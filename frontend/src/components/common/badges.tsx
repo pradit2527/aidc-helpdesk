@@ -111,9 +111,20 @@ export function SlaBadge({
       <span className={cn(BADGE, meta.className, className)}>
         <Icon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
         {meta.label}
-        {typeof remainingMinutes === 'number' && status !== 'paused' && (
+        {/* แสดงเวลาที่เหลือเฉพาะตอนที่ยังมีเวลาเหลือจริง
+            ถ้าเกินกำหนดแล้ว คำว่า "เกินกำหนด" ในป้ายบอกครบอยู่แล้ว
+            ไม่ต้องต่อท้ายว่า "เหลือ เกินกำหนดแล้ว" ให้ซ้ำซ้อน */}
+        {typeof remainingMinutes === 'number' &&
+          remainingMinutes > 0 &&
+          status !== 'paused' && (
+            <span className="tabular font-normal">
+              · เหลือ {formatMinutes(remainingMinutes)}
+              {remainingUnit === 'business_minutes' ? 'ทำการ' : ''}
+            </span>
+          )}
+        {typeof remainingMinutes === 'number' && remainingMinutes < 0 && (
           <span className="tabular font-normal">
-            · เหลือ {formatMinutes(remainingMinutes)}
+            · เกินมา {formatMinutes(Math.abs(remainingMinutes))}
             {remainingUnit === 'business_minutes' ? 'ทำการ' : ''}
           </span>
         )}
@@ -127,7 +138,7 @@ export function SlaBadge({
 
 /** นาที -> "3 ชม. 20 น." · เกิน 1 วันทำการแสดงเป็นวันเพื่อให้อ่านง่าย */
 function formatMinutes(m: number): string {
-  if (m <= 0) return 'เกินกำหนดแล้ว';
+  if (m <= 0) return '0 นาที';
   const BUSINESS_DAY = 540;
   if (m >= BUSINESS_DAY) return `${(m / BUSINESS_DAY).toFixed(1)} วัน`;
   const h = Math.floor(m / 60);

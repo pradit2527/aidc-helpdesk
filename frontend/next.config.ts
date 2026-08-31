@@ -20,22 +20,8 @@ const nextConfig: NextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          // on-prem: ห้ามโหลดสคริปต์/ฟอนต์จากภายนอกทั้งหมด
-          // เป็นมาตรการชดเชยที่ทำให้ token ใน httpOnly cookie ปลอดภัยจริง
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "img-src 'self' data: blob:",
-              "font-src 'self'",
-              "style-src 'self' 'unsafe-inline'", // Next.js inject critical CSS
-              "script-src 'self'",
-              "connect-src 'self'",
-              "frame-ancestors 'self'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join('; '),
-          },
+          // Content-Security-Policy ไม่ได้ตั้งที่นี่ — ต้องเป็น nonce ต่อคำขอ
+          // จึงตั้งใน src/middleware.ts แทน (headers() ตรงนี้เป็นค่าคงที่ ใส่ nonce ไม่ได้)
         ],
       },
     ];
