@@ -3,9 +3,46 @@
 | หัวข้อ | รายละเอียด |
 |---|---|
 | รหัสเอกสาร | DM-001 |
-| เวอร์ชัน | 1.0 |
+| เวอร์ชัน | **2.0** (ปรับให้ตรงเอกสารควบคุมจริง) |
+| วันที่ | 2026-08-31 |
 | ฐานข้อมูล | PostgreSQL 16 |
-| เอกสารอ้างอิง | `01-srs.md`, `03-api-spec.md`, `04-rbac-sla.md` |
+| เอกสารควบคุมที่ยึดถือ | **AIDC-IT-SLA-001 v1.1** · **AIDC-IT-SOP-001 v1.1** |
+| ที่มาของการแก้ | [`05-sla-policy-alignment.md`](./05-sla-policy-alignment.md) (G-01…G-20) · [`06-sop-workflow-mapping.md`](./06-sop-workflow-mapping.md) |
+| เอกสารอ้างอิง | `01-srs.md`, `03-api-spec.md`, `04-rbac-sla.md`, `07-adr-002-tech-stack.md` |
+| จำนวนตาราง | **38** (จาก 22 ในเวอร์ชัน 1.0) |
+| สถานะ | **ปิด schema แล้ว** — การเปลี่ยนแปลงหลังจากนี้ต้องผ่านการทบทวนร่วม SA + BE + FE |
+
+---
+
+## 0. สรุปการเปลี่ยนแปลงจากเวอร์ชัน 1.0
+
+> เวอร์ชัน 1.0 เขียนขึ้น **ก่อน** ได้รับ AIDC-IT-SLA-001 v1.1 และ AIDC-IT-SOP-001 v1.1
+> ทุกรายการด้านล่างคือการแก้ให้ตรงเอกสารควบคุม ไม่ใช่การเพิ่มขอบเขตตามใจ
+
+| # | สิ่งที่เปลี่ยน | ที่มา |
+|---|---|---|
+| 1 | `ticket.priority` `critical/high/medium/low` → **`P1/P2/P3/P4`** และ**ระบบคำนวณจาก `impact × urgency`** ไม่ให้ผู้แจ้งเลือกเอง | G-02, G-17 |
+| 2 | เวลาทำการ จ–ส 08:00–17:00 → **จ–ศ 08:30–17:30** (เสาร์ไม่ใช่วันทำการ) | G-01 |
+| 3 | เพิ่ม `sla_target.clock_mode` — **P1 นับต่อเนื่อง 24×7** ส่วน P2–P4 นับเวลาทำการ | G-05 |
+| 4 | ค่า SLA ใหม่: P1 15/240 · P2 30/480 · **P3 120/1080** · P4 240/2700 | G-03, G-04 |
+| 5 | `pending_user` แยก **`pending_reason`** 3 แบบ (`user` / `vendor` / `approval`) | G-06 |
+| 6 | เพิ่ม **workaround** — หยุดนับ resolution ของ incident และบังคับเปิด `problem` | G-07 |
+| 7 | เปลี่ยน priority กลางทาง → นับใหม่จาก **`priority_changed_at`** ไม่ใช่ `created_at` | G-08 |
+| 8 | ยกเลิก "`pending_user` 5 วันทำการ → `resolved` อัตโนมัติ" แทนด้วย **ติดตาม 2 ครั้ง แล้วปิดเมื่อครบ 3 วันทำการ** | G-09 |
+| 9 | เพิ่ม **`support_tier` 1/2/3** + ตาราง `escalation_contact` และ `sla_escalation_rule` | G-11 |
+| 10 | เพิ่ม **รอบรายงานสถานะ** (P1 ทุก 1 ชม. · P2 ทุก 4 ชม.ทำการ) | G-12 |
+| 11 | เพิ่มโดเมน **Availability** — `service`, `service_tier_target`, `service_outage`, `maintenance_window` | G-13, G-20 |
+| 12 | เพิ่ม **`ticket_type`** (`incident` / `service_request`) + `service_catalog_item` | G-14, SOP-01 |
+| 13 | `ticket.source` → **`channel`** 4 ค่า (`portal`/`email`/`phone`/`walk_in`) — **ไม่มี LINE** | G-15 |
+| 14 | เพิ่ม **`problem`** สำหรับ RCA และ KPI Repeat Incident | G-18 |
+| 15 | เพิ่ม **`approval_request`** — SOP-03/06 บังคับอนุมัติก่อนเริ่มนับเวลา | SOP-03, SOP-06 |
+| 16 | เพิ่ม **checklist 4 ตาราง** — SOP-04/05 บังคับแนบหลักฐานก่อนปิดงาน | SOP-04, SOP-05 |
+| 17 | เพิ่ม **`approved_software`** — SOP-06 ต้องเช็กบัญชีซอฟต์แวร์อนุมัติ | SOP-06, นโยบาย 3.5 |
+| 18 | นโยบายรหัสผ่าน **≥ 12 ตัวอักษร** และ **ล็อกบัญชีต้องให้ Service Desk ปลดเท่านั้น** (`is_locked`) | นโยบาย 3.2 |
+| 19 | เพิ่มฟิลด์ **PDPA / เหตุความปลอดภัย** — `is_security_incident`, `dpo_notified_at`, `regulator_notify_due_at` | SOP-10, นโยบาย 3.8 |
+| 20 | เพิ่มตารางที่ BE ขอ: **`ticket_sequence`** (B-03) และ **`kb_feedback`** (B-05) | `10-…` §10 |
+| 21 | `app_user` รองรับ SSO ตั้งแต่แรก: `auth_provider`, `external_subject`, `password_hash` เป็น nullable, `token_version` | B-01, B-02 |
+| 22 | Token เก็บใน **httpOnly cookie** ที่ FastAPI ตั้งเอง (ไม่ใช่ `localStorage`) | ADR-002 D-01 |
 
 ---
 
@@ -13,153 +50,108 @@
 
 | หลักการ | รายละเอียด |
 |---|---|
-| Primary key | `BIGSERIAL` (bigint auto increment) ทุกตาราง — อ่านง่าย ดีบักง่าย ดัชนีเล็กกว่า UUID |
-| รหัสที่เปิดเผยภายนอก | `ticket.ticket_no` (มนุษย์อ่านได้), `attachment.storage_key` (UUID) เท่านั้น |
-| เวลา | `TIMESTAMPTZ` เก็บเป็น UTC ทั้งหมด แปลงเป็น `Asia/Bangkok` ที่ชั้นแสดงผล |
-| Multi-tenant | **Shared database + shared schema** โดยมีคอลัมน์ `company_id` ในตารางที่เป็นข้อมูลของบริษัท และบังคับ scoping ที่ชั้น query ของ backend เสมอ (ไม่ใช้ Postgres RLS ในเฟส 1 เพื่อลดความซับซ้อนในการดีบัก) |
-| Soft delete | ใช้เฉพาะ `ticket`, `kb_article`, `user` (คอลัมน์ `deleted_at`) ตารางอื่นลบจริงหรือใช้ `is_active` |
-| คอลัมน์มาตรฐาน | `created_at`, `updated_at` มีทุกตาราง; `created_by`, `updated_by` มีในตารางที่มีการแก้ไขโดยผู้ใช้ |
-| Enum | ใช้ `VARCHAR` + `CHECK constraint` (ไม่ใช้ PostgreSQL ENUM type เพราะแก้ค่าภายหลังยาก) |
+| Primary key | `BIGSERIAL` ทุกตาราง — อ่านง่าย ดีบักง่าย ดัชนีเล็กกว่า UUID |
+| รหัสที่เปิดเผยภายนอก | `ticket.ticket_no`, `problem.code`, `attachment.storage_key` (UUID) เท่านั้น |
+| เวลา | `TIMESTAMPTZ` เก็บ UTC ทั้งหมด แปลงเป็น `Asia/Bangkok` ที่ชั้นแสดงผล |
+| Multi-tenant | **Shared database + shared schema** มีคอลัมน์ `company_id` และบังคับ scoping ที่ชั้น query ของ backend เสมอ — **ไม่ใช้ PostgreSQL RLS** เพราะมีทางเข้าถึงข้อมูลทางเดียว (frontend ไม่มี DB credential ตาม ADR-002 §2.1) |
+| Soft delete | `ticket`, `kb_article`, `app_user`, `attachment` (คอลัมน์ `deleted_at`) ตารางอื่นใช้ `is_active` |
+| **Snapshot pattern** | ค่าที่ผูกกับข้อตกลง ณ เวลาที่สร้าง ต้องคัดลอกมาเก็บ ไม่อ้างอิงเป็น FK อย่างเดียว — `ticket.sla_policy_id`, `ticket_checklist.template_version`, `ticket_checklist_item.title_snapshot` |
+| **Document traceability** | ตารางที่มีค่ามาจากเอกสารควบคุมต้องมี `doc_ref` + `doc_version` + `effective_from/to` เพราะ SLA ทบทวนทุก 12 เดือนและต้องตรวจย้อนได้ว่าค่านี้มาจากเอกสารฉบับใด |
+| Enum | `VARCHAR` + `CHECK constraint` (ไม่ใช้ PostgreSQL ENUM type เพราะแก้ค่าภายหลังยาก) |
 | Naming | ตาราง/คอลัมน์เป็น `snake_case` เอกพจน์ |
+| Append-only | `audit_log` ห้าม UPDATE/DELETE จากชั้น application และ **ห้าม purge ก่อน 90 วัน** (นโยบาย 3.3) |
 
 ---
 
 ## 2. ER Diagram
 
+> 38 ตารางอ่านในภาพเดียวไม่ไหว จึงแยกเป็น 5 โดเมน — ความสัมพันธ์ข้ามโดเมนระบุด้วยหมายเหตุใต้ภาพ
+
+### 2.1 องค์กร สิทธิ์ และการยกระดับ (9 ตาราง)
+
 ```mermaid
 erDiagram
     company ||--o{ department : "มี"
     company ||--o{ app_user : "สังกัด"
-    company ||--o{ ticket : "เป็นเจ้าของ"
-    company ||--o{ ticket_category : "กำหนดเฉพาะ"
-    company ||--o{ sla_policy : "ใช้"
-    company ||--o{ business_hours : "กำหนด"
-    company ||--o{ holiday : "กำหนด"
-    company ||--o{ kb_article : "จำกัดการเข้าถึง"
-
+    company ||--o{ user_role_scope : "เป็นขอบเขต"
+    company ||--o{ escalation_contact : "กำหนดผู้รับ"
     department ||--o{ app_user : "สังกัด"
-    department ||--o{ ticket : "แจ้งจาก"
-
     app_user ||--o{ user_role : "ได้รับ"
+    app_user ||--o{ escalation_contact : "ถูกกำหนดเป็น"
     role ||--o{ user_role : "ถูกมอบให้"
     role ||--o{ role_permission : "มี"
     permission ||--o{ role_permission : "อยู่ใน"
     user_role ||--o{ user_role_scope : "จำกัดขอบเขต"
-    company ||--o{ user_role_scope : "เป็นขอบเขต"
 
-    app_user ||--o{ ticket : "แจ้ง"
-    app_user ||--o{ ticket_comment : "เขียน"
-    app_user ||--o{ attachment : "อัปโหลด"
-    app_user ||--o{ notification : "ได้รับ"
-    app_user ||--o{ notification_channel : "ผูกช่องทาง"
-    app_user ||--o{ audit_log : "กระทำ"
-    app_user ||--o{ kb_article : "เขียน"
-
-    ticket_category ||--o{ ticket_category : "หมวดย่อยของ"
-    ticket_category ||--o{ ticket : "จัดประเภท"
-
-    ticket ||--o{ ticket_comment : "มี"
-    ticket ||--o{ ticket_status_history : "มีประวัติ"
-    ticket ||--o{ attachment : "มีไฟล์แนบ"
-    ticket ||--o{ notification : "ทำให้เกิด"
-    ticket }o--o| kb_article : "แก้ด้วยบทความ"
-    ticket_comment ||--o{ attachment : "มีไฟล์แนบ"
-
-    sla_policy ||--o{ sla_target : "ประกอบด้วย"
-    sla_policy ||--o{ ticket : "ผูกกับ"
-
-    kb_category ||--o{ kb_article : "จัดหมวด"
-    kb_category ||--o{ kb_category : "หมวดย่อยของ"
-
-    company {
-        bigint id PK
-        varchar code UK "รหัสบริษัท เช่น AIDC-LOG"
-        varchar name_th
-        varchar name_en
-        boolean is_active
-        timestamptz created_at
-    }
-    department {
-        bigint id PK
-        bigint company_id FK
-        varchar name
-        boolean is_active
-    }
+    company { bigint id PK  varchar code UK  varchar name_th  boolean is_active }
+    department { bigint id PK  bigint company_id FK  varchar name  boolean is_active }
     app_user {
         bigint id PK
         bigint company_id FK
         bigint department_id FK
         varchar username UK
-        varchar email
-        varchar password_hash
-        varchar full_name
-        varchar phone
-        varchar line_user_id
-        boolean is_active
-        boolean must_change_password
+        varchar password_hash "nullable — ผู้ใช้ SSO ไม่มีรหัสผ่าน"
+        varchar auth_provider "local / ldap / oidc"
+        varchar external_subject
+        boolean is_locked "ปลดโดย Service Desk เท่านั้น"
+        int token_version
+        boolean is_admin_account
+        timestamptz password_changed_at
         timestamptz deleted_at
     }
-    role {
+    role { bigint id PK  varchar code UK  varchar name_th  boolean is_system }
+    permission { bigint id PK  varchar code UK  varchar group_name }
+    role_permission { bigint role_id FK  bigint permission_id FK }
+    user_role { bigint id PK  bigint user_id FK  bigint role_id FK  timestamptz expires_at }
+    user_role_scope { bigint id PK  bigint user_role_id FK  bigint company_id FK }
+    escalation_contact {
         bigint id PK
-        varchar code UK "end_user agent company_admin super_admin manager_viewer"
-        varchar name_th
-        boolean is_system
-    }
-    permission {
-        bigint id PK
-        varchar code UK "เช่น ticket.assign"
-        varchar group_name
-    }
-    role_permission {
-        bigint role_id FK "PK ร่วม"
-        bigint permission_id FK "PK ร่วม"
-    }
-    user_role {
-        bigint id PK
-        bigint user_id FK
-        bigint role_id FK
-        timestamptz granted_at
-    }
-    user_role_scope {
-        bigint id PK
-        bigint user_role_id FK
         bigint company_id FK
+        varchar contact_key "head_of_it / ceo / dpo / incident_manager / tier2_group / tier3_group"
+        bigint user_id FK
+        boolean is_primary
     }
+```
+
+### 2.2 Ticket แกนกลาง (6 ตาราง)
+
+```mermaid
+erDiagram
+    ticket_category ||--o{ ticket_category : "หมวดย่อยของ"
+    ticket_category ||--o{ ticket : "จัดประเภท"
+    ticket ||--o{ ticket_status_history : "มีประวัติ"
+    ticket ||--o{ ticket_comment : "มี"
+    ticket ||--o{ attachment : "มีไฟล์แนบ"
+    ticket_comment ||--o{ attachment : "มีไฟล์แนบ"
+
     ticket_category {
         bigint id PK
         bigint company_id FK "null = ใช้ร่วมทั้งกลุ่ม"
         bigint parent_id FK
         varchar code
         varchar name_th
+        varchar default_impact
+        varchar default_urgency
         bigint default_assignee_id FK
-        varchar default_priority
-        int sort_order
         boolean is_active
     }
     ticket {
         bigint id PK
         varchar ticket_no UK
+        varchar ticket_type "incident / service_request"
         bigint company_id FK
-        bigint department_id FK
         bigint category_id FK
-        bigint requester_id FK
-        bigint assignee_id FK
-        varchar subject
-        text description
+        varchar impact
+        varchar urgency
+        varchar priority "P1..P4 — ระบบคำนวณ"
         varchar status
-        varchar priority
-        varchar source
-        bigint sla_policy_id FK
-        timestamptz response_due_at
-        timestamptz resolution_due_at
-        timestamptz first_response_at
-        timestamptz resolved_at
-        timestamptz closed_at
-        int pending_duration_minutes
-        boolean is_response_breached
-        boolean is_resolution_breached
-        int reopen_count
-        bigint resolved_by_kb_id FK
+        varchar pending_reason "user / vendor / approval"
+        varchar channel "portal / email / phone / walk_in"
+        smallint support_tier
+        timestamptz sla_clock_started_at
+        timestamptz workaround_at
+        varchar sla_exclusion_code
+        boolean is_security_incident
         timestamptz deleted_at
     }
     ticket_status_history {
@@ -167,8 +159,8 @@ erDiagram
         bigint ticket_id FK
         varchar from_status
         varchar to_status
-        bigint from_assignee_id FK
-        bigint to_assignee_id FK
+        varchar from_priority
+        varchar to_priority
         varchar reason
         bigint changed_by FK
         timestamptz changed_at
@@ -180,7 +172,6 @@ erDiagram
         text body
         boolean is_internal
         boolean is_system
-        timestamptz created_at
     }
     attachment {
         bigint id PK
@@ -188,82 +179,233 @@ erDiagram
         bigint comment_id FK
         bigint kb_article_id FK
         varchar storage_key UK
-        varchar file_name
         varchar mime_type
-        bigint file_size
-        bigint uploaded_by FK
+        varchar scan_status
+        timestamptz deleted_at
     }
+    ticket_sequence {
+        bigint company_id "PK ร่วม"
+        char period "PK ร่วม — yyyymm"
+        int last_no
+    }
+```
+
+> ความสัมพันธ์ข้ามโดเมนของ `ticket`: `requester_id` / `created_by` / `assignee_id` / `incident_commander_id` → `app_user` · `department_id` → `department` · `sla_policy_id` → `sla_policy` · `service_id` → `service` · `problem_id` → `problem` · `catalog_item_id` → `service_catalog_item` · `resolved_by_kb_id` → `kb_article`
+
+### 2.3 SLA บริการ และความพร้อมใช้งาน (11 ตาราง)
+
+```mermaid
+erDiagram
+    sla_policy ||--o{ sla_target : "ประกอบด้วย"
+    sla_policy ||--o{ ticket : "ผูกกับ (สแนปช็อต)"
+    company ||--o{ sla_policy : "ใช้"
+    company ||--o{ business_hours : "กำหนด"
+    company ||--o{ holiday : "กำหนด"
+    company ||--o{ sla_escalation_rule : "กำหนด"
+    service ||--o{ service_outage : "เคยขัดข้อง"
+    service ||--o{ ticket : "เกี่ยวข้องกับ"
+    service ||--o{ problem : "เป็นสาเหตุที่"
+    service_tier_target ||--o{ service : "กำหนดเป้าหมายให้"
+    maintenance_window ||--o{ service_outage : "ครอบคลุม (ไม่นับ downtime)"
+    problem ||--o{ ticket : "รวมเหตุซ้ำ"
+    service_catalog_item ||--o{ ticket : "กำหนดเป้าหมายเวลาให้"
+
     sla_policy {
         bigint id PK
         bigint company_id FK "null = policy กลาง"
         varchar name
         boolean is_default
-        boolean is_active
+        varchar doc_ref
+        varchar doc_version
+        date effective_from
+        date effective_to
     }
     sla_target {
         bigint id PK
         bigint sla_policy_id FK
-        varchar priority
+        varchar priority "P1..P4"
         int response_minutes
         int resolution_minutes
+        varchar clock_mode "business_hours / calendar_24x7"
+        int status_report_interval_minutes
         int escalation_percent
     }
-    business_hours {
+    business_hours { bigint id PK  bigint company_id FK  smallint day_of_week  time start_time  time end_time  boolean is_working_day }
+    holiday { bigint id PK  bigint company_id FK  date holiday_date  varchar name }
+    sla_escalation_rule {
         bigint id PK
-        bigint company_id FK "null = ใช้ร่วมทั้งกลุ่ม"
-        int day_of_week
-        time start_time
-        time end_time
-        boolean is_working_day
+        bigint company_id FK
+        varchar code "ES-01 .. ES-12"
+        varchar trigger_type
+        varchar priority
+        int threshold_minutes
+        varchar threshold_clock_mode
+        varchar notify_contact_keys
+        int repeat_interval_minutes
+        boolean is_active
     }
-    holiday {
+    service {
         bigint id PK
-        bigint company_id FK "null = ใช้ร่วมทั้งกลุ่ม"
-        date holiday_date
-        varchar name
-    }
-    kb_category {
-        bigint id PK
-        bigint parent_id FK
+        bigint company_id FK
+        varchar code
         varchar name_th
-        int sort_order
+        varchar service_group
+        varchar service_tier "critical / high / standard"
+        bigint owner_user_id FK
+        boolean is_24x7
     }
+    service_tier_target { varchar tier_code PK  numeric uptime_percent  int max_downtime_minutes_month }
+    service_outage {
+        bigint id PK
+        bigint service_id FK
+        bigint ticket_id FK
+        timestamptz started_at
+        timestamptz ended_at
+        boolean is_planned
+        bigint maintenance_window_id FK
+    }
+    maintenance_window {
+        bigint id PK
+        bigint company_id FK
+        bigint service_id FK
+        timestamptz planned_start
+        timestamptz planned_end
+        timestamptz notified_at
+        int notice_lead_business_days
+    }
+    problem {
+        bigint id PK
+        bigint company_id FK
+        varchar code UK
+        varchar title
+        bigint service_id FK
+        varchar root_cause_code
+        varchar status
+        timestamptz rca_due_at
+        timestamptz rca_submitted_at
+        bigint owner_id FK
+    }
+    service_catalog_item {
+        bigint id PK
+        bigint company_id FK
+        varchar code UK
+        varchar name_th
+        varchar target_mode "duration / before_date / by_date"
+        int target_minutes
+        varchar clock_start_event
+        int lead_time_days
+        boolean requires_approval
+        bigint checklist_template_id FK
+    }
+```
+
+### 2.4 กระบวนการตาม SOP — อนุมัติและ checklist (6 ตาราง)
+
+```mermaid
+erDiagram
+    ticket ||--o{ approval_request : "ต้องผ่าน"
+    ticket ||--o{ ticket_checklist : "มี"
+    checklist_template ||--o{ checklist_item : "ประกอบด้วย"
+    checklist_template ||--o{ ticket_checklist : "ถูกใช้โดย"
+    ticket_checklist ||--o{ ticket_checklist_item : "มีรายการ"
+    checklist_item ||--o{ ticket_checklist_item : "เป็นต้นแบบของ"
+    service_catalog_item ||--o{ checklist_template : "ผูกกับ"
+
+    approval_request {
+        bigint id PK
+        bigint ticket_id FK
+        smallint seq "ขั้น n+1 เปิดเมื่อขั้น n approved"
+        varchar approver_type "line_manager / system_owner / head_of_it / budget_owner / cab"
+        bigint approver_id FK
+        varchar status "pending / approved / rejected / cancelled / skipped"
+        bigint decided_by FK
+        timestamptz decided_at
+        varchar comment "บังคับเมื่อ rejected"
+        timestamptz due_at
+    }
+    checklist_template {
+        bigint id PK
+        bigint company_id FK
+        varchar code "CHK-ONBOARD / CHK-OFFBOARD"
+        varchar name_th
+        varchar doc_ref
+        int version
+        boolean is_active
+    }
+    checklist_item {
+        bigint id PK
+        bigint template_id FK
+        int sort_order
+        varchar title_th
+        boolean is_required "true = บล็อกการปิดงาน"
+        boolean evidence_required "true = ต้องแนบไฟล์"
+    }
+    ticket_checklist {
+        bigint id PK
+        bigint ticket_id FK
+        bigint template_id FK
+        int template_version "สแนปช็อต"
+        timestamptz completed_at
+    }
+    ticket_checklist_item {
+        bigint id PK
+        bigint ticket_checklist_id FK
+        bigint checklist_item_id FK
+        varchar title_snapshot
+        boolean is_required
+        boolean is_done
+        bigint done_by FK
+        bigint attachment_id FK
+    }
+    approved_software {
+        bigint id PK
+        bigint company_id FK
+        varchar name
+        varchar version
+        varchar license_type
+        boolean is_active
+    }
+```
+
+### 2.5 ความรู้ การแจ้งเตือน และร่องรอย (6 ตาราง)
+
+```mermaid
+erDiagram
+    kb_category ||--o{ kb_category : "หมวดย่อยของ"
+    kb_category ||--o{ kb_article : "จัดหมวด"
+    kb_article ||--o{ kb_feedback : "ได้รับคะแนน"
+    kb_article ||--o{ attachment : "มีไฟล์แนบ"
+    app_user ||--o{ kb_feedback : "โหวต"
+    app_user ||--o{ notification : "ได้รับ"
+    app_user ||--o{ notification_channel : "ผูกช่องทาง"
+    app_user ||--o{ audit_log : "กระทำ"
+    ticket ||--o{ notification : "ทำให้เกิด"
+    ticket }o--o| kb_article : "แก้ด้วยบทความ"
+
+    kb_category { bigint id PK  bigint parent_id FK  varchar name_th  int sort_order }
     kb_article {
         bigint id PK
         bigint kb_category_id FK
-        bigint company_id FK "null = ทุกบริษัท"
+        bigint company_id FK
         varchar title
         text body_markdown
-        varchar visibility
-        varchar status
-        bigint author_id FK
-        int view_count
-        int helpful_count
-        int not_helpful_count
-        timestamptz published_at
+        varchar visibility "public / company / agent_only"
+        varchar status "draft / published / archived"
+        bigint source_ticket_id FK
         timestamptz deleted_at
     }
+    kb_feedback { bigint id PK  bigint kb_article_id FK  bigint user_id FK  boolean is_helpful }
     notification {
         bigint id PK
         bigint user_id FK
         bigint ticket_id FK
         varchar event_type
-        varchar channel
-        varchar title
-        text body
-        varchar status
+        varchar channel "in_app / email / teams / line / webpush"
+        varchar status "pending / sent / failed / skipped"
         int retry_count
         timestamptz read_at
-        timestamptz sent_at
     }
-    notification_channel {
-        bigint id PK
-        bigint user_id FK
-        varchar channel
-        varchar destination
-        boolean is_enabled
-        boolean is_verified
-    }
+    notification_channel { bigint id PK  bigint user_id FK  varchar channel  varchar destination  boolean is_enabled  boolean is_verified }
     audit_log {
         bigint id PK
         bigint actor_id FK
@@ -278,447 +420,572 @@ erDiagram
     }
 ```
 
-> **หมายเหตุ:** ใช้ชื่อตาราง `app_user` แทน `user` เพราะ `user` เป็นคำสงวนของ PostgreSQL — ในเอกสาร API และ SRS เรียกว่า "user" ตามความหมายเชิงธุรกิจ
+> ใช้ชื่อตาราง `app_user` แทน `user` เพราะ `user` เป็นคำสงวนของ PostgreSQL — ในเอกสาร API และ SRS เรียกว่า "user" ตามความหมายเชิงธุรกิจ
 
 ---
 
-## 3. รายละเอียดตาราง
+## 3. ตาราง `ticket` — ฉบับเต็ม
 
-### 3.1 `company` — บริษัทในกลุ่ม
+จัดกลุ่มคอลัมน์เพื่อให้อ่านได้ · **ตัวหนา = เพิ่มหรือแก้ในเวอร์ชัน 2.0**
 
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `code` | varchar(20) | N | — | รหัสบริษัท ใช้ประกอบเลข ticket (UNIQUE) |
-| `name_th` | varchar(150) | N | — | ชื่อภาษาไทย |
-| `name_en` | varchar(150) | Y | null | ชื่อภาษาอังกฤษ |
-| `logo_path` | varchar(255) | Y | null | โลโก้สำหรับหัวรายงาน |
-| `contact_email` | varchar(150) | Y | null | อีเมลติดต่อของฝ่าย IT บริษัทนั้น |
-| `is_active` | boolean | N | true | ปิดใช้งานบริษัทได้โดยไม่ลบข้อมูล |
-| `created_at` / `updated_at` | timestamptz | N | now() | |
-
-### 3.2 `department` — แผนก
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `company_id` | bigint | N | — | FK → company |
-| `name` | varchar(150) | N | — | ชื่อแผนก |
-| `is_active` | boolean | N | true | |
-| `created_at` / `updated_at` | timestamptz | N | now() | |
-
-UNIQUE (`company_id`, `name`)
-
-### 3.3 `app_user` — ผู้ใช้
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `company_id` | bigint | N | — | บริษัทต้นสังกัด (บริษัทหลัก) |
-| `department_id` | bigint | Y | null | FK → department |
-| `username` | varchar(50) | N | — | UNIQUE ใช้ล็อกอิน |
-| `email` | varchar(150) | Y | null | ใช้แจ้งเตือน |
-| `password_hash` | varchar(255) | N | — | Argon2id |
-| `full_name` | varchar(150) | N | — | ชื่อ-นามสกุล |
-| `employee_code` | varchar(50) | Y | null | รหัสพนักงาน |
-| `phone` | varchar(30) | Y | null | |
-| `line_user_id` | varchar(100) | Y | null | ใช้ส่ง LINE (ได้จากการผูกบัญชี) |
-| `job_title` | varchar(100) | Y | null | ตำแหน่ง |
-| `is_active` | boolean | N | true | ปิดใช้งาน = ล็อกอินไม่ได้ |
-| `must_change_password` | boolean | N | true | บังคับเปลี่ยนรหัสครั้งแรก |
-| `failed_login_count` | int | N | 0 | นับรหัสผิด |
-| `locked_until` | timestamptz | Y | null | เวลาที่ปลดล็อกบัญชี |
-| `last_login_at` | timestamptz | Y | null | |
-| `deleted_at` | timestamptz | Y | null | soft delete |
-| `created_at` / `updated_at` | timestamptz | N | now() | |
-
-INDEX: `idx_user_company` (`company_id`, `is_active`)
-
-### 3.4 `role` / `permission` / `role_permission` / `user_role` / `user_role_scope`
-
-**`role`**
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `code` | varchar(30) | N | — | UNIQUE: `end_user`, `agent`, `company_admin`, `super_admin`, `manager_viewer` |
-| `name_th` | varchar(100) | N | — | ชื่อแสดงผล |
-| `description` | varchar(255) | Y | null | |
-| `is_system` | boolean | N | true | role ระบบ ลบไม่ได้ |
-
-**`permission`**
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `code` | varchar(60) | N | — | UNIQUE เช่น `ticket.create`, `ticket.assign`, `report.export` |
-| `group_name` | varchar(40) | N | — | กลุ่มสำหรับแสดงผล เช่น `ticket`, `admin` |
-| `description` | varchar(255) | Y | null | |
-
-**`role_permission`** — PK รวม (`role_id`, `permission_id`)
-
-**`user_role`**
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `user_id` | bigint | N | — | FK → app_user |
-| `role_id` | bigint | N | — | FK → role |
-| `granted_by` | bigint | Y | null | ผู้มอบสิทธิ์ |
-| `granted_at` | timestamptz | N | now() | |
-
-UNIQUE (`user_id`, `role_id`)
-
-**`user_role_scope`** — ขอบเขตบริษัทของ role นั้น (ใช้กับ `agent`, `company_admin`, `manager_viewer`)
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `user_role_id` | bigint | N | — | FK → user_role (ON DELETE CASCADE) |
-| `company_id` | bigint | N | — | บริษัทที่ role นี้ครอบคลุม |
-
-UNIQUE (`user_role_id`, `company_id`)
-> ถ้าไม่มีแถวใน `user_role_scope` เลย → ขอบเขตเป็นบริษัทต้นสังกัดของผู้ใช้ (`app_user.company_id`)
-> `super_admin` ไม่ต้องมี scope (เห็นทุกบริษัทเสมอ)
-
-### 3.5 `ticket_category` — หมวดหมู่ปัญหา (2 ระดับ)
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `company_id` | bigint | Y | null | null = หมวดหมู่ใช้ร่วมทั้งกลุ่ม |
-| `parent_id` | bigint | Y | null | null = หมวดหลัก |
-| `code` | varchar(40) | N | — | รหัสอ้างอิง |
-| `name_th` | varchar(150) | N | — | ชื่อหมวดหมู่ |
-| `default_assignee_id` | bigint | Y | null | ผู้รับผิดชอบเริ่มต้น |
-| `default_priority` | varchar(10) | N | `'medium'` | ความเร่งด่วนเริ่มต้น |
-| `sort_order` | int | N | 0 | ลำดับแสดงผล |
-| `is_active` | boolean | N | true | |
-
-> จำกัดความลึกไว้ที่ 2 ระดับ (บังคับที่ชั้น application: หมวดที่มี `parent_id` ห้ามเป็น parent ของหมวดอื่น)
-
-### 3.6 `ticket` — ตารางหลัก
+### 3.1 ข้อมูลพื้นฐาน
 
 | field | type | null | default | คำอธิบาย |
 |---|---|---|---|---|
 | `id` | bigserial | N | auto | PK |
 | `ticket_no` | varchar(30) | N | — | UNIQUE เช่น `AIDC-LOG-202608-0042` |
+| **`ticket_type`** | varchar(20) | N | `'incident'` | `incident` / `service_request` — Tier 1 บังคับเลือก (SOP-01 ข้อ 2) |
 | `company_id` | bigint | N | — | บริษัทเจ้าของเรื่อง (ใช้ scoping) |
 | `department_id` | bigint | Y | null | แผนกที่แจ้ง |
 | `category_id` | bigint | N | — | หมวดหมู่ (ระดับย่อยถ้ามี) |
+| **`catalog_item_id`** | bigint | Y | null | FK → `service_catalog_item` — **บังคับเมื่อ `ticket_type='service_request'`** |
+| **`service_id`** | bigint | Y | null | FK → `service` — จำเป็นต่อ KPI Uptime และ Repeat Incident |
+| **`problem_id`** | bigint | Y | null | FK → `problem` |
 | `requester_id` | bigint | N | — | ผู้ร้องขอ (เจ้าของปัญหา) |
 | `created_by` | bigint | N | — | ผู้บันทึกเข้าระบบ (อาจเป็น agent แทนผู้ร้องขอ) |
 | `assignee_id` | bigint | Y | null | ผู้รับผิดชอบปัจจุบัน |
 | `subject` | varchar(255) | N | — | หัวข้อ |
 | `description` | text | N | — | รายละเอียด |
-| `status` | varchar(20) | N | `'new'` | ดูหัวข้อ 4 |
-| `priority` | varchar(10) | N | `'medium'` | `critical` / `high` / `medium` / `low` |
-| `source` | varchar(20) | N | `'web'` | `web` / `mobile_web` / `phone` / `email` / `line` |
-| `sla_policy_id` | bigint | Y | null | policy ที่ใช้ตอนสร้าง (สแนปช็อต) |
-| `response_due_at` | timestamptz | Y | null | กำหนดตอบรับ |
-| `resolution_due_at` | timestamptz | Y | null | กำหนดแก้ไขเสร็จ |
-| `first_response_at` | timestamptz | Y | null | เวลาตอบกลับสาธารณะครั้งแรก |
-| `pending_started_at` | timestamptz | Y | null | เวลาที่เข้าสถานะ `pending_user` ครั้งล่าสุด |
-| `pending_duration_minutes` | int | N | 0 | เวลาสะสมที่หยุดนับ SLA (นาทีทำการ) |
+| **`channel`** | varchar(20) | N | `'portal'` | **แทน `source` เดิม** — `portal` / `email` / `phone` / `walk_in` (SLA 3.2) |
+| **`source_device`** | varchar(20) | Y | null | `web` / `mobile_web` — ข้อมูลเชิงเทคนิค แยกจากช่องทางตามเอกสาร |
+| **`call_answered_at`** | timestamptz | Y | null | ใช้กับ `channel='phone'` เพื่อรายงานเป้า "รับสายภายใน 3 นาที" |
+| **`asset_tag`** | varchar(50) | Y | null | หมายเลขทรัพย์สิน (ข้อความอิสระ — สะพานชั่วคราวก่อนมี Asset module) |
+
+### 3.2 ระดับความสำคัญ
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| **`impact`** | varchar(20) | N | `'individual'` | `org_wide` / `department` / `individual` |
+| **`urgency`** | varchar(20) | N | `'medium'` | `high` / `medium` / `low` |
+| **`priority`** | varchar(10) | N | `'P3'` | **`P1`/`P2`/`P3`/`P4` — ระบบคำนวณจากเมทริกซ์** agent ปรับได้พร้อมเหตุผลบังคับ |
+| **`priority_changed_at`** | timestamptz | Y | null | เวลาที่ปรับระดับล่าสุด — **เป็นจุดเริ่มนับ SLA ใหม่** (SLA 5.4) |
+| **`priority_review_requested_at`** | timestamptz | Y | null | ผู้แจ้งขอทบทวนระดับ (ES-08) |
+| **`priority_review_reason`** | varchar(500) | Y | null | เหตุผลทางธุรกิจ — บังคับเมื่อขอทบทวน |
+
+**เมทริกซ์ที่ระบบใช้คำนวณ** (SLA ข้อ 4)
+
+| impact ↓ / urgency → | `high` | `medium` | `low` |
+|---|---|---|---|
+| `org_wide` | **P1** | **P2** | **P3** |
+| `department` | **P2** | **P3** | **P3** |
+| `individual` | **P3** | **P3** | **P4** |
+
+### 3.3 สถานะและการหยุดนับเวลา
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `status` | varchar(20) | N | `'new'` | ดูหัวข้อ 6 |
+| **`pending_reason`** | varchar(20) | Y | null | `user` / `vendor` / `approval` — **บังคับเมื่อ `status='pending_user'`** |
+| `pending_started_at` | timestamptz | Y | null | เวลาที่เข้า `pending_user` ครั้งล่าสุด |
+| **`pending_notified_at`** | timestamptz | Y | null | **บังคับสำหรับ `reason='vendor'`** — ต้องแจ้งผู้รับบริการก่อนจึงหยุดนับได้ (SLA 5.4) |
+| `pending_duration_minutes` | int | N | 0 | เวลาสะสมที่หยุดนับ (นาทีทำการ) |
+| **`followup_count`** | int | N | 0 | จำนวนครั้งที่ระบบส่งติดตาม (ต้องครบ 2 ก่อนปิดอัตโนมัติ) |
+| **`last_followup_at`** | timestamptz | Y | null | |
+| **`support_tier`** | smallint | N | 1 | 1 / 2 / 3 (SLA 6.1) |
+| **`tier_changed_at`** | timestamptz | Y | null | |
+| **`vendor_ref`** | varchar(100) | Y | null | **บังคับเมื่อ `support_tier=3`** และเป็นงานของผู้ให้บริการภายนอก |
+| **`assignee_change_count`** | int | N | 0 | counter สำหรับ KPI FCR (นับจาก history ช้าเกินไป) |
+
+### 3.4 SLA และการวัดผล
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `sla_policy_id` | bigint | Y | null | policy ที่ใช้ตอนสร้าง (**สแนปช็อต** — US-11 AC-1) |
+| **`sla_clock_started_at`** | timestamptz | Y | null | จุดเริ่มนับจริงตาม `clock_start_event` (ต่างจาก `created_at` สำหรับคำขอที่ต้องอนุมัติก่อน) |
+| `response_due_at` | timestamptz | Y | null | |
+| `resolution_due_at` | timestamptz | Y | null | |
+| `first_response_at` | timestamptz | Y | null | **คอมเมนต์สาธารณะครั้งแรกจาก agent** — การ assign ไม่นับ |
+| **`target_date`** | date | Y | null | ใช้กับคำขอเชิงวันที่ (onboarding / offboarding) |
+| **`next_status_report_due_at`** | timestamptz | Y | null | รอบรายงานสถานะ (P1 ทุก 1 ชม. · P2 ทุก 4 ชม.ทำการ) |
+| **`workaround_at`** | timestamptz | Y | null | **หยุดนับ resolution ของ incident ทันที** (SLA 5.4) |
+| **`workaround_note`** | text | Y | null | |
 | `resolved_at` | timestamptz | Y | null | |
+| `resolution_note` | text | Y | null | บังคับกรอกก่อนเข้า `resolved` |
 | `closed_at` | timestamptz | Y | null | |
 | `closed_by` | bigint | Y | null | null + `closed_at` ไม่ null = ระบบปิดอัตโนมัติ |
-| `is_response_breached` | boolean | N | false | เกิน SLA ตอบรับ |
-| `is_resolution_breached` | boolean | N | false | เกิน SLA แก้ไข |
+| `is_response_breached` | boolean | N | false | |
+| `is_resolution_breached` | boolean | N | false | |
 | `escalation_notified_at` | timestamptz | Y | null | กันการแจ้งเตือน 75% ซ้ำ |
-| `reopen_count` | int | N | 0 | จำนวนครั้งที่เปิดซ้ำ |
-| `resolution_note` | text | Y | null | สรุปวิธีแก้ |
-| `resolved_by_kb_id` | bigint | Y | null | FK → kb_article ที่ใช้แก้ปัญหา |
-| `satisfaction_score` | smallint | Y | null | 1–5 ผู้แจ้งให้คะแนนตอนปิด |
+| **`sla_exclusion_code`** | varchar(30) | Y | null | ข้อยกเว้นตาม SLA ข้อ 9 — **ตัดออกจากตัวหารของ KPI และไม่ตั้งธง breach** |
+| **`sla_exclusion_note`** | varchar(500) | Y | null | |
+| `reopen_count` | int | N | 0 | |
+| `resolved_by_kb_id` | bigint | Y | null | FK → `kb_article` (FR-55) |
+
+**ค่าที่อนุญาตของ `sla_exclusion_code`:** `planned_maintenance` · `force_majeure` · `vendor_delay` · `user_installed` · `waiting_requester` · `agreed_special_terms`
+
+### 3.5 เหตุขัดข้องร้ายแรงและความปลอดภัย
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| **`is_major_incident`** | boolean | N | false | ตั้งอัตโนมัติเมื่อเป็น P1 (ES-01) |
+| **`incident_commander_id`** | bigint | Y | null | FK → `app_user` (SOP-02 ข้อ 2) |
+| **`is_security_incident`** | boolean | N | false | **จำกัดการมองเห็นเป็นพิเศษ** — ดูหัวข้อ 7.3 |
+| **`personal_data_affected`** | boolean | N | false | |
+| **`dpo_notified_at`** | timestamptz | Y | null | SOP-10 ข้อ 4 |
+| **`regulator_notify_due_at`** | timestamptz | Y | null | = เวลาที่ประเมินว่ากระทบข้อมูลส่วนบุคคล **+ 72 ชม.** (PDPA) |
+| **`is_immediate_suspend`** | boolean | N | false | ใช้กับ offboarding กรณีเลิกจ้างฉับพลัน (SOP-05) |
+| **`restore_point_date`** | date | Y | null | ใช้กับคำขอกู้คืนข้อมูล (SOP-07) |
+
+### 3.6 CSAT และคอลัมน์มาตรฐาน
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `satisfaction_score` | smallint | Y | null | 1–5 |
+| **`csat_sent_at`** | timestamptz | Y | null | **จำเป็นต่อการรายงาน Response Rate** (SLA ภาคผนวก ก.3 บังคับรายงานคู่กับ CSAT) |
+| **`csat_responded_at`** | timestamptz | Y | null | |
 | `deleted_at` | timestamptz | Y | null | soft delete |
 | `created_at` / `updated_at` | timestamptz | N | now() | |
 
-**Index ที่ต้องมี**
+### 3.7 Index ที่ต้องมี
 
 | index | คอลัมน์ | เหตุผล |
 |---|---|---|
 | `idx_ticket_company_status` | (`company_id`, `status`, `created_at DESC`) | query หลักของทุกหน้ารายการ |
-| `idx_ticket_assignee` | (`assignee_id`, `status`) | หน้างานของฉัน |
+| `idx_ticket_assignee` | (`assignee_id`, `status`) | หน้าคิวงานของฉัน |
 | `idx_ticket_requester` | (`requester_id`, `created_at DESC`) | หน้าเรื่องของฉัน |
 | `idx_ticket_due` | (`resolution_due_at`) WHERE `status NOT IN ('resolved','closed','cancelled')` | งานสแกน SLA |
-| `idx_ticket_search` | GIN บน `to_tsvector` ของ subject + trigram | ค้นหา |
+| **`idx_ticket_status_report`** | (`next_status_report_due_at`) WHERE `next_status_report_due_at IS NOT NULL` | งาน `status_report_reminder` |
+| **`idx_ticket_tier`** | (`support_tier`, `created_at`) WHERE `status NOT IN ('resolved','closed','cancelled')` | ES-04 Tier 1 เกิน 2 ชม.ทำการ |
+| **`idx_ticket_problem`** | (`problem_id`, `created_at DESC`) | KPI Repeat Incident |
+| `idx_ticket_search` | GIN trigram บน `subject` | ค้นหาภาษาไทย |
 
-### 3.7 `ticket_status_history`
+---
+
+## 4. ตารางเดิมที่มีการเปลี่ยนแปลง
+
+### 4.1 `app_user`
+
+| field | การเปลี่ยนแปลง | เหตุผล |
+|---|---|---|
+| `password_hash` | varchar(255) → **nullable** | ผู้ใช้ SSO ในเฟส 2 ไม่มีรหัสผ่าน (B-01) |
+| **`auth_provider`** | varchar(20) N default `'local'` | `local` / `ldap` / `oidc` |
+| **`external_subject`** | varchar(255) Y | UNIQUE ร่วมกับ `auth_provider` |
+| **`token_version`** | int N default 0 | เพิกถอน token ทั้งบัญชีทันทีเมื่อปิดบัญชี/เปลี่ยน role (B-02) |
+| **`is_locked`** | boolean N default false | **แทน `locked_until`** — นโยบาย 3.2 บังคับว่าปลดล็อกต้องยืนยันตัวตนกับ Service Desk **ปลดเองตามเวลาไม่ได้** |
+| `locked_until` | **ลบทิ้ง** | ขัดนโยบาย 3.2 |
+| **`is_admin_account`** | boolean N default false | บัญชีผู้ดูแลต้องแยกจากบัญชีใช้งานประจำวัน |
+| **`password_changed_at`** | timestamptz Y | บังคับเปลี่ยนทุก 90 วันสำหรับบัญชี admin |
+| `line_user_id` | คงไว้ | ใช้กับ**การแจ้งเตือนขาออก**เท่านั้น ไม่ใช่ช่องทางรับแจ้ง |
+
+> **นโยบายรหัสผ่านใหม่:** ≥ **12 ตัวอักษร** ประกอบด้วยพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข อักขระพิเศษ (นโยบาย 3.2) — เดิม `01-srs.md` NFR-10 เขียน ≥ 8 ต้องแก้ตาม
+
+### 4.2 `user_role`
+
+| field | การเปลี่ยนแปลง | เหตุผล |
+|---|---|---|
+| **`expires_at`** | timestamptz Y | สิทธิ์ชั่วคราวต้องมีกำหนดสิ้นสุด (นโยบาย 3.3) — เฟส 1 ใช้**รายงานเตือน** เฟส 2 เพิกถอนอัตโนมัติ |
+
+### 4.3 `sla_policy` / `sla_target`
+
+| ตาราง | การเปลี่ยนแปลง |
+|---|---|
+| `sla_policy` | เพิ่ม **`doc_ref`** varchar(40) · **`doc_version`** varchar(10) · **`effective_from`** date · **`effective_to`** date (null = ยังบังคับใช้) |
+| `sla_target` | `priority` เปลี่ยนค่าเป็น `P1..P4` · เพิ่ม **`clock_mode`** varchar(20) N default `'business_hours'` · เพิ่ม **`status_report_interval_minutes`** int Y (null = รายงานเมื่อสถานะเปลี่ยน) |
+
+> **ห้าม UPDATE แถว `sla_policy` เมื่อเอกสารขึ้นเวอร์ชันใหม่** — ให้ตั้ง `effective_to` ของแถวเดิมแล้ว INSERT แถวใหม่ (`ticket.sla_policy_id` เป็นสแนปช็อตอยู่แล้ว จึงไม่กระทบ ticket เก่า)
+
+### 4.4 `business_hours`
+
+| field | เดิม | ใหม่ |
+|---|---|---|
+| `start_time` default | `'08:00'` | **`'08:30'`** |
+| `end_time` default | `'17:00'` | **`'17:30'`** |
+| เสาร์ (`day_of_week=6`) | `is_working_day=true` | **`false`** |
+
+### 4.5 `ticket_category`
+
+| field | การเปลี่ยนแปลง |
+|---|---|
+| `default_priority` | **ลบทิ้ง** — แทนด้วย **`default_impact`** varchar(20) และ **`default_urgency`** varchar(20) เพราะระบบคำนวณ priority เอง |
+
+### 4.6 `attachment`
+
+| field | การเปลี่ยนแปลง | เหตุผล |
+|---|---|---|
+| **`scan_status`** | varchar(20) N default `'skipped'` | `pending` / `clean` / `infected` / `skipped` — รองรับ virus scan เฟส 2 (B-04) |
+| **`deleted_at`** | timestamptz Y | soft delete + quarantine |
+| CHECK "ต้องมี ticket/comment/kb อย่างน้อยหนึ่ง" | **ผ่อนให้ orphan ได้ชั่วคราว** | `POST /attachments` อัปโหลดก่อนสร้าง ticket (B-08) — งาน `cleanup_orphan_attachments` ลบไฟล์ที่ไม่ผูกกับอะไรเกิน 24 ชม. |
+
+### 4.7 `notification` / `notification_channel`
+
+| การเปลี่ยนแปลง | เหตุผล |
+|---|---|
+| CHECK ของ `channel` ขยายเป็น `in_app`, `email`, **`teams`**, `line`, **`webpush`** | LINE Notify ปิดบริการแล้ว ต้องเปิดทางให้สลับช่องทาง (B-06, P-02) |
+| เพิ่ม **partial UNIQUE index** `(user_id, ticket_id, event_type, channel)` WHERE `created_at::date = CURRENT_DATE` | กัน Celery retry สร้างแถวซ้ำ (S-04) |
+| `event_type` เพิ่มค่า | `sla_warning`, `sla_breached`, `status_report_due`, `approval_requested`, `approval_decided`, `followup`, `major_incident`, `security_incident`, `rca_due` |
+
+---
+
+## 5. ตารางใหม่ 16 ตาราง
+
+### 5.1 `ticket_sequence` — ออกเลข ticket แบบไม่ชนกัน (B-03)
+
+| field | type | null | คำอธิบาย |
+|---|---|---|---|
+| `company_id` | bigint | N | PK ร่วม |
+| `period` | char(6) | N | PK ร่วม — `yyyymm` |
+| `last_no` | int | N | เลขล่าสุดที่ออกไป |
+
+> ออกเลขด้วย `SELECT … FOR UPDATE` ในทรานแซกชันเดียวกับการ insert ticket — **ห้ามใช้ `COUNT(*)+1`**
+
+### 5.2 `kb_feedback` — กันโหวตซ้ำ (B-05)
+
+| field | type | null | คำอธิบาย |
+|---|---|---|---|
+| `id` | bigserial | N | PK |
+| `kb_article_id` | bigint | N | FK |
+| `user_id` | bigint | N | FK |
+| `is_helpful` | boolean | N | |
+| `note` | varchar(500) | Y | เหตุผลเมื่อกด "ไม่มีประโยชน์" |
+| `created_at` | timestamptz | N | |
+
+UNIQUE (`kb_article_id`, `user_id`) → โหวตซ้ำตอบ `409` (US-13 AC-3)
+
+### 5.3 `escalation_contact` — ผูกตำแหน่งในองค์กรกับบัญชีจริง
 
 | field | type | null | default | คำอธิบาย |
 |---|---|---|---|---|
 | `id` | bigserial | N | auto | PK |
-| `ticket_id` | bigint | N | — | FK |
-| `from_status` | varchar(20) | Y | null | null = ตอนสร้าง |
-| `to_status` | varchar(20) | N | — | |
-| `from_assignee_id` | bigint | Y | null | |
-| `to_assignee_id` | bigint | Y | null | |
-| `from_priority` | varchar(10) | Y | null | |
-| `to_priority` | varchar(10) | Y | null | |
-| `reason` | varchar(500) | Y | null | เหตุผล (บังคับกรณี cancel / reopen / เปลี่ยน priority) |
-| `changed_by` | bigint | Y | null | null = ระบบ |
-| `changed_at` | timestamptz | N | now() | |
-
-### 3.8 `ticket_comment`
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `ticket_id` | bigint | N | — | FK |
-| `author_id` | bigint | Y | null | null = คอมเมนต์ของระบบ |
-| `body` | text | N | — | เนื้อหา (plain text + line break) |
-| `is_internal` | boolean | N | false | true = เห็นเฉพาะ agent ขึ้นไป |
-| `is_system` | boolean | N | false | ข้อความอัตโนมัติ เช่น "ระบบปิดอัตโนมัติ" |
-| `created_at` / `updated_at` | timestamptz | N | now() | |
-
-> แก้ไขคอมเมนต์ได้ภายใน 15 นาทีหลังสร้าง หลังจากนั้นล็อก (บังคับที่ชั้น application)
-
-### 3.9 `attachment`
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `ticket_id` | bigint | Y | null | แนบกับ ticket |
-| `comment_id` | bigint | Y | null | แนบกับคอมเมนต์ |
-| `kb_article_id` | bigint | Y | null | แนบกับบทความ KB |
-| `storage_key` | varchar(255) | N | — | UNIQUE — path สัมพัทธ์ `{company_id}/{yyyy}/{mm}/{uuid}.{ext}` |
-| `file_name` | varchar(255) | N | — | ชื่อไฟล์ตามที่ผู้ใช้อัปโหลด |
-| `mime_type` | varchar(100) | N | — | ตรวจจากเนื้อไฟล์จริง ไม่เชื่อ header |
-| `file_size` | bigint | N | — | ไบต์ (≤ 20,971,520) |
-| `uploaded_by` | bigint | N | — | FK → app_user |
-| `created_at` | timestamptz | N | now() | |
-
-CHECK: ต้องมี `ticket_id` หรือ `comment_id` หรือ `kb_article_id` อย่างน้อยหนึ่งค่า
-
-### 3.10 `sla_policy` และ `sla_target`
-
-**`sla_policy`**
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `company_id` | bigint | Y | null | null = policy กลาง ใช้เมื่อบริษัทไม่มี policy ของตน |
-| `name` | varchar(100) | N | — | |
-| `is_default` | boolean | N | false | policy เริ่มต้นของขอบเขตนั้น |
+| `company_id` | bigint | Y | null | null = ระดับกลุ่ม |
+| `contact_key` | varchar(30) | N | — | `head_of_it` / `ceo` / `dpo` / `incident_manager` / `tier2_group` / `tier3_group` |
+| `user_id` | bigint | N | — | FK → `app_user` |
+| `is_primary` | boolean | N | true | รองรับผู้รับสำรอง |
 | `is_active` | boolean | N | true | |
 
-**`sla_target`**
+UNIQUE (`company_id`, `contact_key`, `user_id`)
+
+> **ไม่เพิ่มเป็น role ใหม่** เพราะเป็นตำแหน่งในองค์กร ไม่ใช่ชุดสิทธิ์ — เพิ่มเป็น role จะทำให้ permission matrix บวมโดยไม่จำเป็น
+
+### 5.4 `sla_escalation_rule` — กฎ escalation ที่ตั้งค่าได้
 
 | field | type | null | default | คำอธิบาย |
 |---|---|---|---|---|
 | `id` | bigserial | N | auto | PK |
-| `sla_policy_id` | bigint | N | — | FK |
-| `priority` | varchar(10) | N | — | `critical`/`high`/`medium`/`low` |
-| `response_minutes` | int | N | — | นาที**ทำการ**สำหรับตอบรับ |
-| `resolution_minutes` | int | N | — | นาที**ทำการ**สำหรับแก้ไขเสร็จ |
-| `escalation_percent` | int | N | 75 | แจ้งเตือนเมื่อใช้เวลาไปกี่ % |
+| `company_id` | bigint | Y | null | null = ใช้ทั้งกลุ่ม |
+| `code` | varchar(20) | N | — | `ES-01` … `ES-12` |
+| `trigger_type` | varchar(30) | N | — | `on_priority` / `time_in_tier` / `after_due` / `interval_report` / `manual_request` / `rca_overdue` / `repeat_incident` |
+| `priority` | varchar(10) | Y | null | จำกัดเฉพาะระดับ |
+| `threshold_minutes` | int | Y | null | เกณฑ์เวลา |
+| `threshold_clock_mode` | varchar(20) | N | `'business_hours'` | ตีความ `threshold_minutes` |
+| `notify_contact_keys` | varchar(200) | N | — | รายการ `contact_key` คั่นด้วย `,` |
+| `notify_roles` | varchar(200) | Y | null | role ในระบบที่ต้องแจ้งเพิ่ม |
+| `repeat_interval_minutes` | int | Y | null | null = แจ้งครั้งเดียว |
+| `notify_outside_business_hours` | boolean | N | false | **true เฉพาะ ES-01/ES-02/ES-03** |
+| `is_active` | boolean | N | true | |
 
-UNIQUE (`sla_policy_id`, `priority`)
+UNIQUE (`company_id`, `code`)
 
-### 3.11 `business_hours` และ `holiday`
+> ทำเป็นตารางเพราะเอกสาร SLA **ทบทวนทุก 12 เดือน** — hard-code ไว้จะต้อง deploy ใหม่ทุกครั้งที่เกณฑ์เปลี่ยน
 
-**`business_hours`**
+### 5.5 `service` — ทะเบียนระบบงาน
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `id` | bigserial | N | auto | PK |
+| `company_id` | bigint | Y | null | null = บริการร่วมทั้งกลุ่ม |
+| `code` | varchar(40) | N | — | UNIQUE ต่อบริษัท |
+| `name_th` | varchar(150) | N | — | |
+| `service_group` | varchar(30) | N | — | `core_business` / `infrastructure` / `communication` / `file_storage` / `endpoint` / `service_request` |
+| `service_tier` | varchar(20) | N | `'standard'` | `critical` / `high` / `standard` |
+| `owner_user_id` | bigint | Y | null | System Owner — ใช้เป็นผู้อนุมัติขั้นที่ 2 ของ SOP-03 |
+| `is_24x7` | boolean | N | false | true = ตัวหารของ Uptime คือ 43,200 นาที/เดือน |
+| `is_active` | boolean | N | true | |
+
+### 5.6 `service_tier_target`
+
+| field | type | null | คำอธิบาย |
+|---|---|---|---|
+| `tier_code` | varchar(20) | N | PK — `critical` / `high` / `standard` |
+| `uptime_percent` | numeric(5,3) | N | `99.900` / `99.500` / `99.000` |
+| `max_downtime_minutes_month` | int | N | `43` / `216` / `432` |
+
+### 5.7 `service_outage` — ตัวตั้งของสูตร Uptime
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `id` | bigserial | N | auto | PK |
+| `service_id` | bigint | N | — | FK → `service` |
+| `ticket_id` | bigint | Y | null | ticket ที่เกี่ยวข้อง (ปกติคือ P1/P2) |
+| `started_at` | timestamptz | N | — | |
+| `ended_at` | timestamptz | Y | null | null = ยังขัดข้องอยู่ |
+| `is_planned` | boolean | N | false | true = **ไม่นับเป็น Downtime** (SLA 5.2, 9) |
+| `maintenance_window_id` | bigint | Y | null | FK |
+| `cause` | varchar(500) | Y | null | |
+| `recorded_by` | bigint | Y | null | null = ระบบ Monitoring (เฟส 2) |
+
+> **เฟส 1 บันทึกด้วยมือ** — ได้ KPI-6 ครบตามสูตรของเอกสารโดยไม่ต้องเชื่อมระบบ Monitoring
+
+### 5.8 `maintenance_window`
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `id` | bigserial | N | auto | PK |
+| `company_id` | bigint | Y | null | |
+| `service_id` | bigint | Y | null | null = กระทบหลายระบบ |
+| `planned_start` / `planned_end` | timestamptz | N | — | มาตรฐาน: เสาร์ 20:00–24:00 |
+| `notified_at` | timestamptz | Y | null | **ระบบบล็อกการยืนยันถ้าแจ้งล่วงหน้า < 3 วันทำการ** |
+| `notice_lead_business_days` | int | N | 3 | |
+| `description` | varchar(500) | Y | null | |
+| `created_by` | bigint | N | — | |
+
+### 5.9 `problem` — RCA และเหตุซ้ำ
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `id` | bigserial | N | auto | PK |
+| `company_id` | bigint | N | — | |
+| `code` | varchar(30) | N | — | UNIQUE เช่น `PRB-202608-0007` |
+| `title` | varchar(255) | N | — | |
+| `service_id` | bigint | Y | null | FK → `service` |
+| `root_cause_code` | varchar(40) | Y | null | ใช้จับ "สาเหตุเดิมซ้ำภายใน 90 วัน" |
+| `root_cause_note` | text | Y | null | |
+| `status` | varchar(20) | N | `'open'` | `open` / `rca_pending` / `fixed` / `closed` |
+| `opened_at` | timestamptz | N | now() | |
+| `rca_due_at` | timestamptz | Y | null | = `opened_at` + **5 วันทำการ** สำหรับเหตุ P1 (SLA 7.2) |
+| `rca_submitted_at` | timestamptz | Y | null | |
+| `owner_id` | bigint | Y | null | |
+| `closed_at` | timestamptz | Y | null | |
+
+### 5.10 `service_catalog_item` — เป้าหมายเวลาของคำขอบริการ
 
 | field | type | null | default | คำอธิบาย |
 |---|---|---|---|---|
 | `id` | bigserial | N | auto | PK |
 | `company_id` | bigint | Y | null | null = ใช้ร่วมทั้งกลุ่ม |
-| `day_of_week` | smallint | N | — | 0=อาทิตย์ … 6=เสาร์ |
-| `start_time` | time | N | `'08:00'` | |
-| `end_time` | time | N | `'17:00'` | |
-| `is_working_day` | boolean | N | true | false = ไม่นับเวลาวันนั้น |
-
-UNIQUE (`company_id`, `day_of_week`)
-
-**`holiday`**
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `company_id` | bigint | Y | null | null = วันหยุดทั้งกลุ่ม |
-| `holiday_date` | date | N | — | |
-| `name` | varchar(150) | N | — | ชื่อวันหยุด |
-
-UNIQUE (`company_id`, `holiday_date`)
-
-### 3.12 `kb_category` และ `kb_article`
-
-**`kb_category`**
-
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `parent_id` | bigint | Y | null | หมวดย่อย |
+| `code` | varchar(40) | N | — | UNIQUE |
 | `name_th` | varchar(150) | N | — | |
-| `sort_order` | int | N | 0 | |
+| `category_id` | bigint | Y | null | FK → `ticket_category` |
+| `default_impact` / `default_urgency` | varchar(20) | N | — | ใช้คำนวณ priority เริ่มต้น |
+| `target_mode` | varchar(30) | N | `'duration'` | `duration` / `before_date` / `by_date` |
+| `target_minutes` | int | Y | null | **นาทีทำการ** |
+| `clock_start_event` | varchar(30) | N | `'on_create'` | `on_create` / `after_identity_verified` / `after_approval` / `after_budget_approval` |
+| `lead_time_days` | int | Y | null | เวลาแจ้งล่วงหน้าขั้นต่ำ |
+| `lead_time_unit` | varchar(10) | Y | null | `calendar` / `business` |
+| `requires_approval` | boolean | N | false | |
+| `approval_chain` | varchar(200) | Y | null | ลำดับ `approver_type` คั่นด้วย `,` เช่น `line_manager,system_owner` |
+| `checklist_template_id` | bigint | Y | null | FK → `checklist_template` |
 | `is_active` | boolean | N | true | |
 
-**`kb_article`**
+> **กติกาการเลือกเป้าหมาย:** `ticket_type='service_request'` และมี `catalog_item_id` → ใช้ `target_minutes` · ถ้าไม่มีรายการที่ตรง → fallback ไป `sla_target` ของ priority
+> **`response_due_at` ใช้ `sla_target` ตาม priority เสมอ** เพราะ SLA 5.3 กำหนดเฉพาะเวลาดำเนินการ ไม่ได้ยกเว้นเวลาตอบรับ
+
+### 5.11 `approval_request`
 
 | field | type | null | default | คำอธิบาย |
 |---|---|---|---|---|
 | `id` | bigserial | N | auto | PK |
-| `kb_category_id` | bigint | N | — | FK |
-| `company_id` | bigint | Y | null | null = ทุกบริษัทเห็น |
-| `title` | varchar(255) | N | — | |
-| `summary` | varchar(500) | Y | null | ใช้แสดงในผลค้นหา |
-| `body_markdown` | text | N | — | เนื้อหา Markdown |
-| `visibility` | varchar(20) | N | `'public'` | `public` (ทุกคนในขอบเขต) / `company` / `agent_only` |
-| `status` | varchar(20) | N | `'draft'` | `draft` / `published` / `archived` |
-| `tags` | varchar(255) | Y | null | คั่นด้วยจุลภาค ใช้ช่วยค้นหา |
-| `author_id` | bigint | N | — | ผู้เขียน |
-| `view_count` | int | N | 0 | |
-| `helpful_count` | int | N | 0 | |
-| `not_helpful_count` | int | N | 0 | |
-| `source_ticket_id` | bigint | Y | null | สร้างมาจาก ticket ใด |
-| `published_at` | timestamptz | Y | null | |
-| `deleted_at` | timestamptz | Y | null | |
-| `created_at` / `updated_at` | timestamptz | N | now() | |
+| `ticket_id` | bigint | N | — | FK → `ticket` |
+| `seq` | smallint | N | 1 | ขั้น `n+1` เปิดใช้เมื่อขั้น `n` เป็น `approved` |
+| `approver_type` | varchar(30) | N | — | `line_manager` / `system_owner` / `head_of_it` / `budget_owner` / `cab` |
+| `approver_id` | bigint | Y | null | null = ยังหาผู้อนุมัติไม่ได้ (ต้องแจ้ง `company_admin`) |
+| `status` | varchar(20) | N | `'pending'` | `pending` / `approved` / `rejected` / `cancelled` / `skipped` |
+| `decided_by` | bigint | Y | null | |
+| `decided_at` | timestamptz | Y | null | |
+| `comment` | varchar(500) | Y | null | **บังคับเมื่อ `rejected`** |
+| `requested_at` | timestamptz | N | now() | |
+| `due_at` | timestamptz | Y | null | ใช้เตือนผู้อนุมัติที่ค้าง |
+| `attachment_id` | bigint | Y | null | หลักฐานการอนุมัติ (SOP-03 ข้อ 4) |
+| `access_expires_at` | timestamptz | Y | null | สิทธิ์ชั่วคราวมีกำหนดสิ้นสุด (SOP-03 ข้อ 6) |
 
-INDEX: GIN trigram บน `title` + `summary` (ค้นหาภาษาไทย)
+UNIQUE (`ticket_id`, `seq`) · INDEX (`approver_id`, `status`)
 
-### 3.13 `notification` และ `notification_channel`
+**กฎที่ backend ต้องบังคับ**
+1. สร้าง ticket ที่ `catalog_item.requires_approval = true` → สร้างแถวตาม `approval_chain`
+2. ขณะมีแถว `pending` → ticket อยู่ `pending_user` + `pending_reason='approval'` → **หยุดนับ SLA**
+3. อนุมัติครบทุกขั้น → ตั้ง `ticket.sla_clock_started_at = now()` แล้วคำนวณ due จากจุดนั้น
+4. ขั้นใดเป็น `rejected` → ticket ไป `cancelled` พร้อมเหตุผลจาก `comment`
+5. **ห้ามผู้ขออนุมัติคำขอของตนเอง** (`approver_id ≠ ticket.requester_id`)
+6. permission ใหม่: `approval.decide` (มอบให้ผู้ที่เป็น approver ของแถวนั้นเท่านั้น ไม่ผูกกับ role), `approval.read`
 
-**`notification`** — บันทึกการแจ้งเตือน 1 แถวต่อ 1 ช่องทาง
+### 5.12–5.15 Checklist (4 ตาราง)
 
-| field | type | null | default | คำอธิบาย |
-|---|---|---|---|---|
-| `id` | bigserial | N | auto | PK |
-| `user_id` | bigint | N | — | ผู้รับ |
-| `ticket_id` | bigint | Y | null | เรื่องที่เกี่ยวข้อง |
-| `event_type` | varchar(40) | N | — | `ticket_created`, `ticket_assigned`, `comment_added`, `status_changed`, `sla_warning`, `sla_breached`, `ticket_resolved`, `ticket_closed` |
-| `channel` | varchar(20) | N | — | `in_app` / `email` / `line` |
-| `title` | varchar(255) | N | — | |
-| `body` | text | N | — | |
-| `status` | varchar(20) | N | `'pending'` | `pending` / `sent` / `failed` / `skipped` |
-| `retry_count` | int | N | 0 | สูงสุด 3 |
-| `error_message` | varchar(500) | Y | null | |
-| `sent_at` | timestamptz | Y | null | |
-| `read_at` | timestamptz | Y | null | ใช้กับ `in_app` |
-| `created_at` | timestamptz | N | now() | |
-
-INDEX: (`user_id`, `channel`, `read_at`) สำหรับนับที่ยังไม่อ่าน
-
-**`notification_channel`** — การตั้งค่าช่องทางของผู้ใช้
+**`checklist_template`**
 
 | field | type | null | default | คำอธิบาย |
 |---|---|---|---|---|
 | `id` | bigserial | N | auto | PK |
-| `user_id` | bigint | N | — | FK |
-| `channel` | varchar(20) | N | — | `in_app` / `email` / `line` |
-| `destination` | varchar(255) | Y | null | อีเมล หรือ LINE token/user id |
-| `is_enabled` | boolean | N | true | |
-| `is_verified` | boolean | N | false | LINE ต้องผูกสำเร็จก่อนจึงส่งได้ |
+| `company_id` | bigint | Y | null | |
+| `code` | varchar(40) | N | — | `CHK-ONBOARD` / `CHK-OFFBOARD` (UNIQUE ต่อบริษัท) |
+| `name_th` | varchar(150) | N | — | |
+| `doc_ref` | varchar(40) | Y | null | เช่น `AIDC-IT-SOP-001 ก.1` |
+| `version` | int | N | 1 | เพิ่มทีละ 1 เมื่อแก้รายการ |
+| `is_active` | boolean | N | true | |
 
-UNIQUE (`user_id`, `channel`)
-
-### 3.14 `audit_log`
+**`checklist_item`**
 
 | field | type | null | default | คำอธิบาย |
 |---|---|---|---|---|
 | `id` | bigserial | N | auto | PK |
-| `actor_id` | bigint | Y | null | null = ระบบ |
-| `company_id` | bigint | Y | null | บริษัทของข้อมูลที่ถูกกระทำ |
-| `action` | varchar(40) | N | — | `login`, `login_failed`, `create`, `update`, `delete`, `assign`, `status_change`, `permission_change`, `export`, `download` |
-| `entity_type` | varchar(40) | N | — | `ticket`, `app_user`, `kb_article`, `sla_policy`, ... |
-| `entity_id` | bigint | Y | null | |
-| `old_value` | jsonb | Y | null | เฉพาะฟิลด์ที่เปลี่ยน (ห้ามเก็บ password/token) |
-| `new_value` | jsonb | Y | null | |
-| `ip_address` | varchar(45) | Y | null | รองรับ IPv6 |
-| `user_agent` | varchar(255) | Y | null | |
-| `created_at` | timestamptz | N | now() | |
+| `template_id` | bigint | N | — | FK (ON DELETE CASCADE) |
+| `sort_order` | int | N | 0 | |
+| `title_th` | varchar(255) | N | — | |
+| `description` | varchar(500) | Y | null | |
+| `is_required` | boolean | N | true | **true = บล็อกการปิดงาน** |
+| `evidence_required` | boolean | N | false | true = ต้องแนบไฟล์หลักฐาน |
+| `default_role_code` | varchar(30) | Y | null | |
+| `is_active` | boolean | N | true | |
 
-INDEX: (`created_at DESC`), (`actor_id`, `created_at DESC`), (`entity_type`, `entity_id`)
-เป็นตาราง **append-only** — ไม่มี UPDATE/DELETE จากชั้น application
+UNIQUE (`template_id`, `sort_order`)
+
+**`ticket_checklist`**
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `id` | bigserial | N | auto | PK |
+| `ticket_id` | bigint | N | — | FK |
+| `template_id` | bigint | N | — | FK |
+| `template_version` | int | N | — | **สแนปช็อต** — แก้ template ภายหลังไม่กระทบ ticket เก่า |
+| `completed_at` | timestamptz | Y | null | ตั้งอัตโนมัติเมื่อข้อ required ครบ |
+
+UNIQUE (`ticket_id`, `template_id`)
+
+**`ticket_checklist_item`**
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `id` | bigserial | N | auto | PK |
+| `ticket_checklist_id` | bigint | N | — | FK (ON DELETE CASCADE) |
+| `checklist_item_id` | bigint | Y | null | FK (null ได้ถ้าต้นทางถูกลบ) |
+| `title_snapshot` | varchar(255) | N | — | ข้อความ ณ เวลาที่สร้าง |
+| `is_required` / `evidence_required` | boolean | N | — | สแนปช็อต |
+| `is_done` | boolean | N | false | |
+| `done_by` | bigint | Y | null | |
+| `done_at` | timestamptz | Y | null | |
+| `note` | varchar(500) | Y | null | |
+| `attachment_id` | bigint | Y | null | **บังคับเมื่อ `evidence_required`** |
+
+**กฎที่ backend ต้องบังคับ**
+1. สร้าง ticket ที่ `catalog_item.checklist_template_id` ไม่ null → สร้าง `ticket_checklist` + item ทั้งชุดอัตโนมัติ
+2. `in_progress → resolved` ถูกปฏิเสธด้วย `409` ถ้ายังมี item ที่ `is_required AND NOT is_done` (ต้องระบุข้อที่ยังไม่ครบในข้อความ)
+3. item ที่ `evidence_required` ต้องมี `attachment_id` ก่อนติ๊กเสร็จ
+4. การติ๊ก/ยกเลิกติ๊กทุกครั้งบันทึกลง `audit_log`
+
+### 5.16 `approved_software` — บัญชีซอฟต์แวร์อนุมัติ (SOP-06)
+
+| field | type | null | default | คำอธิบาย |
+|---|---|---|---|---|
+| `id` | bigserial | N | auto | PK |
+| `company_id` | bigint | Y | null | null = ใช้ร่วมทั้งกลุ่ม |
+| `name` | varchar(150) | N | — | |
+| `version` | varchar(50) | Y | null | |
+| `license_type` | varchar(50) | Y | null | `free` / `perpetual` / `subscription` / `oem` |
+| `note` | varchar(500) | Y | null | |
+| `is_active` | boolean | N | true | |
+
+> เฟส 1 เป็น **master data อ่านอย่างเดียว** — ให้ระบบเช็กอัตโนมัติว่าคำขอติดตั้งเข้าข่าย `SR-SW-INSTALL` (2 วันทำการ) หรือ `SR-SW-NONSTD` (ต้องอนุมัติ)
 
 ---
 
-## 4. State Machine ของ Ticket
+## 6. State Machine ของ Ticket (เวอร์ชัน 2)
 
 ```mermaid
 stateDiagram-v2
     [*] --> new : สร้าง ticket
     new --> assigned : มอบหมาย / รับงาน
+    new --> pending_user : รออนุมัติ (คำขอที่ต้องอนุมัติ)
     new --> cancelled : ยกเลิก (ระบุเหตุผล)
     assigned --> in_progress : เริ่มดำเนินการ
-    assigned --> pending_user : ขอข้อมูลเพิ่มจากผู้แจ้ง
+    assigned --> pending_user : ขอข้อมูล / รอ vendor / รออนุมัติ
     assigned --> cancelled : ยกเลิก
-    in_progress --> pending_user : รอข้อมูล/รออะไหล่จากผู้แจ้ง
+    in_progress --> pending_user : รอข้อมูล / รออะไหล่ / รออนุมัติ
     in_progress --> resolved : แก้ไขเสร็จ
     in_progress --> cancelled : ยกเลิก
-    pending_user --> in_progress : ผู้แจ้งตอบกลับ
-    pending_user --> resolved : ครบ 5 วันทำการไม่ตอบ (อัตโนมัติ)
-    resolved --> closed : ผู้แจ้งยืนยัน หรือครบ 3 วันทำการ (อัตโนมัติ)
+    pending_user --> in_progress : ผู้แจ้งตอบ / vendor ตอบ / อนุมัติครบ
+    pending_user --> closed : ติดตาม 2 ครั้งแล้วไม่ตอบ ครบ 3 วันทำการ
+    pending_user --> cancelled : คำขอถูกปฏิเสธการอนุมัติ
+    resolved --> closed : ผู้แจ้งยืนยัน หรือครบ 3 วันทำการ
     resolved --> in_progress : ผู้แจ้งแจ้งว่ายังไม่หาย
     closed --> in_progress : เปิดซ้ำภายใน 7 วัน
     closed --> [*]
     cancelled --> [*]
 ```
 
-### 4.1 ตารางการเปลี่ยนสถานะ
+### 6.1 ตารางการเปลี่ยนสถานะ
 
-| จาก | ไป | ใครทำได้ | เงื่อนไข / ผลข้างเคียง |
+| จาก | ไป | ใครทำได้ | เงื่อนไขและผลข้างเคียง |
 |---|---|---|---|
-| — | `new` | end_user, agent+ | สร้าง ticket, คำนวณ `response_due_at` / `resolution_due_at` |
-| `new` | `assigned` | agent+ | ตั้ง `assignee_id`, แจ้งเตือนผู้รับผิดชอบ |
-| `assigned` | `in_progress` | assignee, agent+ | — |
-| `assigned`/`in_progress` | `pending_user` | assignee, agent+ | ต้องมีคอมเมนต์สาธารณะระบุสิ่งที่รอ, ตั้ง `pending_started_at`, **หยุดนับ SLA** |
-| `pending_user` | `in_progress` | ระบบ (เมื่อผู้แจ้งคอมเมนต์) / agent+ | บวก `pending_duration_minutes`, เลื่อน `resolution_due_at` ออกไปเท่าเวลาที่หยุด |
-| `pending_user` | `resolved` | ระบบ | ครบ 5 วันทำการไม่มีการตอบ + คอมเมนต์ระบบ |
-| `in_progress` | `resolved` | assignee, agent+ | ต้องกรอก `resolution_note`, ตั้ง `resolved_at`, ตรวจ resolution breach |
-| `resolved` | `closed` | requester / ระบบ (3 วันทำการ) / agent+ | ตั้ง `closed_at`, `closed_by` |
-| `resolved` | `in_progress` | requester, agent+ | เคลียร์ `resolved_at`, คำนวณ due ใหม่จากเวลาที่กลับมา |
-| `closed` | `in_progress` | requester, agent+ | ภายใน 7 วันหลัง `closed_at`, `reopen_count` +1 |
-| `new`/`assigned`/`in_progress` | `cancelled` | requester (เฉพาะของตนและยังไม่ assign), agent+ | ต้องระบุเหตุผล, ยกเลิกการนับ SLA |
+| — | `new` | end_user, agent+ | คำนวณ `priority` จาก `impact × urgency` · คำนวณ due จาก `sla_clock_started_at` · สร้าง `approval_request` และ `ticket_checklist` ถ้า catalog กำหนด |
+| `new` | `assigned` | agent+ | ตั้ง `assignee_id`, `assignee_change_count` +1, แจ้งเตือนผู้รับผิดชอบ |
+| `new`/`assigned`/`in_progress` | `pending_user` | assignee, agent+, ระบบ | **บังคับ `pending_reason`** · `user` ต้องมีคอมเมนต์สาธารณะระบุสิ่งที่รอ · `vendor` ต้องมีคอมเมนต์แจ้งผู้แจ้งก่อนจึงตั้ง `pending_notified_at` ได้ · `approval` ระบบตั้งอัตโนมัติเมื่อมี `approval_request` ค้าง · ตั้ง `pending_started_at` · **หยุดนับ SLA** |
+| `pending_user` | `in_progress` | ระบบ / agent+ | บวก `pending_duration_minutes` (นาทีทำการ) · เลื่อน `resolution_due_at` เท่าเวลาที่หยุด · เคลียร์ `pending_reason` · ถ้าเป็น `approval` และ `clock_start_event='after_approval'` → ตั้ง `sla_clock_started_at = now()` แล้วคำนวณ due ใหม่ |
+| `pending_user` | `closed` | ระบบ | **ต้องมี `followup_count >= 2`** และครบ 3 วันทำการหลัง `last_followup_at` · คอมเมนต์ระบบ + อีเมลแจ้ง · ผู้แจ้งเปิดใหม่ได้ (SLA 5.4 / SOP-01 ข้อ 9) |
+| `pending_user` | `cancelled` | ระบบ | เมื่อ `approval_request` ขั้นใดเป็น `rejected` · เหตุผลมาจาก `comment` |
+| `in_progress` | `resolved` | assignee, agent+ | **บังคับ `resolution_note`** · **บล็อกถ้า checklist ข้อ required ยังไม่ครบ** (409) · ตั้ง `resolved_at` · ตรวจ resolution breach · ตั้ง `csat_sent_at` |
+| `resolved` | `closed` | requester / ระบบ (3 วันทำการ) / agent+ | ตั้ง `closed_at`, `closed_by` (null = ระบบ) |
+| `resolved` | `in_progress` | requester, agent+ | บวกเวลาที่อยู่ใน `resolved` เข้า `pending_duration_minutes` แล้วเลื่อน due ออก (**สูตรเดียวกับ pause** — ปิดประเด็น S-03) |
+| `closed` | `in_progress` | requester, agent+ | ภายใน 7 วันหลัง `closed_at` · `reopen_count` +1 |
+| `new`/`assigned`/`in_progress` | `cancelled` | requester (เฉพาะของตนและยังไม่ assign), agent+ | บังคับเหตุผล · ยกเลิกการนับ SLA |
 
-> ทุกการเปลี่ยนสถานะบันทึกลง `ticket_status_history` เสมอ — การเปลี่ยนที่ไม่อยู่ในตารางนี้ ระบบต้องตอบ `409 INVALID_STATE_TRANSITION`
+> ทุกการเปลี่ยนสถานะบันทึกลง `ticket_status_history` เสมอ — การเปลี่ยนที่ไม่อยู่ในตารางนี้ต้องตอบ `409 INVALID_STATE_TRANSITION`
+
+### 6.2 เหตุการณ์ที่ไม่ใช่การเปลี่ยนสถานะแต่กระทบ SLA
+
+| เหตุการณ์ | ผล |
+|---|---|
+| **บันทึก workaround** (`workaround_at`) | **หยุดนับ resolution ของ incident ทันที** · บังคับเปิด `problem` และผูก `problem_id` · ticket ยังอยู่ `in_progress` ได้ |
+| **เปลี่ยน priority** | ตั้ง `priority_changed_at = now()` · คำนวณ `response_due_at`/`resolution_due_at` **ใหม่จากจุดนี้** ด้วย target ของระดับใหม่ · บังคับเหตุผลใน history |
+| **ตั้ง `sla_exclusion_code`** | ข้ามการประเมิน breach และตัดออกจากตัวหาร KPI |
+| **ยกระดับเป็น P1** | ตั้ง `is_major_incident = true` · แจ้ง `head_of_it` + On-call ทันทีแม้นอกเวลาทำการ (ES-01) |
+| **ตั้ง `is_security_incident`** | แจ้ง `head_of_it` + `ceo` + `dpo` ภายใน 30 นาที · จำกัดการมองเห็น (หัวข้อ 7.3) · ถ้า `personal_data_affected` ตั้ง `regulator_notify_due_at = now() + 72 ชม.` |
 
 ---
 
-## 5. กฎการมองเห็นข้อมูล (Row-Level Scoping)
+## 7. กฎการมองเห็นข้อมูล (Row-Level Scoping)
 
-> บังคับที่ชั้น repository ของ backend ผ่าน dependency ตัวเดียว (`get_scope(current_user)`) ที่ทุก query ต้องเรียกใช้ — ห้ามเขียน filter เองแยกราย endpoint
+> บังคับที่ชั้น repository ผ่าน dependency ตัวเดียว (`get_scope(current_user)`) — ห้ามเขียน filter เองแยกราย endpoint
+> **frontend ไม่มีสิทธิ์ต่อฐานข้อมูล** (ADR-002) จึงมีทางเข้าถึงข้อมูลทางเดียวและไม่ต้องใช้ PostgreSQL RLS
 
-### 5.1 ตาราง `ticket`
+### 7.1 ตาราง `ticket`
 
 | role | เงื่อนไข WHERE ที่ระบบเติมให้อัตโนมัติ |
 |---|---|
 | `end_user` | `requester_id = :me OR created_by = :me` |
-| `agent` | `company_id IN (:scoped_company_ids)` |
-| `company_admin` | `company_id IN (:scoped_company_ids)` |
-| `manager_viewer` | `company_id IN (:scoped_company_ids)` (อ่านอย่างเดียว) |
+| `agent` / `company_admin` / `manager_viewer` | `company_id IN (:scoped_company_ids)` |
 | `super_admin` | ไม่มีเงื่อนไขเพิ่ม |
 
-ทุก role: เติม `AND deleted_at IS NULL` ยกเว้น super_admin ที่เรียกดูรายการที่ถูกลบโดยเจตนา
+ทุก role เติม `AND deleted_at IS NULL` ยกเว้น super_admin ที่เรียกดูรายการที่ถูกลบโดยเจตนา
 
-### 5.2 ตารางอื่น
+### 7.2 ตารางอื่น
 
 | ตาราง | end_user | agent / company_admin / manager_viewer | super_admin |
 |---|---|---|---|
 | `ticket_comment` | เฉพาะ ticket ที่เห็น **และ** `is_internal = false` | ทุกคอมเมนต์ของ ticket ที่เห็น | ทั้งหมด |
-| `attachment` | เฉพาะที่ผูกกับ ticket/คอมเมนต์ที่เห็น | เฉพาะ ticket ในขอบเขต | ทั้งหมด |
-| `ticket_status_history` | เฉพาะ ticket ที่เห็น | เฉพาะ ticket ในขอบเขต | ทั้งหมด |
-| `app_user` | เห็นเฉพาะโปรไฟล์ตนเอง + ชื่อผู้รับผิดชอบใน ticket ของตน | ผู้ใช้ใน `scoped_company_ids` | ทั้งหมด |
-| `department` / `ticket_category` | ของบริษัทตน + ที่ใช้ร่วมทั้งกลุ่ม | ของบริษัทในขอบเขต + ที่ใช้ร่วม | ทั้งหมด |
-| `kb_article` | `status='published'` และ (`visibility='public'` หรือ (`visibility='company'` และ `company_id` = บริษัทตน)) | เพิ่ม `visibility='agent_only'` และเห็น `draft` ของตนเอง (company_admin เห็น draft ทั้งบริษัท) | ทั้งหมด |
-| `notification` | `user_id = :me` | `user_id = :me` | `user_id = :me` |
-| `audit_log` | ไม่มีสิทธิ์ | ไม่มีสิทธิ์ (company_admin เห็นเฉพาะ log ที่ `company_id` ของตน — ดู `04-rbac-sla.md`) | ทั้งหมด |
-| `sla_policy` / `business_hours` / `holiday` | อ่านค่าที่ใช้กับตนได้ | อ่านของบริษัทในขอบเขต | อ่าน/เขียนทั้งหมด |
+| `attachment` / `ticket_status_history` | เฉพาะที่ผูกกับ ticket ที่เห็น | เฉพาะ ticket ในขอบเขต | ทั้งหมด |
+| **`approval_request`** | เฉพาะ ticket ของตน (ไม่เห็น `comment` ของขั้นที่ยัง `pending`) | เฉพาะ ticket ในขอบเขต **+ แถวที่ตนเป็น `approver_id` ทุกบริษัท** | ทั้งหมด |
+| **`ticket_checklist*`** | **ไม่เห็น** (เป็นงานภายในของทีม IT) | เฉพาะ ticket ในขอบเขต | ทั้งหมด |
+| **`problem`** | ไม่เห็น | เฉพาะบริษัทในขอบเขต | ทั้งหมด |
+| **`service` / `service_outage` / `maintenance_window`** | อ่านชื่อบริการที่ตนใช้ได้ | เฉพาะบริษัทในขอบเขต | อ่าน/เขียนทั้งหมด |
+| `app_user` | โปรไฟล์ตนเอง + ชื่อผู้รับผิดชอบใน ticket ของตน | ผู้ใช้ใน `scoped_company_ids` | ทั้งหมด |
+| `department` / `ticket_category` / **`service_catalog_item`** / **`approved_software`** | ของบริษัทตน + ที่ใช้ร่วมทั้งกลุ่ม | ของบริษัทในขอบเขต + ที่ใช้ร่วม | ทั้งหมด |
+| `kb_article` | `status='published'` และ (`visibility='public'` หรือ (`visibility='company'` และ `company_id` = บริษัทตน)) | เพิ่ม `agent_only` และ `draft` ของตนเอง (company_admin เห็น draft ทั้งบริษัท) | ทั้งหมด |
+| `notification` / `notification_channel` | `user_id = :me` | `user_id = :me` | `user_id = :me` |
+| **`escalation_contact`** / **`sla_escalation_rule`** | ไม่เห็น | อ่านได้ (เพื่อรู้ว่าเรื่องจะถูกยกระดับไปหาใคร) | อ่าน/เขียนทั้งหมด |
+| `audit_log` | ไม่มีสิทธิ์ | company_admin เห็นเฉพาะ log ที่ `company_id` ของตน · agent/manager_viewer ไม่มีสิทธิ์ | ทั้งหมด |
+| `sla_policy` / `sla_target` / `business_hours` / `holiday` | อ่านค่าที่ใช้กับตนได้ (scoped ตามบริษัท — B-10) | อ่านของบริษัทในขอบเขต | อ่าน/เขียนทั้งหมด |
 
-### 5.3 นิยาม `scoped_company_ids`
+### 7.3 ข้อยกเว้น — ticket ที่เป็นเหตุความปลอดภัย
+
+`ticket.is_security_incident = true` **ไม่ใช้ scoping ปกติ** (SOP-10 ข้อ 2 กำหนดให้จำกัดการมองเห็นเฉพาะผู้เกี่ยวข้อง)
+
+เห็นได้เฉพาะ: `requester_id` · `assignee_id` · `incident_commander_id` · ผู้ที่อยู่ใน `escalation_contact` ที่ `contact_key IN ('head_of_it','ceo','dpo')` ของบริษัทนั้นหรือระดับกลุ่ม · `super_admin`
+
+> **company_admin และ agent คนอื่นในบริษัทเดียวกันไม่เห็น** — เป็นข้อยกเว้นเดียวในระบบที่ขอบเขตแคบกว่าบริษัท และต้องมีเทสต์เฉพาะ
+
+### 7.4 นิยาม `scoped_company_ids`
 
 ```
 scoped_company_ids(user) =
     ถ้ามี role super_admin        → ทุก company.id
-    มิฉะนั้น                      → UNION ของ user_role_scope.company_id ของทุก user_role ที่ผู้ใช้มี
+    มิฉะนั้น                      → UNION ของ user_role_scope.company_id ของทุก user_role
+                                     ที่ผู้ใช้มี และยังไม่หมดอายุ (expires_at IS NULL OR expires_at > now())
                                     ถ้าว่าง → { user.company_id }
 ```
 
 ---
 
-## 6. ข้อมูลตั้งต้น (Seed Data)
+## 8. ข้อมูลตั้งต้น (Seed Data)
 
-### 6.1 บริษัท
+### 8.1 บริษัท (คงเดิม)
 
 | id | code | name_th | name_en |
 |---|---|---|---|
@@ -730,154 +997,218 @@ scoped_company_ids(user) =
 | 6 | `AIDC-TRD` | เอไอดีซี เทรดดิ้ง | AIDC Trading |
 | 7 | `AIDC-LOG` | เอไอดีซี โลจิสติกส์ | AIDC Logistic |
 
-### 6.2 Role
+### 8.2 `sla_policy`
 
-| code | name_th | หมายเหตุ |
-|---|---|---|
-| `end_user` | ผู้แจ้ง | role เริ่มต้นของผู้ใช้ใหม่ทุกคน |
-| `agent` | เจ้าหน้าที่ support | |
-| `company_admin` | ผู้ดูแลระดับบริษัท | |
-| `manager_viewer` | ผู้บริหาร (ดูอย่างเดียว) | |
-| `super_admin` | ผู้ดูแลระบบ | สร้าง 1 บัญชีตอนติดตั้ง |
+| id | company_id | name | is_default | doc_ref | doc_version | effective_from |
+|---|---|---|---|---|---|---|
+| 1 | `NULL` | มาตรฐานกลางกลุ่ม AIDC (อ้างอิง AIDC-IT-SLA-001 v1.1) | true | `AIDC-IT-SLA-001` | `1.1` | `2026-08-01` |
+| 2 | `5` (AIDC-TECH) | AIDC Tech — AIDC-IT-SLA-001 v1.1 | true | `AIDC-IT-SLA-001` | `1.1` | `2026-08-01` |
 
-### 6.3 ระดับความเร่งด่วน (priority)
+> แถว id=2 มีอำนาจตามเอกสารจริง · แถว id=1 คัดลอกค่าเดียวกันเป็น fallback ของอีก 6 บริษัท — **[ต้องยืนยันกับ PM] Q-01**
 
-| ค่า | ชื่อไทย | สี | นิยามย่อ |
-|---|---|---|---|
-| `critical` | วิกฤต | แดง | ธุรกิจหยุดชะงัก / กระทบหลายคนหรือรายได้โดยตรง |
-| `high` | สูง | ส้ม | ทำงานไม่ได้แต่มีทางเลี่ยงชั่วคราว / กระทบทั้งแผนก |
-| `medium` | ปานกลาง | เหลือง | ทำงานได้แต่ติดขัด / กระทบรายบุคคล |
-| `low` | ต่ำ | เขียว | คำขอทั่วไป ไม่เร่งด่วน |
+### 8.3 `sla_target` (ใช้กับ policy 1 และ 2 เหมือนกัน)
 
-> เกณฑ์จัดระดับพร้อมตัวอย่างรายบริษัท ดู `04-rbac-sla.md` หัวข้อ 6
+| priority | response_minutes | resolution_minutes | clock_mode | status_report_interval | escalation_percent |
+|---|---|---|---|---|---|
+| `P1` | **15** | **240** | `calendar_24x7` | **60** | 75 |
+| `P2` | **30** | **480** | `business_hours` | **240** | 75 |
+| `P3` | **120** | **1080** | `business_hours` | `NULL` | 75 |
+| `P4` | **240** | **2700** | `business_hours` | `NULL` | 75 |
 
-### 6.4 หมวดหมู่ปัญหา — ใช้ร่วมทั้งกลุ่ม (`company_id = NULL`)
+> `escalation_percent = 75` เป็นกลไกของทีมเอง ไม่ได้มาจากเอกสารควบคุม — คงไว้ได้เพราะไม่ขัดกัน
 
-| หมวดหลัก | หมวดย่อย | default_priority |
-|---|---|---|
-| **ฮาร์ดแวร์** (`HW`) | คอมพิวเตอร์/โน้ตบุ๊กเสีย | high |
-| | เครื่องพิมพ์/สแกนเนอร์ | medium |
-| | อุปกรณ์ต่อพ่วง (เมาส์ คีย์บอร์ด จอ) | low |
-| | โทรศัพท์/แท็บเล็ตของบริษัท | medium |
-| **ซอฟต์แวร์** (`SW`) | ติดตั้ง/ถอนโปรแกรม | low |
-| | Microsoft Office / อีเมล | medium |
-| | โปรแกรมค้าง/ใช้งานไม่ได้ | high |
-| | ไวรัส/มัลแวร์ | critical |
-| **เครือข่าย** (`NET`) | อินเทอร์เน็ตใช้ไม่ได้ | high |
-| | Wi-Fi สัญญาณอ่อน | medium |
-| | VPN เชื่อมต่อไม่ได้ | high |
-| | ระบบโทรศัพท์ภายใน | medium |
-| **บัญชีผู้ใช้และสิทธิ์** (`ACC`) | ลืมรหัสผ่าน / บัญชีถูกล็อก | high |
-| | ขอเปิดบัญชีผู้ใช้ใหม่ | medium |
-| | ขอสิทธิ์เข้าถึงระบบ/โฟลเดอร์ | medium |
-| **ระบบงานส่วนกลาง** (`SYS`) | ระบบ ERP | high |
-| | ระบบบัญชี/การเงิน | high |
-| | ระบบ HR / ลงเวลา | medium |
-| | ระบบเอกสาร/ไฟล์เซิร์ฟเวอร์ | medium |
-| **อื่น ๆ** (`OTH`) | สอบถามการใช้งาน | low |
-| | คำขออื่น ๆ | low |
-
-### 6.5 หมวดหมู่เฉพาะบริษัท
-
-**AIDC Construction (`company_id = 2`) — งานก่อสร้าง**
-
-| หมวดหลัก | หมวดย่อย | default_priority |
-|---|---|---|
-| ระบบหน้างาน (`CON`) | ระบบรายงานความคืบหน้าหน้างาน (site report) | high |
-| | กล้อง CCTV หน้าไซต์งาน | medium |
-| | เน็ต/สัญญาณที่ไซต์งาน (4G router) | high |
-| | โปรแกรมเขียนแบบ (AutoCAD/Revit) | high |
-| | เครื่องพิมพ์แบบ (plotter) | medium |
-| | แท็บเล็ตตรวจงาน/เก็บรูปหน้างาน | medium |
-
-**COSI (`company_id = 3`) — ที่ปรึกษา/ออกแบบ**
-
-| หมวดหลัก | หมวดย่อย | default_priority |
-|---|---|---|
-| งานออกแบบ (`DSG`) | ซอฟต์แวร์ออกแบบ/License หมดอายุ | high |
-| | เวิร์กสเตชันประสิทธิภาพตก / render ไม่ผ่าน | high |
-| | พื้นที่จัดเก็บไฟล์โครงการเต็ม | medium |
-| | ไฟล์โครงการเสียหาย / ขอกู้คืนจาก backup | critical |
-
-**Heavy Machine (`company_id = 4`) — เครื่องจักรหนัก**
-
-| หมวดหลัก | หมวดย่อย | default_priority |
-|---|---|---|
-| ระบบบริการ (`HMS`) | ระบบจัดการงานซ่อม/ใบสั่งงาน (job order) | critical |
-| | ระบบสต็อกอะไหล่ | high |
-| | เครื่องมือวินิจฉัยเครื่องจักร (diagnostic tool) | high |
-| | แท็บเล็ตช่างบริการนอกสถานที่ | high |
-| | ระบบติดตามพิกัดเครื่องจักร (GPS/telematics) | medium |
-
-**AIDC Trading (`company_id = 6`) — เทรดดิ้ง**
-
-| หมวดหลัก | หมวดย่อย | default_priority |
-|---|---|---|
-| ระบบการค้า (`TRD`) | ระบบใบเสนอราคา/ใบสั่งขาย | critical |
-| | ระบบเชื่อมต่อคู่ค้า/ลูกค้า (EDI/API) | high |
-| | ระบบออกใบกำกับภาษี e-Tax | critical |
-| | ระบบสต็อกสินค้า | high |
-| | อีเมลลูกค้าเข้าไม่ได้/ตีกลับ | high |
-
-**AIDC Logistic (`company_id = 7`) — ขนส่ง/คลังสินค้า**
-
-| หมวดหลัก | หมวดย่อย | default_priority |
-|---|---|---|
-| ระบบขนส่ง (`LOG`) | ระบบ TMS (จัดรถ/วางแผนเส้นทาง) | critical |
-| | ระบบ WMS (คลังสินค้า) | critical |
-| | เครื่องยิงบาร์โค้ด/เครื่องพิมพ์ฉลาก | high |
-| | GPS ติดรถ / ระบบติดตามรถ | high |
-| | แอปคนขับ / มือถือประจำรถ | high |
-| | ระบบชั่งน้ำหนัก/ไม้กั้นทางเข้าคลัง | high |
-
-> **AIDC HQ (1)** และ **AIDC Tech (5)** ใช้หมวดหมู่กลางเป็นหลัก — AIDC Tech เพิ่ม `ระบบภายในที่พัฒนาเอง` (default `high`) และ `เซิร์ฟเวอร์/ระบบหลังบ้าน` (default `critical`)
-
-### 6.6 SLA Policy เริ่มต้น (policy กลาง `company_id = NULL`)
-
-| priority | response_minutes | resolution_minutes | escalation_percent |
-|---|---|---|---|
-| `critical` | 30 | 240 | 75 |
-| `high` | 60 | 480 | 75 |
-| `medium` | 240 | 1440 | 75 |
-| `low` | 480 | 2700 | 75 |
-
-> ตัวเลขเป็น**นาทีทำการ** (1 วันทำการ = 540 นาที) — คำอธิบายและที่มา ดู `04-rbac-sla.md`
-
-### 6.7 Business Hours เริ่มต้น (`company_id = NULL`)
+### 8.4 `business_hours` (`company_id = NULL` และ `company_id = 5`)
 
 | day_of_week | วัน | is_working_day | start_time | end_time |
 |---|---|---|---|---|
-| 0 | อาทิตย์ | false | — | — |
-| 1 | จันทร์ | true | 08:00 | 17:00 |
-| 2 | อังคาร | true | 08:00 | 17:00 |
-| 3 | พุธ | true | 08:00 | 17:00 |
-| 4 | พฤหัสบดี | true | 08:00 | 17:00 |
-| 5 | ศุกร์ | true | 08:00 | 17:00 |
-| 6 | เสาร์ | true | 08:00 | 17:00 |
+| 0 | อาทิตย์ | **false** | — | — |
+| 1–5 | จันทร์–ศุกร์ | true | **08:30** | **17:30** |
+| 6 | เสาร์ | **false** | — | — |
 
-### 6.8 หมวดหมู่ KB เริ่มต้น
+1 วันทำการ = **540 นาที** (ปิดประเด็น S-02 ของ Backend)
 
-| หมวด | ตัวอย่างบทความที่ควรมีตั้งแต่วันแรก |
-|---|---|
-| เริ่มต้นใช้งาน | วิธีแจ้งปัญหาผ่านมือถือ, ความหมายของแต่ละสถานะ |
-| บัญชีและรหัสผ่าน | รีเซ็ตรหัสผ่านด้วยตนเอง, บัญชีถูกล็อกทำอย่างไร |
-| เครื่องพิมพ์ | เพิ่มเครื่องพิมพ์, แก้ปัญหาพิมพ์ไม่ออก |
-| เครือข่าย | เชื่อม Wi-Fi สำนักงาน, ตั้งค่า VPN |
-| อีเมลและ Office | ตั้งค่าอีเมลบนมือถือ, กู้ไฟล์ที่เผลอปิด |
-| ระบบงานเฉพาะบริษัท | (visibility = `company`) |
+### 8.5 `holiday`
 
-### 6.9 วันหยุด
-นำเข้าวันหยุดนักขัตฤกษ์ไทยของปีปัจจุบันและปีถัดไปเป็น `company_id = NULL`
-**[ต้องยืนยันกับ PM]** วันหยุดตามประเพณีที่แต่ละบริษัทกำหนดเอง (ถ้ามี) ให้เพิ่มเป็นรายบริษัท
+🔴 **[บล็อก go-live] ต้องขอปฏิทินวันหยุดบริษัทฉบับทางการ** — เอกสาร SLA ระบุเพียง "ยกเว้นวันหยุดบริษัท" โดยไม่แนบปฏิทิน และยังไม่ยืนยันว่าเป็นวันหยุดไทยหรือ สปป.ลาว (โดเมนอีเมลในเอกสารคือ `.com.la`) — ไม่มีปฏิทิน = `resolution_due_at` ผิดทุก ticket ที่คร่อมวันหยุด (Q-03)
+
+### 8.6 `service_tier_target`
+
+| tier_code | uptime_percent | max_downtime_minutes_month |
+|---|---|---|
+| `critical` | 99.900 | 43 |
+| `high` | 99.500 | 216 |
+| `standard` | 99.000 | 432 |
+
+### 8.7 `service` — กลุ่มบริการตาม SLA ข้อ 2
+
+| service_group | ตัวอย่างบริการ | service_tier | is_24x7 |
+|---|---|---|---|
+| `core_business` | ระบบ ERP, ระบบงานขายและบริการลูกค้า, ฐานข้อมูลหลัก | `critical` | true |
+| `infrastructure` | เครือข่ายสำนักงาน (LAN), อินเทอร์เน็ตองค์กร, ระบบยืนยันตัวตน | `critical` | true |
+| `communication` | อีเมล, ระบบประชุมออนไลน์, แชทองค์กร, Wi-Fi, VPN | `high` | false |
+| `file_storage` | File Server / Cloud Storage | `high` | false |
+| `endpoint` | คอมพิวเตอร์, โน้ตบุ๊ก, เครื่องพิมพ์, อุปกรณ์ต่อพ่วง | `standard` | false |
+| `service_request` | ขอสิทธิ์, ติดตั้งซอฟต์แวร์, ขอ/ยืมอุปกรณ์, ขอคำปรึกษา | `standard` | false |
+
+🟠 **[ต้องยืนยันกับ PM] Q-05** — ต้องขอ **ทะเบียนระบบงาน** จริงพร้อมรายชื่อ System Owner มา seed ตาราง `service` มิฉะนั้นคำนวณ KPI-6 (Uptime) ไม่ได้ และ SOP-03 ไม่มีผู้อนุมัติขั้นที่ 2
+
+### 8.8 `service_catalog_item` — ตาม SLA 5.3
+
+| code | name_th | target_mode | target_minutes | เทียบเป็น | clock_start_event | approval_chain |
+|---|---|---|---|---|---|---|
+| `SR-PWD-RESET` | รีเซ็ตรหัสผ่าน / ปลดล็อกบัญชี | `duration` | **30** | 30 นาทีทำการ | `after_identity_verified` | — |
+| `SR-SW-INSTALL` | ติดตั้งซอฟต์แวร์ในบัญชีมาตรฐาน | `duration` | **1080** | 2 วันทำการ | `on_create` | — |
+| `SR-SW-NONSTD` | ขอซอฟต์แวร์นอกบัญชีมาตรฐาน | `duration` | 🟡 **[รอ PM]** | ไม่ระบุในเอกสาร | `after_approval` | `tier2_review,head_of_it` |
+| `SR-ACCESS` | ขอสิทธิ์เข้าถึงระบบ | `duration` | **540** | 1 วันทำการ | `after_approval` | `line_manager,system_owner` |
+| `SR-ONBOARD` | เตรียมระบบพนักงานใหม่ | `before_date` | — | พร้อมก่อนวันเริ่มงาน 1 วัน | `on_create` | 🟡 **[รอ PM]** |
+| `SR-OFFBOARD` | เพิกถอนระบบพนักงานพ้นสภาพ | `by_date` | — | ภายในวันสุดท้ายของการทำงาน | `on_create` | — |
+| `SR-EQUIP` | จัดหาอุปกรณ์ใหม่ตามมาตรฐาน | `duration` | **5400** | 10 วันทำการ | `after_budget_approval` | `budget_owner` |
+| `SR-RESTORE` | ขอกู้คืนข้อมูลจาก Backup | `duration` | 🟡 **[รอ PM]** | ไม่ระบุในเอกสาร | `after_approval` | `line_manager` |
+| `SR-POLICY-EXC` | ขอยกเว้นนโยบาย | `duration` | 🟡 **[รอ PM]** | ไม่ระบุในเอกสาร | `after_approval` | `head_of_it` |
+| `SR-ADVISORY` | ขอคำปรึกษา / สอบถามการใช้งาน | `duration` | 2700 | 5 วันทำการ (= P4) | `on_create` | — |
+
+`SR-ONBOARD`: `lead_time_days = 7` (`calendar`, แนะนำ 14) · `checklist_template_id` → `CHK-ONBOARD`
+`SR-OFFBOARD`: `lead_time_days = 3` (`business`) · `checklist_template_id` → `CHK-OFFBOARD`
+
+### 8.9 `checklist_template` + `checklist_item`
+
+**`CHK-ONBOARD`** — ภาคผนวก ก.1 (`doc_ref = AIDC-IT-SOP-001 ก.1`)
+
+| # | title_th | is_required | evidence_required |
+|---|---|---|---|
+| 1 | สร้างบัญชีผู้ใช้และอีเมล พร้อมกำหนดสิทธิ์ตามตำแหน่ง | ✔ | — |
+| 2 | เตรียมเครื่องคอมพิวเตอร์และติดตั้งซอฟต์แวร์มาตรฐาน | ✔ | — |
+| 3 | ลงทะเบียนทรัพย์สินและจัดทำใบส่งมอบอุปกรณ์ | ✔ | **✔** |
+| 4 | เปิดใช้ MFA และทดสอบการเข้าระบบทั้งหมด | ✔ | — |
+| 5 | แนะนำนโยบายไอทีและช่องทางติดต่อ Service Desk พร้อมลงนามรับทราบ | ✔ | **✔** |
+
+**`CHK-OFFBOARD`** — ภาคผนวก ก.2 (`doc_ref = AIDC-IT-SOP-001 ก.2`)
+
+| # | title_th | is_required | evidence_required |
+|---|---|---|---|
+| 1 | ระงับบัญชีผู้ใช้ อีเมล VPN และสิทธิ์ทุกระบบภายในวันสุดท้าย | ✔ | — |
+| 2 | รับคืนอุปกรณ์ครบถ้วนตามทะเบียนทรัพย์สิน และตรวจสภาพ | ✔ | **✔** |
+| 3 | โอนย้ายข้อมูลงานให้หัวหน้าหน่วยงานตามที่อนุมัติ | ✔ | — |
+| 4 | เพิกถอนสิทธิ์ระบบภายนอก (SaaS/Cloud) และปรับทะเบียน License | ✔ | — |
+| 5 | ลบข้อมูลบริษัทจากอุปกรณ์ BYOD และปิดบัญชีถาวรภายใน 30 วัน | ✔ | — |
+
+### 8.10 `sla_escalation_rule`
+
+| code | trigger_type | priority | threshold | clock_mode | notify_contact_keys | repeat | นอกเวลาทำการ |
+|---|---|---|---|---|---|---|---|
+| `ES-01` | `on_priority` | `P1` | 0 | — | `head_of_it,incident_manager,tier2_group` | — | **✔** |
+| `ES-02` | `after_due` | `P1` | 240 | `calendar` | `ceo,head_of_it` | 60 | **✔** |
+| `ES-03` | `on_security_incident` | — | 30 | `calendar` | `head_of_it,ceo,dpo` | — | **✔** |
+| `ES-04` | `time_in_tier` | — | 120 | `business_hours` | `tier2_group` | — | — |
+| `ES-05` | `on_tier3` | — | 0 | — | `tier3_group,head_of_it` | — | — |
+| `ES-06` | `after_due` | — | 0 | — | `head_of_it` | 1440 | — |
+| `ES-07` | `manual_request` | — | — | — | `head_of_it` | — | — |
+| `ES-08` | `manual_request` | — | — | — | — | — | — |
+| `ES-09` | `interval_report` | `P1` | 60 | `calendar` | `incident_manager` | 60 | **✔** |
+| `ES-09b` | `interval_report` | `P2` | 240 | `business_hours` | — | 240 | — |
+| `ES-10` | `rca_overdue` | — | 2700 | `business_hours` | `head_of_it` | — | — |
+| `ES-11` | `repeat_incident` | `P1` | 129600 | `calendar` | `head_of_it,ceo` | — | — |
+| `ES-12` | `percent_elapsed` | — | 75% | — | — | — | — |
+
+🔴 **[บล็อก go-live] Q-07** — ต้องรู้ว่าใครเป็น `head_of_it` / `ceo` / `dpo` แล้ว seed `escalation_contact` มิฉะนั้นกฎ ES-01, ES-02, ES-03, ES-06, ES-07, ES-10, ES-11 ส่งแจ้งเตือนไม่ได้เลย
+
+### 8.11 `maintenance_window`
+
+| company_id | recurrence | start | end | notice_lead_business_days |
+|---|---|---|---|---|
+| 5 | ทุกวันเสาร์ | `20:00` | `24:00` | **3** |
+
+### 8.12 หมวดหมู่ปัญหา — ค่าเริ่มต้นใหม่
+
+`ticket_category.default_priority` ถูกแทนด้วย `default_impact` + `default_urgency` — ตัวอย่างการแมป
+
+| หมวดย่อย | default_impact | default_urgency | → priority ที่ระบบคำนวณ |
+|---|---|---|---|
+| ไวรัส/มัลแวร์ | `org_wide` | `high` | **P1** |
+| ระบบ ERP / e-Tax / WMS / TMS ล่ม | `org_wide` | `high` | **P1** |
+| อินเทอร์เน็ตใช้ไม่ได้ (ทั้งชั้น/ทั้งแผนก) | `department` | `high` | **P2** |
+| VPN เชื่อมต่อไม่ได้ | `department` | `high` | **P2** |
+| คอมพิวเตอร์/โน้ตบุ๊กเสีย | `individual` | `high` | **P3** |
+| เครื่องพิมพ์/สแกนเนอร์ | `individual` | `medium` | **P3** |
+| ลืมรหัสผ่าน / บัญชีถูกล็อก | `individual` | `high` | **P3** *(แต่ใช้ catalog `SR-PWD-RESET` = 30 นาที)* |
+| ติดตั้ง/ถอนโปรแกรม · ขอสิทธิ์ · สอบถามการใช้งาน | `individual` | `low` | **P4** |
+| **สงสัยรหัสผ่านรั่วไหล** *(หมวดใหม่ตามนโยบาย 3.2)* | `org_wide` | `high` | **P1** + ตั้ง `is_security_incident` อัตโนมัติ |
+
+> รายการเต็มของหมวดหมู่กลาง 6 หมวด + หมวดเฉพาะบริษัท 5 บริษัท ยกมาจากเวอร์ชัน 1.0 §6.4–6.5 ทั้งหมด เปลี่ยนเฉพาะคอลัมน์ค่าเริ่มต้น
 
 ---
 
-## 7. หมายเหตุการนำไปพัฒนา
+## 9. ลำดับ Migration และหมายเหตุการพัฒนา
+
+### 9.1 ลำดับ migration (Alembic)
+
+| # | ไฟล์ | เนื้อหา |
+|---|---|---|
+| 0001 | `initial_org_and_auth` | `company`, `department`, `app_user`, `role`, `permission`, `role_permission`, `user_role`, `user_role_scope`, `escalation_contact` |
+| 0002 | `sla_and_calendar` | `sla_policy`, `sla_target`, `business_hours`, `holiday`, `sla_escalation_rule` |
+| 0003 | `service_registry` | `service`, `service_tier_target`, `service_outage`, `maintenance_window`, `problem` |
+| 0004 | `catalog_and_process` | `service_catalog_item`, `approval_request`, `checklist_template`, `checklist_item`, `approved_software` |
+| 0005 | `ticket_core` | `ticket_category`, `ticket`, `ticket_sequence`, `ticket_status_history`, `ticket_comment`, `ticket_checklist`, `ticket_checklist_item` |
+| 0006 | `attachment_kb_notification_audit` | `attachment`, `kb_category`, `kb_article`, `kb_feedback`, `notification`, `notification_channel`, `audit_log` |
+| 0007 | `search_indexes` | extension `pg_trgm` + `unaccent` · GIN trigram บน `ticket.subject`, `kb_article.title/summary` |
+| 0008 | `perf_indexes` | index ตาม §3.7 + partial unique ของ `notification` (ใช้ `CREATE INDEX CONCURRENTLY` เมื่อมีข้อมูลจริงแล้ว) |
+
+ทุก migration ต้องมี `upgrade` **และ** `downgrade` (NFR-24) และห้าม import `app.*`
+
+### 9.2 ลำดับ seed (ต้องเรียงตาม FK)
+
+```text
+1.  permission            49 แถว   (43 เดิม + approval.decide, approval.read,
+                                     ticket.request_priority_review, ticket.declare_major_incident,
+                                     ticket.set_workaround, service.manage, problem.manage,
+                                     escalation.manage — ดู 04-rbac-sla.md §7 ฉบับปรับปรุง)
+2.  role                  5 แถว
+3.  role_permission       ตาม permission matrix
+4.  company               7 แถว
+5.  service_tier_target   3 แถว
+6.  business_hours        7 แถว × (NULL + company 5)
+7.  holiday               🔴 รอปฏิทินทางการ
+8.  sla_policy            2 แถว
+9.  sla_target            4 แถว × 2 policy
+10. sla_escalation_rule   13 แถว
+11. service               🟠 รอทะเบียนระบบงาน
+12. checklist_template    2 แถว + checklist_item 10 แถว
+13. service_catalog_item  10 แถว
+14. approved_software     🟠 รอบัญชีจากฝ่าย IT
+15. ticket_category       หมวดกลาง 6 + หมวดย่อย ~23 + หมวดเฉพาะบริษัท
+16. kb_category           6 หมวด
+17. app_user              super_admin 1 บัญชี (รหัสจาก env, must_change_password = true)
+18. user_role             ผูก super_admin
+19. escalation_contact    🔴 รอรายชื่อผู้บริหาร
+20. department            รอไฟล์ Excel จริงจาก PM
+```
+
+### 9.3 หมายเหตุการนำไปพัฒนา
 
 | ประเด็น | แนวทาง |
 |---|---|
-| การออกเลข `ticket_no` | ใช้ตาราง sequence ต่อ (`company_id`, `yyyymm`) พร้อม `SELECT ... FOR UPDATE` — ไม่ใช้ `COUNT(*)+1` (race condition) |
-| การคำนวณ SLA | ทำเป็นฟังก์ชันเดียว `add_business_minutes(start, minutes, company_id)` ที่ backend พร้อม unit test ครอบเคสข้ามคืน/ข้ามวันหยุด/นอกเวลาทำการ |
-| Timezone | คำนวณ business hours ในโซน `Asia/Bangkok` แล้วแปลงกลับ UTC ก่อนบันทึกเสมอ |
-| ตารางที่โตเร็ว | `audit_log`, `notification` — ทำ partition รายปีเมื่อเกิน 5 ล้านแถว (ยังไม่ต้องทำในเฟส 1) |
-| การลบบริษัท | ห้ามลบ ใช้ `is_active = false` เท่านั้น |
+| ออกเลข `ticket_no` | `ticket_sequence` + `SELECT … FOR UPDATE` ในทรานแซกชันเดียวกับ insert |
+| การคำนวณ SLA | ฟังก์ชันเดียว `add_business_minutes(start, minutes, company_id)` + สาขา `calendar_24x7` สำหรับ P1 · ชุดทดสอบ 23 เคสต้อง**คำนวณค่าคาดหวังใหม่ทั้งหมด** เพราะเสาร์ไม่ใช่วันทำการแล้ว |
+| Timezone | คำนวณ business hours ใน `Asia/Bangkok` แล้วแปลงกลับ UTC ก่อนบันทึกเสมอ |
+| ตารางที่โตเร็ว | `audit_log`, `notification` — partition รายปีเมื่อเกิน 5 ล้านแถว (ยังไม่ต้องทำในเฟส 1) |
+| การลบบริษัท | ห้ามลบ ใช้ `is_active = false` |
+| นับ `pending_user` เกิน 3 ครั้ง | นับจาก `ticket_status_history` ตอนทำรายงาน ไม่ต้องเพิ่ม counter (S-07) |
+| **ค่าที่คำนวณตอนอ่าน ไม่เก็บใน DB** | `sla_status` (`on_track`/`at_risk`/`breached`/`paused`) · `priority` จาก matrix (เก็บผลลัพธ์แต่คำนวณอัตโนมัติ) |
+
+---
+
+## 10. ประเด็นที่ยังต้องยืนยันกับ PM
+
+| # | ประเด็น | ผลถ้าไม่มีคำตอบ | ระดับ |
+|---|---|---|---|
+| Q-01 | อีก 6 บริษัทใช้ SLA ชุดเดียวกับ AIDC Tech หรือไม่ | ใช้ policy กลางที่คัดลอกค่ามา ซึ่งอาจไม่มีผลผูกพันจริง | 🟠 |
+| Q-02 | อีก 6 บริษัทมีเวลาทำการเหมือน จ–ศ 08:30–17:30 หรือไม่ (ไซต์ก่อสร้าง/คลังอาจทำเสาร์) | due date ของ ticket ข้ามบริษัทคำนวณผิด | 🟠 |
+| Q-03 | **ปฏิทินวันหยุดฉบับทางการ — ไทยหรือ สปป.ลาว** | `resolution_due_at` ผิดทุก ticket ที่คร่อมวันหยุด | 🔴 **บล็อก go-live** |
+| Q-04 | มีทีม On-call 24×7 จริงหรือไม่ (P1 นับต่อเนื่อง) | P1 ที่เกิดคืนวันศุกร์จะ breach แน่นอน | 🟠 |
+| Q-05 | ทะเบียนระบบงาน + รายชื่อ System Owner | คำนวณ KPI-6 ไม่ได้ · SOP-03 ไม่มีผู้อนุมัติขั้น 2 | 🟠 |
+| Q-06 | เอกสาร AIDC-IT-WF-001 (ตารางอำนาจอนุมัติ onboarding) | seed `approval_chain` ของ `SR-ONBOARD` ไม่ได้ | 🟡 |
+| Q-07 | **ใครเป็น `head_of_it` / `ceo` / `dpo`** | กฎ escalation 7 ข้อส่งแจ้งเตือนไม่ได้ | 🔴 **บล็อก go-live** |
+| Q-08 | เป้าหมายเวลาของ `SR-SW-NONSTD`, `SR-RESTORE`, `SR-POLICY-EXC` | ใช้ค่า P4 (5 วันทำการ) ไปก่อน — **ต้องบันทึกว่าเป็นการตัดสินใจของ PM** | 🟡 |
+| Q-09 | **MFA** — AIDC Helpdesk นับเป็นระบบงานหลักตามนโยบาย 3.2 หรือไม่ | ถ้าใช่ ต้องเพิ่ม TOTP เข้า MVP (+3–5 วัน) และเพิ่มฟิลด์ใน `app_user` | 🟠 |
+| Q-10 | **นโยบายเก็บรักษาข้อมูล (retention)** — PDPA 3.8 บังคับ "ลบเมื่อพ้นระยะเวลาเก็บรักษา" แต่ `01-srs.md` A-09 บอก "เก็บตลอดอายุระบบ" | ขัดนโยบายองค์กรโดยตรง | 🟠 |
+| Q-11 | เก็บประวัติรหัสผ่านกี่ชุด (นโยบาย 3.2 ห้ามใช้ซ้ำ แต่ไม่ระบุจำนวน) | ใช้ 5 ชุดตามค่ามาตรฐานทั่วไป | 🟡 |
