@@ -17,3 +17,6 @@ deploy/backup/
 deploy/frontend-dist/
 .DS_Store
 Thumbs.db
+
+# venv ของ backend
+backend/.venv/
