@@ -1,0 +1,165 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ══════════════════════════════════════════════════════════════════════
+   Design token — ADR-003 แนวทาง B · 21-ui-ux-design.md §4.9
+   ค่า contrast ทุกคู่ตรวจด้วย scripts/check-contrast.py แล้ว (WCAG 2.1 AA)
+   ══════════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── พื้นผิว ── */
+  --bg-page: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f1f5f9;
+
+  /* ── ตัวอักษร ── */
+  --text-primary: #0f172a;   /* 17.85:1 บนขาว — AAA */
+  --text-secondary: #475569; /*  7.58:1 บนขาว — AAA */
+  --text-muted: #64748b;     /*  4.55:1 บนพื้นหน้า — AA */
+  --text-inverse: #ffffff;
+
+  /* ── เส้นขอบ ── */
+  --border: #e2e8f0;         /* ตกแต่งเท่านั้น ไม่สื่อความหมาย */
+  --border-control: #64748b; /*  4.76:1 — ขอบ input ต้องผ่าน 3:1 (WCAG 1.4.11) */
+
+  /* ── แบรนด์ ── */
+  --primary: #1d4ed8;        /*  6.70:1 กับตัวอักษรขาว — AA */
+  --primary-hover: #1e40af;  /*  8.72:1 — AAA */
+  --primary-subtle: #eff6ff;
+  --focus-ring: #2563eb;     /*  5.17:1 — ผ่าน 3:1 */
+
+  /* ── ระดับความสำคัญ P1–P4 ──
+     solid = ใช้เป็นจุดสี แถบซ้ายของแถว และสีในกราฟ (ผ่าน non-text 3:1) */
+  --p1-fg: #991b1b;  --p1-bg: #fee2e2;  --p1-solid: #dc2626;
+  --p2-fg: #9a3412;  --p2-bg: #ffedd5;  --p2-solid: #c2410c;
+  --p3-fg: #854d0e;  --p3-bg: #fef9c3;  --p3-solid: #a16207;
+  --p4-fg: #166534;  --p4-bg: #dcfce7;  --p4-solid: #15803d;
+
+  /* ── สถานะเรื่อง 7 ค่า ──
+     closed กับ cancelled ใช้โทนเทาใกล้กันโดยตั้งใจ (ทั้งคู่คือ "จบแล้ว")
+     แยกกันด้วยไอคอนคนละตัว + ข้อความ + cancelled มีเส้นขอบประ */
+  --st-new-fg: #1e40af;        --st-new-bg: #dbeafe;
+  --st-assigned-fg: #5b21b6;   --st-assigned-bg: #ede9fe;
+  --st-progress-fg: #075985;   --st-progress-bg: #e0f2fe;
+  --st-pending-fg: #92400e;    --st-pending-bg: #fef3c7;
+  --st-resolved-fg: #166534;   --st-resolved-bg: #dcfce7;
+  --st-closed-fg: #334155;     --st-closed-bg: #e2e8f0;
+  --st-cancelled-fg: #475569;  --st-cancelled-bg: #f1f5f9;
+
+  /* ── สถานะ SLA 4 ค่า ── */
+  --sla-ok-fg: #166534;      --sla-ok-bg: #dcfce7;
+  --sla-risk-fg: #9a3412;    --sla-risk-bg: #ffedd5;
+  --sla-breach-fg: #991b1b;  --sla-breach-bg: #fee2e2;  --sla-breach-solid: #b91c1c;
+  --sla-paused-fg: #475569;  --sla-paused-bg: #f1f5f9;
+
+  /* ── ซีรีส์กราฟ ── */
+  --chart-1: #1d4ed8;  --chart-2: #0e7490;  --chart-3: #7c3aed;
+  --chart-4: #c2410c;  --chart-5: #15803d;  --chart-6: #db2777;
+
+  color-scheme: light;
+}
+
+/* โหมดมืดยังไม่ทำในเฟส 1 (ADR-003) — แต่ประกาศเป็น variable ไว้แล้ว
+   จึงเพิ่มภายหลังได้โดยนิยาม token ชุดใหม่ใต้ :root[data-theme="dark"]
+   ไม่ต้องแตะ component แม้แต่ตัวเดียว */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-page text-ink font-sans text-body;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* วงแหวนโฟกัสต้องเห็นชัดทุกจุด — ห้าม outline:none โดยไม่มีของทดแทน */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* ภาษาไทยห้ามตัดกลางคำ */
+  p,
+  li,
+  td,
+  th,
+  span,
+  h1,
+  h2,
+  h3,
+  h4 {
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  /* ตัวเลขต้องเรียงคอลัมน์ตรงกันเสมอ (SLA, รายงาน, เลขที่เรื่อง) */
+  .tabular,
+  td,
+  th {
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* ── ป้ายสถานะ/ระดับ — สี + ไอคอน + ข้อความ ครบสามอย่างเสมอ ── */
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-caption font-semibold whitespace-nowrap;
+  }
+
+  /* ── มาตรวัดความเร่งด่วนแบบขีด (ยกมาจาก prototype — ADR-003 C-03) ──
+     ความสูงของขีดบอกระดับได้โดยไม่ต้องพึ่งสี อ่านออกในโหมด grayscale */
+  .meter {
+    @apply inline-flex h-3.5 flex-none items-end gap-px;
+  }
+  .meter > i {
+    @apply block w-[3px] bg-hair;
+  }
+  .meter > i:nth-child(1) { height: 5px; }
+  .meter > i:nth-child(2) { height: 8px; }
+  .meter > i:nth-child(3) { height: 11px; }
+  .meter > i:nth-child(4) { height: 14px; }
+
+  /* ── แถบซ้ายไล่ความหนาตามระดับ (21-ui-ux-design.md §5.2) ── */
+  .prio-rail-p1 { box-shadow: inset 4px 0 0 0 var(--p1-solid); }
+  .prio-rail-p2 { box-shadow: inset 3px 0 0 0 var(--p2-solid); }
+  .prio-rail-p3 { box-shadow: inset 2px 0 0 0 var(--p3-solid); }
+  .prio-rail-p4 { box-shadow: inset 1px 0 0 0 var(--p4-solid); }
+
+  /* ── ฟอร์ม — input ต้อง >= 16px เสมอ กัน iOS ซูมหน้าจอเองตอนโฟกัส ── */
+  .field-input {
+    @apply w-full min-h-tap rounded border border-control bg-surface px-3 py-2
+           text-body text-ink placeholder:text-ink-3
+           focus:border-primary focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:ring-offset-1;
+    font-size: 16px;
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-label text-ink;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   โหมดสำรองเมื่อสไตล์ชีตโหลดไม่สำเร็จ (ADR-003 C-01)
+   ยกมาจาก prototype เพราะเน็ตที่ไซต์งานหลุดจริง —
+   ทุกอย่างต้องยังอ่านออกและกดได้แม้ CSS หลักมาไม่ครบ
+   ══════════════════════════════════════════════════════════════════════ */
+.no-css-fallback {
+  display: none;
+}

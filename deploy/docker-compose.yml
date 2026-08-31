@@ -1,0 +1,197 @@
+# AIDC Helpdesk — on-prem deployment (ADR-002)
+# frontend (Next.js) และ backend (FastAPI) แยกกันสนิท เชื่อมกันผ่าน /api/v1 เท่านั้น
+name: aidc-helpdesk
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-api-env: &api-env
+  ENV: ${ENV:-production}
+  TZ: Asia/Bangkok
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  REDIS_URL: redis://redis:6379/0
+  SECRET_KEY: ${SECRET_KEY}
+  ATTACHMENT_DIR: /data/attachments
+  EXPORT_DIR: /data/exports
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+  COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-25}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-helpdesk@aidc.co.th}
+  NOTIFY_CHANNELS: ${NOTIFY_CHANNELS:-in_app,email}
+  TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Bangkok
+      PGTZ: UTC
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - log_min_duration_statement=1000
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backup:/backup
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # noeviction สำคัญ — Redis เป็น broker ของ Celery ถ้าใช้ LRU งานในคิวอาจหายเงียบ
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+    networks: [backend]
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: aidc-helpdesk-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment: *api-env
+    command:
+      - gunicorn
+      - app.main:app
+      - --worker-class=uvicorn.workers.UvicornWorker
+      - --workers=4
+      - --bind=0.0.0.0:8000
+      - --timeout=90
+      - --graceful-timeout=30
+      - --access-logfile=-
+      - --error-logfile=-
+    volumes:
+      - attachments:/data/attachments
+      - exports:/data/exports
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging: *default-logging
+    networks: [backend]
+
+  worker:
+    image: aidc-helpdesk-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment: *api-env
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app.celery_app
+      - worker
+      - --loglevel=info
+      - --concurrency=2
+      - --max-tasks-per-child=200
+    volumes:
+      - attachments:/data/attachments
+      - exports:/data/exports
+    depends_on:
+      api: { condition: service_healthy }
+    logging: *default-logging
+    networks: [backend]
+
+  beat:
+    image: aidc-helpdesk-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment: *api-env
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app.celery_app
+      - beat
+      - --loglevel=info
+      - --schedule=/tmp/celerybeat-schedule
+    depends_on:
+      redis: { condition: service_healthy }
+    logging: *default-logging
+    networks: [backend]
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: aidc-helpdesk-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: Asia/Bangkok
+      # Server Component เรียก FastAPI ตรงในเน็ตเวิร์กภายใน (ไม่ผ่านเบราว์เซอร์)
+      INTERNAL_API_URL: http://api:8000/api/v1
+      # เบราว์เซอร์เรียกผ่าน nginx ที่ origin เดียวกัน — cookie จึงแนบอัตโนมัติ
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    networks: [backend]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+      - attachments:/data/attachments:ro
+      - exports:/data/exports:ro
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
+    logging: *default-logging
+    networks: [backend]
+
+volumes:
+  pgdata:
+  redisdata:
+  attachments:
+  exports:
+
+networks:
+  backend:
+    driver: bridge
