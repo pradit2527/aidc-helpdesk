@@ -1,0 +1,2465 @@
+<!doctype html>
+<html lang="th" class="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AIDC Service Desk</title>
+<meta name="description" content="ศูนย์บริการไอทีและงานซ่อมบำรุงกลางของกลุ่มบริษัท AIDC 7 บริษัท">
+
+<!-- ── ตัวอักษร: Archivo สำหรับหัวเรื่อง/ตัวเลขละติน, IBM Plex Sans Thai สำหรับเนื้อหาไทย ── -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
+
+<!-- ── Tailwind Play CDN + ผูกชุดสีแบรนด์เข้ากับ theme.extend.colors ── -->
+<script src="https://cdn.tailwindcss.com"
+        onerror="document.documentElement.classList.add('no-tw')"></script>
+<script>
+  // สีทุกตัวชี้ไปที่ CSS variable เพื่อให้สลับ light/dark ได้จากจุดเดียว
+  // (กัน error กรณีเปิดไฟล์ตอนไม่มีเน็ต — สไตล์หลักอยู่ใน <style> ด้านล่างอยู่แล้ว)
+  window.tailwind = window.tailwind || {};
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          canvas:    'var(--c-bg)',        // พื้นหลังหลัก
+          surface:   'var(--c-surface)',   // พื้นแผง/แถบข้าง
+          card:      'var(--c-card)',      // พื้นการ์ดที่ยกขึ้นมา
+          ink:       'var(--c-ink)',       // ตัวอักษรหลัก
+          muted:     'var(--c-muted)',     // ตัวอักษรรอง
+          faint:     'var(--c-faint)',     // ตัวอักษรจาง / eyebrow
+          hair:      'var(--c-hair)',      // เส้น hairline ตกแต่ง
+          'hair-soft':'var(--c-hair-soft)', // เส้นคั่นภายในการ์ด/แถวตาราง
+          line:      'var(--c-line)',      // เส้นขอบเชิงหน้าที่ (input/ปุ่ม)
+          accent:    'var(--c-accent)',    // สีแบรนด์ — ใช้เป็นพื้น/แถบ ไม่ใช้เป็นตัวอักษร
+          'accent-text': 'var(--c-accent-text)', // สีแบรนด์เวอร์ชันที่ผ่าน AA เมื่อเป็นตัวอักษร
+          'accent-btn':  'var(--c-accent-btn)',
+          'accent-soft': 'var(--c-accent-soft)',
+          'accent-soft-ink': 'var(--c-accent-soft-ink)',
+          'on-accent':   'var(--c-on-accent)'
+        },
+        fontFamily: {
+          display: ['Archivo', 'IBM Plex Sans Thai', 'system-ui', 'sans-serif'],
+          body:    ['IBM Plex Sans Thai', 'Archivo', 'system-ui', 'sans-serif']
+        },
+        borderRadius: { none: '0' }
+      }
+    }
+  };
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   1. TOKENS — ชุดสีแบรนด์เดิม แยกบทบาท "พื้น" กับ "ตัวอักษร"
+      เพื่อให้ทุกคู่สีผ่าน WCAG AA (ตรวจด้วย contrast.py)
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  /* neutral ramp */
+  --n-50:#f8f4f4; --n-100:#eae7e7; --n-200:#d7d3d3; --n-300:#bab6b6; --n-400:#9b9797;
+  --n-500:#7d7979; --n-600:#605d5d; --n-700:#444141; --n-800:#2d2b2b; --n-900:#201e1d;
+  --n-950:#161514;
+  /* accent ramp */
+  --a-50:#fff2ef; --a-100:#ffe0d9; --a-200:#ffc4b8; --a-300:#ff9783; --a-400:#ff563c;
+  --a-500:#ec3013; --a-600:#dd2b0f; --a-700:#ae1800; --a-800:#7c1405; --a-900:#4d170e;
+
+  /* บทบาทสีในโหมดสว่าง */
+  --c-bg:#f3f2f2;
+  --c-surface:#eae9e9;
+  --c-card:#f8f4f4;
+  --c-ink:#201e1d;
+  --c-muted:#444141;
+  --c-faint:#605d5d;
+  --c-hair:#d7d3d3;
+  --c-hair-soft:#eae7e7;       /* เส้นคั่น "ภายใน" การ์ด/แถวตาราง — บางกว่าขอบนอกหนึ่งขั้น */
+  --c-rail:#bab6b6;
+  --c-line:#7d7979;
+  --c-accent:#ec3013;          /* พื้น/แถบเท่านั้น — ไม่มีตัวอักษรวางทับ */
+  --c-accent-text:#ae1800;     /* 6.41:1 บนพื้นหลัก — AA */
+  --c-accent-btn:#dd2b0f;      /* ขาวบนพื้นนี้ 4.74:1 — AA */
+  --c-accent-btn-hover:#ae1800;
+  --c-accent-soft:#ffe0d9;
+  --c-accent-soft-ink:#7c1405; /* 8.63:1 — AAA */
+  --c-on-accent:#ffffff;
+  --c-shadow:0 1px 1px rgba(32,30,29,.05), 0 2px 5px -2px rgba(32,30,29,.07), 0 12px 28px -16px rgba(32,30,29,.20);
+  --c-shadow-lift:0 1px 2px rgba(32,30,29,.07), 0 4px 10px -4px rgba(32,30,29,.10), 0 24px 52px -22px rgba(32,30,29,.32);
+  --c-btn-edge:rgba(77,23,14,.42);   /* ขอบล่างในปุ่มหลัก ให้ปุ่มมีน้ำหนักภาพ ไม่แบน */
+  --c-ring:var(--c-accent-soft);
+  --tap:44px;
+  /* สเกลตัวอักษรชุดเดียวทั้งระบบ */
+  --fs-micro:10.5px; --fs-fine:11.5px; --fs-sm:12.5px; --fs-body:13.5px; --fs-base:15px; --fs-lead:17px;
+  color-scheme: light;
+}
+html.dark {
+  --c-bg:#161514;
+  --c-surface:#201e1d;
+  --c-card:#2d2b2b;
+  --c-ink:#f3f2f2;
+  --c-muted:#bab6b6;
+  --c-faint:#9b9797;
+  --c-hair:#444141;
+  /* โหมดมืด: การ์ดเป็น #2d2b2b อยู่แล้ว เส้นคั่นจึงต้องสว่างกว่าการ์ด ไม่ใช่เข้มกว่า */
+  --c-hair-soft:#444141;
+  --c-rail:#605d5d;
+  --c-line:#7d7979;
+  --c-accent:#ff563c;
+  --c-accent-text:#ff9783;     /* 8.69:1 บนพื้นมืด — AAA */
+  --c-accent-btn:#ff563c;
+  --c-accent-btn-hover:#ff9783;
+  --c-accent-soft:#4d170e;
+  --c-accent-soft-ink:#ffc4b8; /* 9.58:1 — AAA */
+  --c-on-accent:#161514;       /* 5.77:1 บน #ff563c — AA */
+  --c-shadow:0 1px 1px rgba(0,0,0,.34), 0 2px 5px -2px rgba(0,0,0,.42), 0 12px 28px -16px rgba(0,0,0,.62);
+  --c-shadow-lift:0 1px 2px rgba(0,0,0,.44), 0 4px 10px -4px rgba(0,0,0,.5), 0 24px 52px -22px rgba(0,0,0,.72);
+  --c-btn-edge:rgba(0,0,0,.34);
+  color-scheme: dark;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   2. ฐาน — มุมคม 0 ทั้งระบบ, ไทยอ่านสบาย line-height 1.65
+   ═══════════════════════════════════════════════════════════════ */
+*,*::before,*::after { box-sizing:border-box; border-radius:0; }
+html { -webkit-text-size-adjust:100%; }
+html body {
+  margin:0;
+  background:var(--c-bg);
+  color:var(--c-ink);
+  font-family:'IBM Plex Sans Thai','Archivo',system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+h1,h2,h3,h4,h5,h6 { margin:0; text-wrap:balance; line-height:1.22; font-weight:700; }
+p { margin:0; }
+button,input,select,textarea { font:inherit; color:inherit; }
+button { background:none; border:0; cursor:pointer; }
+img,svg { display:block; max-width:100%; }
+table { border-collapse:collapse; width:100%; }
+ol,ul { margin:0; padding:0; }
+
+/* grid/flex item มี min-width:auto เป็นค่าเริ่มต้น ทำให้ <select> หรือตารางกว้าง ๆ
+   ดันทั้งหน้าให้เลื่อนแนวนอนบนมือถือ — บังคับให้ยุบได้ แล้วปล่อยให้กล่องของตัวเองเลื่อนแทน */
+.grid > *, .field, .input, .tbl-wrap { min-width:0; max-width:100%; }
+
+/* ตัวเลขเรียงคอลัมน์ให้ตรงกันเสมอ */
+.num, .tbl td, .tbl th, .kpi-val, .stat-val { font-variant-numeric:tabular-nums; }
+
+/* โฟกัสคีย์บอร์ดต้องเห็นชัดทุกจุด */
+:focus-visible {
+  outline:2px solid var(--c-accent-text);
+  outline-offset:2px;
+}
+html.dark :focus-visible { outline-color:var(--c-accent-text); }
+
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   3. ตัวอักษร — สเกลชุดเดียวทั้งระบบ (micro 10.5 / fine 11.5 / sm 12.5 /
+      body 13.5 / base 15 / lead 17) แล้วต่อด้วยสเกลหัวเรื่องและตัวเลขสถิติ
+   ═══════════════════════════════════════════════════════════════ */
+.font-display { font-family:'Archivo','IBM Plex Sans Thai',system-ui,sans-serif; }
+.eyebrow {
+  font-family:'Archivo',system-ui,sans-serif;
+  font-size:var(--fs-micro); font-weight:600; letter-spacing:.11em; text-transform:uppercase;
+  color:var(--c-faint); line-height:1.45;
+}
+.eyebrow-accent { color:var(--c-accent-text); }
+
+.display-xl {
+  font-family:'Archivo',sans-serif; font-weight:800;
+  font-size:clamp(2.15rem,5.1vw,3.85rem); line-height:.98; letter-spacing:-.038em;
+  text-transform:none; text-wrap:balance;
+}
+.display-lg { font-family:'Archivo',sans-serif; font-weight:800; font-size:clamp(1.4rem,2.4vw,1.85rem); line-height:1.18; letter-spacing:-.022em; }
+.display-md { font-family:'Archivo',sans-serif; font-weight:700; font-size:1.0625rem; line-height:1.32; letter-spacing:-.012em; }
+.display-sm { font-family:'Archivo',sans-serif; font-weight:700; font-size:var(--fs-base); line-height:1.4; letter-spacing:-.008em; }
+
+/* ตัวเลขสถิติ — แยกจากหัวเรื่อง เพราะทำหน้าที่คนละอย่าง */
+.stat-xl { font-family:'Archivo',sans-serif; font-weight:800; font-size:2.05rem; line-height:.96; letter-spacing:-.032em; }
+.stat-lg { font-family:'Archivo',sans-serif; font-weight:800; font-size:1.8rem;  line-height:.98; letter-spacing:-.03em; }
+.stat-md { font-family:'Archivo',sans-serif; font-weight:800; font-size:1.55rem; line-height:1;   letter-spacing:-.028em; }
+
+/* ไทยต้องมีที่ให้วรรณยุกต์ — ห้ามต่ำกว่า 1.55 ในข้อความยาว */
+.lede { color:var(--c-muted); font-size:var(--fs-body); line-height:1.72; max-width:62ch; }
+.leading-relaxed { line-height:1.68 !important; }
+.leading-snug { line-height:1.45 !important; }
+
+/* จังหวะหายใจของหัวข้อ section — ใช้ชุดเดียวกันทุกหน้า */
+.sec-head { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; margin-bottom:.6rem; }
+
+/* ═══════════════════════════════════════════════════════════════
+   4. เส้นและพื้นผิว — ลำดับชั้นมาจากน้ำหนักเส้น ไม่ใช่กรอบหนา
+   ═══════════════════════════════════════════════════════════════ */
+.hair-b { border-bottom:1px solid var(--c-hair); }
+.hair-t { border-top:1px solid var(--c-hair); }
+.hair-r { border-right:1px solid var(--c-hair); }
+.hair-l { border-left:1px solid var(--c-hair); }
+.hair-all { border:1px solid var(--c-hair); }
+/* เส้นคั่น "ภายใน" การ์ด — บางกว่าขอบนอกหนึ่งขั้น เพื่อไม่ให้เกิดกรอบซ้อนกรอบ */
+.rule-in { border-top:1px solid var(--c-hair-soft); }
+.rule-accent { width:34px; height:3px; background:var(--c-accent); }
+.panel { background:var(--c-card); border:1px solid var(--c-hair); }
+.panel-flat { background:var(--c-surface); border:1px solid var(--c-hair); }
+.panel-head { padding:1.15rem 1.25rem .95rem; border-bottom:1px solid var(--c-hair-soft); }
+.lift { box-shadow:var(--c-shadow); }
+
+/* ═══════════════════════════════════════════════════════════════
+   5. ปุ่ม — สเกล sm / md / lg, พื้นที่แตะ ≥44px บนจอสัมผัส,
+      hover เข้มขึ้น + เงาบาง, active จมลง 1px, focus เป็นวงแหวนนุ่ม
+   ═══════════════════════════════════════════════════════════════ */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+  min-height:40px; padding:0 1.05rem;
+  font-family:'IBM Plex Sans Thai',sans-serif; font-size:var(--fs-body); font-weight:600;
+  letter-spacing:.004em; line-height:1.2;
+  border:1px solid transparent; white-space:nowrap;
+  transition:background-color .16s ease, color .16s ease, border-color .16s ease,
+             box-shadow .16s ease, transform .12s ease;
+}
+.btn > svg { flex:none; }
+.btn:active:not([disabled]) { transform:translateY(1px); }
+.btn[disabled] { opacity:.42; cursor:not-allowed; box-shadow:none; }
+.btn[disabled]:active { transform:none; }
+.btn-sm { min-height:34px; padding:0 .8rem; gap:.4rem; font-size:var(--fs-sm); }
+.btn-lg { min-height:48px; padding:0 1.4rem; gap:.6rem; font-size:var(--fs-base); letter-spacing:.008em; }
+.btn-icon { width:40px; min-height:40px; padding:0; }
+@media (pointer:coarse) {
+  .btn, .btn-sm { min-height:var(--tap); }
+  .btn-icon { width:var(--tap); min-height:var(--tap); }
+}
+
+.btn-primary {
+  background:var(--c-accent-btn); color:var(--c-on-accent);
+  box-shadow:inset 0 -2px 0 0 var(--c-btn-edge), 0 1px 1px rgba(32,30,29,.10);
+}
+.btn-primary:hover:not([disabled]) {
+  background:var(--c-accent-btn-hover);
+  box-shadow:inset 0 -2px 0 0 rgba(0,0,0,.34), 0 2px 8px -2px rgba(174,24,0,.35);
+}
+.btn-primary:active:not([disabled]) { box-shadow:inset 0 2px 3px rgba(0,0,0,.22); }
+html.dark .btn-primary:hover:not([disabled]) { color:#161514; }
+
+.btn-secondary { background:transparent; color:var(--c-ink); border-color:var(--c-line); }
+.btn-secondary:hover:not([disabled]) { background:var(--c-surface); border-color:var(--c-ink); box-shadow:0 1px 1px rgba(32,30,29,.05); }
+html.dark .btn-secondary:hover:not([disabled]) { box-shadow:0 1px 1px rgba(0,0,0,.4); }
+.btn-ink { background:var(--c-ink); color:var(--c-bg); box-shadow:inset 0 -2px 0 0 rgba(0,0,0,.22); }
+.btn-ink:hover:not([disabled]) { background:var(--c-muted); }
+.btn-ghost {
+  background:transparent; color:var(--c-accent-text); padding:0 .4rem; min-height:2rem;
+  font-weight:600; text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:3px;
+}
+.btn-ghost:hover { background:var(--c-accent-soft); color:var(--c-accent-soft-ink); text-decoration:none; }
+.btn-ghost-sm { font-size:var(--fs-sm); }
+@media (pointer:coarse) { .btn-ghost { min-height:2.5rem; } }
+
+/* วงแหวนโฟกัส: เส้นสีแบรนด์ + ฮาโลอ่อน แทนกรอบดำของเบราว์เซอร์ */
+.btn:focus-visible, .chip:focus-visible, .navitem:focus-visible,
+.prio-card:focus-visible, .sw:focus-visible, .disc > summary:focus-visible {
+  outline:2px solid var(--c-accent-text); outline-offset:2px;
+  box-shadow:0 0 0 4px var(--c-ring);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   6. ฟอร์ม — input ≥16px กัน iOS zoom
+   ═══════════════════════════════════════════════════════════════ */
+.field { display:flex; flex-direction:column; gap:.4rem; }
+.field > label, .lbl {
+  font-family:'Archivo',sans-serif; font-size:var(--fs-fine); font-weight:600;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--c-faint);
+}
+.input {
+  width:100%; min-height:44px; padding:.65rem .8rem;
+  font-size:16px; line-height:1.5;
+  background:var(--c-bg); color:var(--c-ink);
+  border:1px solid var(--c-line);
+  transition:border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+.input::placeholder { color:var(--c-faint); opacity:1; }
+.input:hover { border-color:var(--c-ink); }
+.input:focus { outline:none; border-color:var(--c-accent-text); box-shadow:inset 0 -2px 0 0 var(--c-accent), 0 0 0 3px var(--c-ring); }
+.input[aria-invalid="true"] { border-color:var(--c-accent-text); box-shadow:inset 0 -2px 0 0 var(--c-accent); }
+.input-search { padding-left:2.25rem; }
+.input-pw { padding-right:3rem; }
+textarea.input { min-height:112px; resize:vertical; line-height:1.65; }
+select.input {
+  appearance:none; padding-right:2.25rem; cursor:pointer;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23444141' stroke-width='1.6'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right .8rem center; background-size:11px;
+}
+html.dark select.input {
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23bab6b6' stroke-width='1.6'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+}
+
+/* ข้อความผิดพลาดใต้ช่องกรอก */
+.err-text {
+  display:flex; align-items:flex-start; gap:.4rem;
+  color:var(--c-accent-text); font-size:var(--fs-sm); line-height:1.6; font-weight:500;
+}
+.err-text > svg { flex:none; width:14px; height:14px; margin-top:2px; }
+
+/* ปุ่มสลับดู/ซ่อนรหัสผ่าน — วางในกรอบเดียวกับ input */
+.pw-wrap { position:relative; }
+.pw-toggle {
+  position:absolute; top:1px; right:1px; bottom:1px; width:44px;
+  display:grid; place-items:center; color:var(--c-faint);
+  border-left:1px solid var(--c-hair-soft);
+  transition:color .16s ease, background-color .16s ease;
+}
+.pw-toggle:hover { color:var(--c-ink); background:var(--c-surface); }
+.pw-toggle:focus-visible { outline:2px solid var(--c-accent-text); outline-offset:-2px; }
+
+/* checkbox แบบมุมคม ทำเอง ไม่พึ่ง appearance เริ่มต้น */
+.check { display:inline-flex; align-items:center; gap:.55rem; cursor:pointer; min-height:36px; font-size:var(--fs-body); }
+.check input { position:absolute; opacity:0; width:0; height:0; }
+.check i {
+  flex:none; width:17px; height:17px; display:grid; place-items:center;
+  border:1.5px solid var(--c-line); background:var(--c-bg);
+  transition:background-color .16s ease, border-color .16s ease;
+}
+.check i::after {
+  content:''; width:9px; height:5px; border-left:2px solid var(--c-on-accent); border-bottom:2px solid var(--c-on-accent);
+  transform:rotate(-45deg) scale(.6); transform-origin:center; opacity:0; margin-top:-2px;
+  transition:opacity .16s ease, transform .16s ease;
+}
+.check input:checked + i { background:var(--c-accent-btn); border-color:var(--c-accent-btn); }
+.check input:checked + i::after { opacity:1; transform:rotate(-45deg) scale(1); }
+.check input:focus-visible + i { outline:2px solid var(--c-accent-text); outline-offset:2px; box-shadow:0 0 0 4px var(--c-ring); }
+
+/* ตัวคั่น "หรือ" */
+.divider-or {
+  display:flex; align-items:center; gap:.85rem;
+  font-family:'Archivo',sans-serif; font-size:var(--fs-micro); font-weight:600;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--c-faint);
+}
+.divider-or::before, .divider-or::after { content:''; flex:1; height:1px; background:var(--c-hair); }
+
+/* disclosure บัญชีที่จดจำไว้ */
+.disc > summary {
+  display:flex; align-items:center; gap:.6rem; min-height:48px; padding:0 1rem;
+  cursor:pointer; list-style:none; font-size:var(--fs-body); font-weight:600; color:var(--c-ink);
+}
+.disc > summary::-webkit-details-marker { display:none; }
+.disc > summary .chev { margin-left:auto; color:var(--c-faint); transition:transform .18s ease; }
+.disc[open] > summary .chev { transform:rotate(90deg); }
+
+/* กล่องหมายเหตุสำหรับผู้ทดสอบระบบ */
+.devnote {
+  border:1px dashed var(--c-rail); background:var(--c-surface);
+  padding:.7rem .85rem; font-size:var(--fs-fine); line-height:1.65; color:var(--c-muted);
+}
+.devnote code {
+  font-family:'Archivo',ui-monospace,monospace; font-weight:600; letter-spacing:.02em;
+  color:var(--c-ink); background:var(--c-bg); border:1px solid var(--c-hair); padding:.05rem .3rem;
+}
+
+/* radio ความเร่งด่วน — การ์ดเลือกได้ */
+.prio-card {
+  display:flex; align-items:center; gap:.75rem; width:100%;
+  min-height:58px; padding:.65rem .85rem; text-align:left;
+  background:var(--c-bg); border:1px solid var(--c-hair);
+  transition:border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+.prio-card:hover { border-color:var(--c-line); background:var(--c-surface); }
+.prio-card[aria-checked="true"] {
+  border-color:var(--c-ink); background:var(--c-surface);
+  box-shadow:inset 3px 0 0 0 var(--c-accent);
+}
+.prio-radio {
+  flex:none; width:16px; height:16px; border:1.5px solid var(--c-line);
+  display:grid; place-items:center; transition:border-color .16s ease;
+}
+.prio-card[aria-checked="true"] .prio-radio { border-color:var(--c-accent-text); }
+.prio-radio i { width:8px; height:8px; background:var(--c-accent); opacity:0; transition:opacity .16s ease; }
+.prio-card[aria-checked="true"] .prio-radio i { opacity:1; }
+
+/* ═══════════════════════════════════════════════════════════════
+   7. ป้าย / ตัวบ่งชี้ — แยกได้โดยไม่พึ่งสี (สี + รูปทรง + ไอคอน + ข้อความ)
+   ═══════════════════════════════════════════════════════════════ */
+.tag {
+  display:inline-flex; align-items:center; gap:.3rem;
+  padding:.22rem .48rem; font-family:'Archivo',sans-serif;
+  font-size:var(--fs-micro); font-weight:600; letter-spacing:.045em; line-height:1.45;
+  white-space:nowrap; border:1px solid transparent;
+}
+.tag > svg { width:12px; height:12px; flex:none; }
+.tag-solid { background:var(--c-accent-btn); color:var(--c-on-accent); box-shadow:inset 0 -1px 0 0 var(--c-btn-edge); }
+.tag-soft  { background:var(--c-accent-soft); color:var(--c-accent-soft-ink); }
+.tag-quiet { background:var(--c-surface); color:var(--c-muted); border-color:var(--c-hair); }
+.tag-outline { background:transparent; color:var(--c-ink); border-color:var(--c-line); }
+
+/* มาตรวัดความเร่งด่วน: P1=4 ขีด … P4=1 ขีด (รูปทรงบอกระดับโดยไม่ต้องดูสี) */
+.meter { display:inline-flex; align-items:flex-end; gap:2px; height:13px; }
+.meter i { width:3px; background:var(--c-hair); display:block; transition:background-color .16s ease; }
+.meter i:nth-child(1){height:4px}   .meter i:nth-child(2){height:7px}
+.meter i:nth-child(3){height:10px}  .meter i:nth-child(4){height:13px}
+.meter i.on { background:var(--c-muted); }
+.meter.crit i.on { background:var(--c-accent); }
+
+/* จุดสถานะ: เส้นทึบ/ประ + ระดับการเติม บอกสถานะโดยไม่ต้องดูสี */
+.sdot { flex:none; width:10px; height:10px; border:1.5px solid var(--c-muted); display:block; }
+.sdot--new    { border-color:var(--c-accent); border-style:solid; background:transparent; }
+.sdot--work   { border-color:var(--c-ink); background:linear-gradient(135deg,var(--c-ink) 0 50%,transparent 50% 100%); }
+.sdot--hold   { border-color:var(--c-accent-text); border-style:dashed; background:transparent; }
+.sdot--done   { border-color:var(--c-faint); background:var(--c-faint); }
+
+/* แถบ SLA — ราง hairline + ขีดเตือนที่ 80% (จุดที่นโยบายเริ่มแจ้งเตือนล่วงหน้า) */
+.slabar { position:relative; height:3px; background:var(--c-hair-soft); box-shadow:inset 0 0 0 1px var(--c-hair-soft); overflow:hidden; }
+.slabar > i { position:absolute; inset:0 auto 0 0; background:var(--c-muted); transition:width .6s cubic-bezier(.22,.61,.36,1); display:block; }
+.slabar::after { content:''; position:absolute; top:-1px; bottom:-1px; left:80%; width:1px; background:var(--c-rail); opacity:.75; }
+.slabar.warn > i { background:var(--c-accent-text); }
+.slabar.crit > i { background:var(--c-accent); }
+.slabar.done > i { background:var(--c-rail); }
+.slabar.done::after { opacity:0; }
+
+/* ═══════════════════════════════════════════════════════════════
+   8. ตาราง — จังหวะแถวสม่ำเสมอ, หัวตารางแยกชั้นด้วยน้ำหนัก/ระยะ ไม่ใช่เส้นหนา,
+      เส้นคั่นเป็น hairline จากแรมป์ neutral, คอลัมน์แรกตรึงเมื่อเลื่อนแนวนอน
+   ═══════════════════════════════════════════════════════════════ */
+.tbl-wrap { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.tbl { min-width:100%; font-size:var(--fs-body); }
+.tbl thead th {
+  position:sticky; top:0; z-index:2;
+  background:var(--c-surface); color:var(--c-faint);
+  font-family:'Archivo',sans-serif; font-size:var(--fs-micro); font-weight:600;
+  letter-spacing:.12em; text-transform:uppercase; text-align:left;
+  padding:.9rem .75rem .65rem; white-space:nowrap;
+  border-bottom:1px solid var(--c-hair);
+}
+.tbl tbody tr { background:var(--c-card); transition:background-color .16s ease; }
+.tbl tbody td { height:62px; padding:.7rem .75rem; border-bottom:1px solid var(--c-hair-soft); vertical-align:middle; line-height:1.5; }
+.tbl tbody tr:last-child td { border-bottom:0; }
+.tbl tbody tr.clickable { cursor:pointer; }
+.tbl tbody tr.clickable:hover { background:var(--c-surface); }
+.tbl tbody tr.is-active { background:var(--c-accent-soft); }
+.tbl tbody tr.is-active td:first-child { box-shadow:inset 3px 0 0 0 var(--c-accent); }
+/* ตัวเลขที่เทียบกันได้ ให้ชิดขวาและเรียงหลักตรงกัน */
+.tbl th.rt, .tbl td.rt { text-align:right; font-variant-numeric:tabular-nums; }
+/* คอลัมน์แรกตรึงไว้ตอนเลื่อนแนวนอน — บนจอแคบตารางกว้างเกินเสมอ */
+.tbl-sticky thead th:first-child { position:sticky; left:0; z-index:3; }
+.tbl-sticky tbody td:first-child { position:sticky; left:0; z-index:1; background:inherit; }
+.tbl-sticky thead th:first-child, .tbl-sticky tbody td:first-child { box-shadow:1px 0 0 0 var(--c-hair-soft); }
+.tbl-sticky tbody tr.is-active td:first-child { box-shadow:inset 3px 0 0 0 var(--c-accent), 1px 0 0 0 var(--c-hair-soft); }
+/* หัวเรื่องในตารางยาวได้ไม่เกินสองบรรทัด เพื่อให้จังหวะแถวคงที่ */
+.cell-title { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+/* ═══════════════════════════════════════════════════════════════
+   9. เนวิเกชัน
+   ═══════════════════════════════════════════════════════════════ */
+.navitem {
+  display:flex; align-items:center; gap:.7rem; width:100%;
+  min-height:var(--tap); padding:.5rem .75rem .5rem 1.25rem;
+  text-align:left; color:var(--c-muted); font-size:var(--fs-body); font-weight:500;
+  border-left:3px solid transparent;
+  transition:background-color .16s ease, color .16s ease, border-color .16s ease;
+}
+.navitem:hover { background:var(--c-bg); color:var(--c-ink); }
+.navitem[aria-current="page"] {
+  background:var(--c-accent-soft); color:var(--c-accent-soft-ink);
+  border-left-color:var(--c-accent); font-weight:600;
+}
+.navitem .nb {
+  margin-left:auto; font-family:'Archivo',sans-serif; font-size:var(--fs-fine); font-weight:600;
+  min-width:22px; height:20px; padding:0 5px; display:grid; place-items:center;
+  background:var(--c-surface); color:var(--c-muted); border:1px solid var(--c-hair);
+}
+.navitem[aria-current="page"] .nb { background:var(--c-accent-btn); color:var(--c-on-accent); border-color:transparent; }
+
+/* bottom nav มือถือ */
+.botnav {
+  position:fixed; left:0; right:0; bottom:0; z-index:40;
+  display:grid; grid-auto-flow:column; grid-auto-columns:1fr;
+  background:var(--c-card); border-top:1px solid var(--c-line);
+  padding-bottom:env(safe-area-inset-bottom);
+  box-shadow:0 -8px 24px -18px rgba(0,0,0,.4);
+}
+.botnav button {
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  min-height:58px; padding:.35rem .25rem; font-size:var(--fs-micro); font-weight:600; color:var(--c-faint);
+  border-top:2px solid transparent; transition:color .16s ease, border-color .16s ease;
+}
+.botnav button[aria-current="page"] { color:var(--c-accent-text); border-top-color:var(--c-accent); }
+
+/* ═══════════════════════════════════════════════════════════════
+   10. Overlay: drawer / modal / toast / sheet
+   ═══════════════════════════════════════════════════════════════ */
+.scrim {
+  position:fixed; inset:0; z-index:50; background:rgba(22,21,20,.44);
+  opacity:0; pointer-events:none; transition:opacity .2s ease;
+  -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
+}
+.scrim.on { opacity:1; pointer-events:auto; }
+
+.drawer {
+  position:fixed; top:0; right:0; bottom:0; z-index:60;
+  width:min(560px,100vw); display:flex; flex-direction:column;
+  background:var(--c-bg); border-left:1px solid var(--c-line);
+  box-shadow:var(--c-shadow-lift);
+  transform:translateX(101%); transition:transform .24s cubic-bezier(.32,.72,0,1), visibility 0s linear .24s;
+  visibility:hidden;
+}
+.drawer.on { transform:translateX(0); visibility:visible; transition-delay:0s; }
+
+.sheet {
+  position:fixed; left:0; right:0; bottom:0; z-index:60;
+  max-height:82vh; overflow-y:auto;
+  background:var(--c-bg); border-top:2px solid var(--c-ink);
+  transform:translateY(101%); transition:transform .24s cubic-bezier(.32,.72,0,1), visibility 0s linear .24s;
+  visibility:hidden; padding-bottom:env(safe-area-inset-bottom);
+}
+.sheet.on { transform:translateY(0); visibility:visible; transition-delay:0s; }
+
+/* overlay ที่ปิดอยู่ต้อง inert จริง ๆ ไม่งั้นจะบังคลิกทั้งหน้าจอ */
+.modal-wrap {
+  position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:1rem;
+  pointer-events:none; visibility:hidden; transition:visibility 0s linear .2s;
+}
+.modal-wrap.on { visibility:visible; transition-delay:0s; }
+.modal {
+  width:min(520px,100%); max-height:88vh; overflow-y:auto;
+  background:var(--c-bg); border:1px solid var(--c-line); box-shadow:var(--c-shadow-lift);
+  opacity:0; transform:translateY(10px) scale(.985); transition:opacity .19s ease, transform .19s cubic-bezier(.22,.61,.36,1);
+}
+.modal-wrap.on .modal { opacity:1; transform:none; pointer-events:auto; }
+
+.toast {
+  position:fixed; z-index:70; left:1rem; right:1rem; bottom:calc(58px + 1rem + env(safe-area-inset-bottom));
+  display:flex; gap:.75rem; align-items:flex-start;
+  padding:.85rem 1rem; background:var(--c-ink); color:var(--c-bg);
+  border-left:3px solid var(--c-accent); box-shadow:var(--c-shadow-lift);
+  font-size:var(--fs-sm); line-height:1.65;
+  opacity:0; transform:translateY(12px); pointer-events:none;
+  transition:opacity .2s ease, transform .2s cubic-bezier(.32,.72,0,1);
+}
+.toast.on { opacity:1; transform:none; pointer-events:auto; }
+@media (min-width:1024px) {
+  .toast { left:auto; right:1.5rem; bottom:1.5rem; max-width:440px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   11. Motion — เข้าเนื้อหาแบบนุ่ม + skeleton ตอนสลับหน้า
+   ═══════════════════════════════════════════════════════════════ */
+@keyframes riseIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+.rise { animation:riseIn .2s cubic-bezier(.22,.61,.36,1) both; }
+.rise-1 { animation-delay:.03s } .rise-2 { animation-delay:.06s } .rise-3 { animation-delay:.09s }
+
+@keyframes shimmer { from { background-position:-180% 0 } to { background-position:280% 0 } }
+.skel {
+  background:linear-gradient(90deg,var(--c-surface) 0%,var(--c-hair) 45%,var(--c-surface) 90%);
+  background-size:220% 100%; animation:shimmer 1.1s linear infinite;
+}
+@keyframes barGrow { from { transform:scaleX(0) } to { transform:scaleX(1) } }
+.bargrow { transform-origin:left center; animation:barGrow .55s cubic-bezier(.22,.61,.36,1) both; }
+
+/* โหมดมืด: แผงแบรนด์กับพื้นหน้าใกล้เคียงกัน จึงคั่นด้วย hairline ให้เส้นแบ่งดูตั้งใจ */
+html.dark .login-hero { border-right:1px solid #444141; }
+
+/* ลายเส้นทแยงบนแผงแบรนด์ฝั่งซ้ายหน้าเข้าสู่ระบบ */
+.hatch {
+  background-image:repeating-linear-gradient(-45deg, rgba(243,242,242,.055) 0 1px, transparent 1px 9px);
+}
+/* กรอบใส่โลโก้บริษัทบนแผงมืด — ขอบบางและมีระยะหายใจ ไม่แย่งสายตาจากหัวเรื่อง */
+.logo-plate {
+  display:flex; align-items:center; gap:1.1rem;
+  padding:.95rem 1.1rem; background:#161514; border:1px solid #444141;
+}
+.logo-plate img { width:158px; flex:none; }
+.logo-plate > div { padding-left:1.1rem; border-left:1px solid #444141; align-self:stretch; display:flex; flex-direction:column; justify-content:center; }
+@media (max-width:400px) { .logo-plate { gap:.75rem; padding:.8rem .85rem; } .logo-plate img { width:110px; } .logo-plate > div { padding-left:.75rem; } }
+
+/* timeline audit trail */
+.tl { position:relative; padding-left:1.4rem; }
+.tl::before { content:''; position:absolute; left:4px; top:6px; bottom:6px; width:1px; background:var(--c-rail); }
+.tl-item { position:relative; padding-bottom:1.05rem; }
+.tl-item:last-child { padding-bottom:0; }
+.tl-item::before {
+  content:''; position:absolute; left:-1.4rem; top:6px; width:9px; height:9px;
+  background:var(--c-bg); border:1.5px solid var(--c-line);
+}
+.tl-item.hot::before { border-color:var(--c-accent); background:var(--c-accent); }
+
+/* ซ่อน scrollbar แนวนอนของแถบชิป แต่ยังเลื่อนได้ */
+.chiprow { display:flex; gap:.4rem; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+.chiprow::-webkit-scrollbar { display:none; }
+.chip {
+  display:inline-flex; align-items:center; gap:.45rem; flex:none;
+  min-height:36px; padding:0 .75rem; font-size:var(--fs-sm); font-weight:500;
+  color:var(--c-ink); background:transparent; border:1px solid var(--c-hair);
+  transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+@media (pointer:coarse) { .chip { min-height:var(--tap); } }
+.chip:hover { border-color:var(--c-line); background:var(--c-surface); }
+.chip[aria-pressed="true"] { background:var(--c-ink); color:var(--c-bg); border-color:var(--c-ink); box-shadow:inset 0 -2px 0 0 rgba(0,0,0,.2); }
+.chip .cn { font-family:'Archivo',sans-serif; font-size:var(--fs-micro); font-weight:600; opacity:.65; font-variant-numeric:tabular-nums; }
+.chip[aria-pressed="true"] .cn { opacity:.85; }
+.chip.dimmed { opacity:.45; }
+
+/* สวิตช์เปิด/ปิดกฎ */
+.sw { position:relative; width:42px; height:22px; flex:none; background:var(--c-hair); border:1px solid var(--c-line); transition:background-color .16s ease; }
+.sw i { position:absolute; top:2px; left:2px; width:16px; height:16px; background:var(--c-bg); border:1px solid var(--c-line); box-shadow:0 1px 2px rgba(32,30,29,.28); transition:transform .16s cubic-bezier(.32,.72,0,1); display:block; }
+.sw[aria-checked="true"] { background:var(--c-accent-btn); border-color:var(--c-accent-btn); }
+.sw[aria-checked="true"] i { transform:translateX(20px); border-color:transparent; }
+
+/* กราฟแท่ง */
+.barrow:hover .barfill { filter:brightness(.92); }
+.barfill { transition:filter .16s ease; }
+
+/* การ์ดคลิกได้ */
+.hovercard { transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.hovercard:hover { border-color:var(--c-line); box-shadow:var(--c-shadow); transform:translateY(-1px); }
+
+/* ป้องกัน content ชนกับ bottom nav บนมือถือ */
+@media (max-width:1023px) { .pad-bottom-nav { padding-bottom:calc(58px + 1.5rem + env(safe-area-inset-bottom)); } }
+
+/* ═══════════════════════════════════════════════════════════════
+   12. SAFE MODE — เผื่อกรณี Tailwind CDN โหลดไม่สำเร็จ (เน็ตไซต์งานหลุด)
+       ยุบเป็นเลย์เอาต์คอลัมน์เดียว ทุกอย่างยังอ่านออกและกดได้
+   ═══════════════════════════════════════════════════════════════ */
+#offlineNote { display:none; }
+html.no-tw #offlineNote {
+  display:flex; align-items:flex-start; gap:.75rem;
+  padding:.85rem 1rem; background:var(--c-accent-soft); color:var(--c-accent-soft-ink);
+  border-bottom:2px solid var(--c-accent); font-size:.8125rem; line-height:1.6;
+}
+html.no-tw #offlineNote button {
+  flex:none; font-weight:600; text-decoration:underline; text-underline-offset:3px;
+  color:inherit; min-height:var(--tap); padding:0 .25rem;
+}
+html.no-tw svg { width:18px; height:18px; flex:none; }
+html.no-tw .hidden { display:none !important; }
+html.no-tw aside.hidden { display:none !important; }
+html.no-tw .grid, html.no-tw .flex { display:block; }
+html.no-tw main > div { padding:1rem; }
+html.no-tw .panel, html.no-tw .panel-flat { padding:1rem; margin-bottom:1rem; }
+html.no-tw .drawer, html.no-tw .botnav { display:flex; }
+html.no-tw .botnav { display:grid; }
+html.no-tw .field { display:flex; margin-bottom:1rem; }
+html.no-tw .tbl-wrap { overflow-x:auto; }
+
+.sr-only {
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+</style>
+</head>
+<body>
+<a href="#main" class="sr-only">ข้ามไปยังเนื้อหาหลัก</a>
+
+<!-- แอปทั้งหมดถูกวาดด้วย JavaScript ล้วน (ไม่มี framework / ไม่มี build step) -->
+<div id="offlineNote" role="status">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:18px;height:18px;flex:none;margin-top:2px"><path d="M12 3.5 22 20H2zM12 10v4M12 17.2v.1"/></svg>
+  <span style="flex:1">โหลดสไตล์ชีตจากอินเทอร์เน็ตไม่สำเร็จ — กำลังแสดงแบบเรียบง่าย ข้อมูลและปุ่มทุกอย่างยังใช้งานได้ตามปกติ</span>
+  <button type="button" onclick="location.reload()">ลองใหม่</button>
+</div>
+<div id="app"></div>
+
+<!-- overlay ที่อยู่คงที่นอกส่วนที่ re-render เพื่อให้ transition ไม่สะดุด -->
+<div id="scrim" class="scrim"></div>
+<aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-label="รายละเอียด Ticket" aria-hidden="true"></aside>
+<div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-label="เมนูทั้งหมด" aria-hidden="true"></div>
+<div id="modalWrap" class="modal-wrap" role="dialog" aria-modal="true" aria-hidden="true"><div id="modal" class="modal"></div></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   AIDC Service Desk — Vanilla JS ล้วน ไม่มี framework ไม่มี build step
+   สถาปัตยกรรม: state เดียว (S) → paint() วาดใหม่ทั้งหน้า → คืนโฟกัสด้วย data-fkey
+   overlay (drawer/modal/toast/sheet) อยู่นอกส่วน re-render เพื่อให้ transition ลื่น
+   *** ไม่ใช้ localStorage / sessionStorage — state อยู่ในตัวแปรเท่านั้น ***
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────── 1. ข้อมูล (mock) ─────────────────────────── */
+
+// บริษัทในเครือ 7 แห่ง
+const CO = [
+  { code:'HQ',   name:'AIDC HQ' },
+  { code:'CON',  name:'AIDC Construction' },
+  { code:'COSI', name:'Cosi' },
+  { code:'HVY',  name:'Heavy Machine' },
+  { code:'TECH', name:'AIDC Tech' },
+  { code:'TRD',  name:'AIDC Trading' },
+  { code:'LOG',  name:'AIDC Logistic' }
+];
+const CONAME = c => (CO.find(x => x.code === c) || {}).name || c;
+
+// หมวดหมู่ปัญหาแยกตามประเภทธุรกิจของแต่ละบริษัท (ใช้ทำ dynamic form)
+const CATS = {
+  HQ:   ['IT / คอมพิวเตอร์', 'เครือข่าย / Wi-Fi', 'สิทธิ์การเข้าถึง', 'อาคารสถานที่', 'ERP / ระบบงาน'],
+  CON:  ['เครื่องจักร / ไซต์งาน', 'IT / คอมพิวเตอร์', 'สิทธิ์การเข้าถึง', 'เครือข่ายไซต์งาน'],
+  COSI: ['ระบบ POS / ห้องอาหาร', 'Key card / ห้องพัก', 'IT / คอมพิวเตอร์', 'อาคารสถานที่'],
+  HVY:  ['เครื่องจักร / ไซต์งาน', 'อะไหล่ / PM', 'IT / คอมพิวเตอร์'],
+  TECH: ['IT / คอมพิวเตอร์', 'สิทธิ์การเข้าถึง', 'ขออุปกรณ์ใหม่', 'เครือข่าย / Wi-Fi'],
+  TRD:  ['ERP / ระบบงาน', 'อีเมลองค์กร', 'IT / คอมพิวเตอร์'],
+  LOG:  ['GPS / IoT ยานพาหนะ', 'เครื่องจักร / ไซต์งาน', 'IT / คอมพิวเตอร์']
+};
+
+/* ระดับความสำคัญ P1–P4 ตามเอกสาร AIDC-IT-SLA-001 ข้อ 5.1
+   วันทำการ = จ–ศ 08:30–17:30 (9 ชม. = 540 นาที) — P1 นับต่อเนื่อง 24×7 */
+const BIZ_DAY_MIN = 540;
+const PRIOS = [
+  { key:'P1', th:'วิกฤต',   en:'Critical', rank:4,
+    respMin:15,  resMin:240,
+    resp:'15 นาที (24×7)', res:'4 ชั่วโมง (นับต่อเนื่อง)', respShort:'15 นาที', resShort:'4 ชั่วโมง', report:'รายงานทุก 1 ชั่วโมง',
+    clock:'นับต่อเนื่อง 24×7 · มีทีม On-call นอกเวลาทำการ',
+    desc:'ระบบ Critical หยุดให้บริการทั้งองค์กร ไม่มีทางเลี่ยง เช่น ERP ล่ม เครือข่ายทั้งสำนักงานใช้ไม่ได้ เหตุโจมตีทางไซเบอร์' },
+  { key:'P2', th:'สูง',     en:'High', rank:3,
+    respMin:30,  resMin:480,
+    resp:'30 นาที', res:'8 ชั่วโมงทำการ', respShort:'30 นาที', resShort:'8 ชม.ทำการ', report:'รายงานทุก 4 ชั่วโมงทำการ',
+    clock:'นับเฉพาะเวลาทำการ จ–ศ 08:30–17:30',
+    desc:'ระบบสำคัญใช้ไม่ได้ทั้งแผนก หรือระบบ Critical มีทางเลี่ยงชั่วคราว เช่น อีเมลทั้งแผนกใช้ไม่ได้' },
+  { key:'P3', th:'ปานกลาง', en:'Medium', rank:2,
+    respMin:120, resMin:BIZ_DAY_MIN * 2,
+    resp:'2 ชั่วโมงทำการ', res:'2 วันทำการ', respShort:'2 ชม.ทำการ', resShort:'2 วันทำการ', report:'รายงานเมื่อสถานะเปลี่ยน',
+    clock:'นับเฉพาะเวลาทำการ จ–ศ 08:30–17:30',
+    desc:'ผู้ใช้รายบุคคลทำงานไม่ได้หรือไม่สะดวก เช่น เครื่องคอมพิวเตอร์มีปัญหา เครื่องพิมพ์ใช้ไม่ได้' },
+  { key:'P4', th:'ต่ำ',     en:'Low', rank:1,
+    respMin:240, resMin:BIZ_DAY_MIN * 5,
+    resp:'4 ชั่วโมงทำการ', res:'5 วันทำการ', respShort:'4 ชม.ทำการ', resShort:'5 วันทำการ', report:'รายงานเมื่อสถานะเปลี่ยน',
+    clock:'นับเฉพาะเวลาทำการ จ–ศ 08:30–17:30',
+    desc:'คำขอบริการทั่วไปหรือคำปรึกษาที่ไม่กระทบงานเร่งด่วน เช่น ขอสิทธิ์เข้าถึง ติดตั้งโปรแกรม' }
+];
+const PRIO = k => PRIOS.find(p => p.key === k) || PRIOS[2];
+
+// ตารางจัดระดับ ผลกระทบ × ความเร่งด่วน (SLA ข้อ 4)
+const MATRIX = {
+  cols: ['เร่งด่วนมาก', 'เร่งด่วนปานกลาง', 'ไม่เร่งด่วน'],
+  rows: [
+    { label:'ทั้งองค์กร / ระบบ Critical', cells:['P1', 'P2', 'P3'] },
+    { label:'ทั้งแผนก / หลายคน',          cells:['P2', 'P3', 'P3'] },
+    { label:'รายบุคคล',                    cells:['P3', 'P3', 'P4'] }
+  ]
+};
+
+// เส้นทางการยกระดับปัญหา (SLA ข้อ 6 + SOP ข้อ 5.3)
+const ESCALATION = [
+  { tier:'Tier 1', who:'เจ้าหน้าที่ Service Desk',
+    when:'รับงานทั้งหมดเป็นด่านแรก ทุกช่องทาง', kind:'func' },
+  { tier:'Tier 2', who:'System / Network Admin',
+    when:'Tier 1 แก้ไขไม่ได้ภายใน 2 ชั่วโมงทำการ หรือเป็นปัญหาเชิงเทคนิคลึก', kind:'func' },
+  { tier:'Tier 3', who:'ผู้เชี่ยวชาญเฉพาะทาง / Vendor',
+    when:'Tier 2 แก้ไขไม่ได้ หรืออยู่ในความรับผิดชอบของผู้ผลิต/ผู้ให้บริการภายนอก', kind:'func' },
+  { tier:'Head of IT', who:'การยกระดับสู่ผู้บริหาร',
+    when:'เหตุ P1 ทุกกรณีทันที · Ticket ที่เกินเป้าหมาย SLA แล้ว · ผู้รับบริการขอทบทวนการจัดการ', kind:'hier' },
+  { tier:'CEO', who:'กรรมการผู้จัดการ',
+    when:'เหตุ P1 ที่เกิน 4 ชั่วโมงยังไม่คืนบริการ · เหตุการณ์ความปลอดภัย/ข้อมูลรั่วไหล · ผลกระทบต่อลูกค้าภายนอก', kind:'hier' }
+];
+
+// KPI ตามเอกสารจริง ข้อ 7.1
+const KPIS = [
+  { label:'SLA Compliance', value:'92%',    target:'เป้าหมาย ≥ 95%',      pass:false, note:'Heavy Machine ฉุดค่าเฉลี่ยลง 13 จุด', freq:'รายเดือน · ระบบ Ticketing' },
+  { label:'First Response', value:'24 นาที', target:'เป้าหมาย ≤ 30 นาที', pass:true,  note:'ดีขึ้น 6 นาทีจากเดือนก่อน',        freq:'รายเดือน · ระบบ Ticketing' },
+  { label:'FCR',            value:'61%',    target:'เป้าหมาย ≥ 70%',      pass:false, note:'แก้จบตั้งแต่ครั้งแรก — ขึ้น 6 จุด', freq:'รายเดือน · ระบบ Ticketing' },
+  { label:'CSAT',           value:'4.4',    target:'เป้าหมาย ≥ 4.2 / 5.0', pass:true,  note:'จาก 1,806 แบบประเมิน',           freq:'รายไตรมาส · แบบสำรวจหลังปิดงาน' },
+  { label:'Aged Backlog',   value:'6.1%',   target:'เป้าหมาย ≤ 5%',        pass:false, note:'Ticket ค้างเกิน SLA 47 รายการจาก 770 รายการ', freq:'รายสัปดาห์ · ระบบ Ticketing' },
+  { label:'Uptime Critical',value:'99.94%', target:'เป้าหมาย ≥ 99.9%',     pass:true,  note:'Downtime ไม่ได้วางแผน 26 นาที',   freq:'รายเดือน · ระบบ Monitoring' }
+];
+
+const KB = [
+  { id:'KB-01', cat:'Access', title:'รีเซ็ตรหัสผ่านบัญชีองค์กรด้วยตัวเอง', views:'1,240', deflect:'312 รายการ', updated:'12 ส.ค. 2569',
+    keys:['รหัสผ่าน','password','login','เข้าระบบ','sso','ล็อกอิน','ลืมรหัส'],
+    steps:['เปิดพอร์ทัลรีเซ็ตรหัสผ่านภายใน (sspr.aidc-group.local) จากอุปกรณ์ที่ลงทะเบียน MFA ไว้','ยืนยันตัวตนผ่านแอปยืนยันตัวตนหรือ SMS','ตั้งรหัสใหม่ยาว 12 ตัวขึ้นไป ไม่ซ้ำ 5 รหัสล่าสุด','รอ 3 นาที ให้ระบบซิงค์กับ Active Directory ภายใน','หากยังเข้าไม่ได้ แจ้ง Ticket หมวดสิทธิ์การเข้าถึง พร้อมภาพหน้าจอ error'] },
+  { id:'KB-02', cat:'Hardware', title:'เครื่องพิมพ์ไม่ตอบสนอง — ตรวจ 5 ขั้นก่อนแจ้งช่าง', views:'968', deflect:'221 รายการ', updated:'4 ส.ค. 2569',
+    keys:['พิมพ์','printer','เครื่องพิมพ์','ปริ้น','กระดาษ'],
+    steps:['ตรวจไฟสถานะ หากกะพริบสีส้มให้เปิดฝาตรวจกระดาษติด','ปิดเครื่อง รอ 30 วินาที แล้วเปิดใหม่','ตรวจว่าเครื่องยังอยู่ในเครือข่ายเดิม โดย ping IP ของเครื่องพิมพ์','ลบคิวงานค้างทั้งหมด แล้วสั่งพิมพ์หน้าทดสอบ','หากผลทดสอบไม่ออก แจ้ง Ticket พร้อมรหัสอุปกรณ์ที่สติกเกอร์ข้างเครื่อง'] },
+  { id:'KB-03', cat:'Machinery', title:'ไฮดรอลิกรั่วที่ไซต์งาน — ตรวจเบื้องต้นและหยุดใช้งานอย่างปลอดภัย', views:'541', deflect:'96 รายการ', updated:'20 ก.ค. 2569',
+    keys:['ไฮดรอลิก','รั่ว','แบคโฮ','เครื่องจักร','น้ำมัน','เครน','เบรก','รถ'],
+    steps:['หยุดใช้งานเครื่องจักรทันที และกันพื้นที่รัศมี 3 เมตร','บันทึกภาพจุดรั่วและระดับน้ำมัน พร้อมเลขชั่วโมงเครื่อง','ตรวจข้อต่อและสายไฮดรอลิกว่าหลวมหรือฉีกขาด','รองภาชนะกันน้ำมันลงดินตามข้อกำหนดสิ่งแวดล้อม','แจ้ง Ticket ระดับ P1 – วิกฤต พร้อมรหัสเครื่องและพิกัด GPS'] },
+  { id:'KB-04', cat:'Application', title:'SAP ออกใบกำกับภาษีไม่ได้ — ตรวจ 3 จุดหลัก', views:'712', deflect:'134 รายการ', updated:'28 ก.ค. 2569',
+    keys:['sap','erp','ใบกำกับ','ภาษี','invoice','ออกบิล','ระบบงาน'],
+    steps:['ตรวจว่างวดบัญชี (posting period) ยังเปิดอยู่','ตรวจเลขที่เอกสารในช่วง number range ว่าไม่หมด','ตรวจสิทธิ์ผู้ใช้ใน role Z_FI_BILLING','หากทั้ง 3 จุดผ่าน แจ้ง Ticket แนบหมายเลข error และเวลาที่เกิด'] },
+  { id:'KB-05', cat:'Network', title:'เชื่อมต่อ VPN สำหรับไซต์งานนอกสำนักงาน', views:'634', deflect:'158 รายการ', updated:'1 ส.ค. 2569',
+    keys:['vpn','ไซต์งาน','เชื่อมต่อ','wifi','wi-fi','เครือข่าย','อินเทอร์เน็ต','เน็ต'],
+    steps:['ติดตั้ง client จาก Software Center (เวอร์ชัน 5.2 ขึ้นไป)','กรอก gateway vpn.aidc-group.local และเข้าสู่ระบบด้วยบัญชีองค์กร','ยืนยัน MFA ภายใน 60 วินาที','ทดสอบเข้าถึง ERP ภายใน หากช้ากว่า 2 วินาทีให้สลับโปรไฟล์ Site-Link'] },
+  { id:'KB-06', cat:'IoT', title:'GPS ยานพาหนะไม่ส่งพิกัด — ตรวจกล่องและซิม', views:'288', deflect:'61 รายการ', updated:'15 ส.ค. 2569',
+    keys:['gps','พิกัด','ติดตาม','ซิม','iot','ขนส่ง'],
+    steps:['ตรวจไฟสถานะกล่อง GPS ต้องติดค้างสีเขียว','ตรวจยอดคงเหลือและอายุซิมในพอร์ทัลผู้ให้บริการ','ถอดปลั๊กกล่อง 1 นาที แล้วเสียบใหม่เพื่อรีเซ็ต','หากยังไม่ส่งพิกัดเกิน 15 นาที แจ้ง Ticket หมวด GPS / IoT พร้อมทะเบียนรถ'] }
+];
+
+const ASSETS = [
+  { code:'EXC-CON-118', name:'แบคโฮ Komatsu PC200-8', company:'AIDC Construction', tickets:14, st:'ใช้งานได้', installed:'มี.ค. 2565',
+    pmNote:'ครบรอบ PM 500 ชั่วโมงในอีก 12 วัน — ระบบจะสร้าง Ticket บำรุงรักษาล่วงหน้าอัตโนมัติ',
+    history:[{date:'22 ส.ค. 69',what:'เปลี่ยนสายไฮดรอลิกแขนบูม',by:'ช่างสมชาย · TCK-2291'},{date:'02 ก.ค. 69',what:'PM 1,500 ชม. เปลี่ยนไส้กรองน้ำมันเครื่อง',by:'ทีมซ่อมบำรุง HVY'},{date:'18 พ.ค. 69',what:'ซ่อมระบบไฟส่องสว่างท้ายรถ',by:'ช่างวิรัตน์ · TCK-1877'},{date:'11 ก.พ. 69',what:'เปลี่ยนตีนตะขาบซ้าย',by:'ผู้รับเหมาภายนอก'}] },
+  { code:'CRN-HVY-004', name:'รถเครน Tadano 25 ตัน', company:'Heavy Machine', tickets:9, st:'รอซ่อม', installed:'ส.ค. 2564',
+    pmNote:'มี Ticket ระดับ P1 ค้างอยู่ 1 รายการ — เครื่องจักรถูกล็อกห้ามใช้งานจนกว่าจะปิดงาน',
+    history:[{date:'30 ส.ค. 69',what:'แจ้งเบรกลื่น หยุดใช้งานชั่วคราว',by:'หัวหน้าไซต์ · TCK-2304'},{date:'14 ก.ค. 69',what:'PM ประจำปี ตรวจสลิงและรอก',by:'ทีมซ่อมบำรุง HVY'},{date:'03 เม.ย. 69',what:'เปลี่ยนน้ำมันเกียร์',by:'ศูนย์บริการ Tadano'}] },
+  { code:'PC-HQ-0912', name:'Dell OptiPlex 7010 — ฝ่ายบัญชี', company:'AIDC HQ', tickets:6, st:'ใช้งานได้', installed:'ม.ค. 2566',
+    pmNote:'อายุการใช้งาน 3 ปี 7 เดือน — เข้าเกณฑ์พิจารณาเปลี่ยนเครื่องรอบปีงบ 2570',
+    history:[{date:'28 ส.ค. 69',what:'ติดตั้ง SSD เพิ่ม 512GB',by:'ทีม Central IT'},{date:'19 มิ.ย. 69',what:'ล้างเครื่องและติดตั้งระบบปฏิบัติการใหม่',by:'ช่างณัฐพล · TCK-1721'},{date:'02 มี.ค. 69',what:'เปลี่ยนแบตเตอรี่ CMOS',by:'ทีม Central IT'}] },
+  { code:'POS-COSI-21', name:'POS Terminal ห้องอาหารชั้น 2', company:'Cosi', tickets:11, st:'เฝ้าระวัง', installed:'ต.ค. 2565',
+    pmNote:'Ticket ซ้ำ 4 รายการใน 30 วัน สาเหตุเดียวกัน — แนะนำเปลี่ยนอุปกรณ์แทนการซ่อม',
+    history:[{date:'29 ส.ค. 69',what:'จอสัมผัสไม่ตอบสนองช่วง peak',by:'ผู้จัดการห้องอาหาร · TCK-2299'},{date:'12 ส.ค. 69',what:'เปลี่ยนสายแลนและ power adapter',by:'ช่าง Cosi IT'},{date:'25 ก.ค. 69',what:'อัปเดตเฟิร์มแวร์เครื่องอ่านบัตร',by:'Vendor POS'}] },
+  { code:'TRK-LOG-077', name:'รถบรรทุก 6 ล้อ — กล่อง GPS', company:'AIDC Logistic', tickets:5, st:'ใช้งานได้', installed:'พ.ย. 2566',
+    pmNote:'สัญญาซิม IoT หมดอายุ ธ.ค. 2569 — เตรียมต่ออายุก่อน 60 วัน',
+    history:[{date:'31 ส.ค. 69',what:'กล่อง GPS ไม่ส่งพิกัด 3 ชั่วโมง',by:'ศูนย์ควบคุมขนส่ง · TCK-2311'},{date:'08 ส.ค. 69',what:'เปลี่ยนซิม IoT ผู้ให้บริการใหม่',by:'ทีม LOG Tech'}] },
+  { code:'NW-TECH-SW3', name:'Core Switch อาคาร B ชั้น 3', company:'AIDC Tech', tickets:3, st:'ใช้งานได้', installed:'ก.ค. 2565',
+    pmNote:'สำรองคอนฟิกอัตโนมัติทุกคืน — ตรวจสอบล่าสุด 30 ส.ค. 2569 ผ่าน',
+    history:[{date:'20 ส.ค. 69',what:'อัปเกรดเฟิร์มแวร์ + รีบูตตามแผน',by:'ทีม Network'},{date:'15 พ.ค. 69',what:'เปลี่ยน SFP module พอร์ต 12',by:'ช่างธนา · TCK-1602'}] }
+];
+
+/* Ticket ตัวอย่าง — slaMins/totalMins ปรับให้ตรงเป้าหมาย SLA จริง (P1 240 น. / P2 480 น. / P3 1080 น. / P4 2700 น.) */
+const TICKETS = [
+  { id:'TCK-2311', company:'LOG',  title:'กล่อง GPS รถทะเบียน 82-4471 ไม่ส่งพิกัด', cat:'GPS / IoT ยานพาหนะ', prio:'P1', status:'กำลังดำเนินการ', slaMins:52,   totalMins:240,  assignee:'ธนา ว.',   requester:'ศูนย์ควบคุมขนส่ง', channel:'LINE OA', dept:'ปฏิบัติการขนส่ง', asset:'TRK-LOG-077', mine:false, desc:'รถออกจากคลังบางนา 06:10 แต่ระบบไม่เห็นพิกัดตั้งแต่ 06:40 ลูกค้าปลายทางโทรตามสถานะแล้ว 2 ครั้ง' },
+  { id:'TCK-2304', company:'HVY',  title:'เครนเบรกลื่น หยุดใช้งานที่ไซต์ระยอง',       cat:'เครื่องจักร / ไซต์งาน', prio:'P1', status:'รอรับเรื่อง',    slaMins:21,   totalMins:240,  assignee:'—',        requester:'หัวหน้าไซต์ ระยอง', channel:'Web',     dept:'ไซต์งาน',        asset:'CRN-HVY-004', mine:false, desc:'เบรกมือไม่จับตัว ทดสอบซ้ำ 3 ครั้ง กันพื้นที่แล้ว ต้องการช่างเข้าหน้างานวันนี้' },
+  { id:'TCK-2299', company:'COSI', title:'POS ห้องอาหารชั้น 2 จอไม่ตอบสนองช่วง peak',  cat:'ระบบ POS / ห้องอาหาร',  prio:'P2', status:'กำลังดำเนินการ', slaMins:132,  totalMins:480,  assignee:'สุภาพร ก.', requester:'ผู้จัดการห้องอาหาร', channel:'อีเมล',  dept:'F&B',            asset:'POS-COSI-21', mine:false, desc:'ช่วง 18:30–20:00 จอค้างประมาณ 20 วินาที เกิดซ้ำทุกวันตลอดสัปดาห์ ต้องคิดเงินด้วยเครื่องสำรอง' },
+  { id:'TCK-2296', company:'HQ',   title:'ขอสิทธิ์เข้าถึงโฟลเดอร์งบประมาณ 2570',       cat:'สิทธิ์การเข้าถึง',      prio:'P3', status:'รอข้อมูลเพิ่ม',  slaMins:648,  totalMins:1080, assignee:'ณัฐพล ส.',  requester:'คุณกมลชนก (คุณ)',   channel:'Web',     dept:'การเงิน',        asset:'',            mine:true,  desc:'ขอสิทธิ์อ่าน-เขียนโฟลเดอร์ Budget2570 เพื่อจัดทำงบประมาณรวมกลุ่มบริษัท แนบอนุมัติจากผู้บังคับบัญชาแล้ว' },
+  { id:'TCK-2291', company:'CON',  title:'แบคโฮ PC200 น้ำมันไฮดรอลิกรั่วที่แขนบูม',    cat:'เครื่องจักร / ไซต์งาน', prio:'P2', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:480,  assignee:'สมชาย ท.',  requester:'โฟร์แมนไซต์ 4',     channel:'LINE OA', dept:'ไซต์งาน',        asset:'EXC-CON-118', mine:false, desc:'พบน้ำมันหยดบริเวณข้อต่อแขนบูม หยุดใช้งานและกันพื้นที่ตามคู่มือ KB-03 แล้ว' },
+  { id:'TCK-2288', company:'TRD',  title:'SAP ออกใบกำกับภาษีไม่ได้ error F5-104',      cat:'ERP / ระบบงาน',        prio:'P2', status:'กำลังดำเนินการ', slaMins:88,   totalMins:480,  assignee:'อนุชา พ.',  requester:'ฝ่ายขายภูมิภาค',    channel:'Web',     dept:'ขาย',            asset:'',            mine:false, desc:'ออกใบกำกับให้ลูกค้ารายใหญ่ไม่ได้ตั้งแต่เช้า มีเอกสารค้าง 34 ใบ กระทบการปิดงวด' },
+  { id:'TCK-2284', company:'TECH', title:'Wi-Fi ชั้น 3 อาคาร B หลุดเป็นช่วง',          cat:'เครือข่าย / Wi-Fi',    prio:'P3', status:'กำลังดำเนินการ', slaMins:402,  totalMins:1080, assignee:'ธนา ว.',   requester:'ทีมพัฒนาระบบ',      channel:'อีเมล',  dept:'พัฒนาระบบ',      asset:'NW-TECH-SW3', mine:false, desc:'สัญญาณหลุดทุก 10-15 นาที กระทบการประชุมออนไลน์ พบเฉพาะโซนตะวันตกของชั้น' },
+  { id:'TCK-2280', company:'HQ',   title:'เครื่องพิมพ์ฝ่ายบัญชีพิมพ์ไม่ออก',           cat:'IT / คอมพิวเตอร์',     prio:'P4', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:2700, assignee:'ณัฐพล ส.',  requester:'คุณกมลชนก (คุณ)',   channel:'Web',     dept:'การเงิน',        asset:'PC-HQ-0912',  mine:true,  desc:'สั่งพิมพ์แล้วไม่มีอะไรออก ลองรีสตาร์ตเครื่องแล้วไม่หาย' },
+  { id:'TCK-2276', company:'COSI', title:'Key card ห้อง 812 อ่านไม่ติด',               cat:'Key card / ห้องพัก',   prio:'P3', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:1080, assignee:'สุภาพร ก.', requester:'Front Office',      channel:'LINE OA', dept:'Front Office',   asset:'',            mine:false, desc:'แขกเข้าห้องไม่ได้ 2 ครั้ง เปลี่ยนการ์ดใหม่แล้วยังอ่านไม่ติด' },
+  { id:'TCK-2271', company:'CON',  title:'ขอเปิดสิทธิ์ VPN ให้ผู้รับเหมาไซต์ขอนแก่น',  cat:'สิทธิ์การเข้าถึง',     prio:'P4', status:'รอรับเรื่อง',    slaMins:1980, totalMins:2700, assignee:'—',        requester:'ธุรการไซต์',        channel:'Web',     dept:'ธุรการ',         asset:'',            mine:false, desc:'ผู้รับเหมา 3 รายต้องส่งรายงานหน้างานผ่านระบบภายใน ขอสิทธิ์ชั่วคราว 90 วัน' },
+  { id:'TCK-2268', company:'LOG',  title:'สแกนเนอร์คลังสินค้าเชื่อม Wi-Fi ไม่ติด',     cat:'IT / คอมพิวเตอร์',     prio:'P2', status:'กำลังดำเนินการ', slaMins:150,  totalMins:480,  assignee:'อนุชา พ.',  requester:'หัวหน้าคลัง',       channel:'Web',     dept:'คลังสินค้า',     asset:'',            mine:false, desc:'เครื่องสแกน 4 จาก 9 เครื่องหลุดจากเครือข่ายคลัง ทำให้รับเข้าสินค้าล่าช้า' },
+  { id:'TCK-2262', company:'HQ',   title:'แอร์ห้องประชุมใหญ่ไม่เย็น',                  cat:'อาคารสถานที่',         prio:'P4', status:'รอข้อมูลเพิ่ม',  slaMins:2280, totalMins:2700, assignee:'ทีมอาคาร',  requester:'เลขานุการผู้บริหาร', channel:'Web',    dept:'ธุรการ',         asset:'',            mine:true,  desc:'มีประชุมคณะกรรมการสัปดาห์หน้า ขอให้ตรวจก่อนวันประชุม' }
+];
+
+const CHART = [
+  { code:'HQ',   total:412, open:38, mttr:'3.2 ชม.', sla:96, csat:4.6 },
+  { code:'CON',  total:366, open:51, mttr:'5.8 ชม.', sla:88, csat:4.1 },
+  { code:'TECH', total:298, open:22, mttr:'2.4 ชม.', sla:97, csat:4.7 },
+  { code:'COSI', total:241, open:34, mttr:'4.1 ชม.', sla:91, csat:4.3 },
+  { code:'HVY',  total:188, open:29, mttr:'7.6 ชม.', sla:82, csat:3.9 },
+  { code:'LOG',  total:174, open:19, mttr:'4.6 ชม.', sla:93, csat:4.4 },
+  { code:'TRD',  total:121, open:11, mttr:'3.9 ชม.', sla:95, csat:4.5 }
+];
+
+const RULES = [
+  { cond:'AIDC Construction + ไซต์งาน + เครื่องจักร',            team:'ทีมซ่อมบำรุง Heavy Machine',   mode:'Round-Robin',      prio:'P2' },
+  { cond:'ทุกบริษัท + ทุกแผนก + สิทธิ์การเข้าถึง',                team:'Central IT — Identity',        mode:'Load-based',       prio:'P4' },
+  { cond:'Cosi + F&B + ระบบ POS',                                 team:'Cosi IT + Vendor POS',         mode:'ผู้รับคนแรกที่ว่าง', prio:'P2' },
+  { cond:'AIDC Trading + ขาย + ERP / ระบบงาน',                    team:'ทีม ERP กลาง',                 mode:'Round-Robin',      prio:'P2' },
+  { cond:'AIDC Logistic + ขนส่ง + GPS / IoT',                     team:'LOG Tech (on-call 24×7)',      mode:'On-call rotation', prio:'P1' },
+  { cond:'ทุกบริษัท + ทุกแผนก + P1 ที่ไม่มีผู้รับภายใน 15 นาที', team:'ดันขึ้นหัวหน้าทีม + Central IT', mode:'Auto Escalation',  prio:'P1' }
+];
+
+const AGENTS = ['ณัฐพล ส.', 'ธนา ว.', 'สุภาพร ก.', 'อนุชา พ.', 'สมชาย ท.'];
+
+const ACCOUNTS = [
+  { role:'employee', i:'กช', name:'กมลชนก เจริญวัฒน์', mail:'kamolchanok.j@aidc-group.com', group:'AIDC-All-Employees',     roleLabel:'พนักงาน · ESS',            scope:'ฝ่ายการเงิน · AIDC HQ' },
+  { role:'agent',    i:'ณส', name:'ณัฐพล สุขเกษม',     mail:'nattapon.s@aidc-group.com',    group:'AIDC-Support-Agent-HQ',  roleLabel:'เจ้าหน้าที่ประจำบริษัท',   scope:'IT Support · AIDC HQ + Tech' },
+  { role:'central',  i:'พธ', name:'พีรพล ธนกิจ',       mail:'peerapol.t@aidc-group.com',    group:'AIDC-Central-IT-Admin',  roleLabel:'Central IT / ผู้บริหาร',   scope:'Central IT Manager · ทั้งกลุ่ม' }
+];
+
+const STATUSES = ['รอรับเรื่อง', 'กำลังดำเนินการ', 'รอข้อมูลเพิ่ม', 'ปิดงานแล้ว'];
+
+/* ─────────────────────────── 2. ไอคอน (inline SVG เขียนเอง) ─────────────────────────── */
+
+const P = {
+  inbox:'M3 13h4l1.5 3h7L17 13h4M3 13 5.5 5h13L21 13v6H3z',
+  layers:'M12 3 3 7.5 12 12l9-4.5zM3 12.5 12 17l9-4.5M3 16.5 12 21l9-4.5',
+  gauge:'M12 20a8 8 0 1 1 8-8M12 12l4.5-3.2',
+  box:'M12 3 3 7.5v9L12 21l9-4.5v-9zM3 7.5 12 12l9-4.5M12 12v9',
+  sliders:'M4 7h10M18 7h2M4 17h4M12 17h8M16 4v6M8 14v6',
+  book:'M4 4h6a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H4zM20 4h-6a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H20z',
+  plus:'M12 5v14M5 12h14',
+  search:'M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM21 21l-4.3-4.3',
+  close:'M6 6l12 12M18 6L6 18',
+  menu:'M4 7h16M4 12h16M4 17h16',
+  sun:'M12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zM12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
+  moon:'M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z',
+  clock:'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 7v5l3.5 2',
+  play:'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM10 8.5l5.5 3.5L10 15.5z',
+  pause:'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM10.5 9v6M13.5 9v6',
+  check:'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM8 12.2l2.8 2.8L16 9.5',
+  alert:'M12 3.5 22 20H2zM12 10v4M12 17.2v.1',
+  clip:'M20 11.5 12.2 19.3a5 5 0 0 1-7-7L12 5.4a3.2 3.2 0 1 1 4.5 4.5l-6.7 6.7a1.4 1.4 0 0 1-2-2l6.3-6.3',
+  pin:'M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11zM12 12.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z',
+  spark:'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4zM19 3.5v3M17.5 5h3',
+  arrowR:'M4 12h15M13 6l6 6-6 6',
+  arrowL:'M20 12H5M11 18l-6-6 6-6',
+  chevR:'M9 5l7 7-7 7',
+  logout:'M15 17l5-5-5-5M20 12H9M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6',
+  user:'M12 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zM4.5 20a7.5 7.5 0 0 1 15 0',
+  shield:'M12 21s7-3.2 7-9V5.6L12 3 5 5.6V12c0 5.8 7 9 7 9zM9.2 12l2 2 3.6-4',
+  route:'M6 20V9a3 3 0 0 1 3-3h6M6 20a2 2 0 1 1 0-4 2 2 0 0 1 0 4zM18 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4zM12 6l3-3M12 6l3 3',
+  star:'M12 3.5l2.6 5.5 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z',
+  refresh:'M20 12a8 8 0 1 1-2.6-5.9M20 3v4.5h-4.5',
+  ext:'M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+  lock:'M5.5 10.5h13V20h-13zM8.5 10.5V7.2a3.5 3.5 0 0 1 7 0v3.3M12 14.2v2.6',
+  eye:'M2.2 12S6 5.6 12 5.6 21.8 12 21.8 12 18 18.4 12 18.4 2.2 12 2.2 12zM12 14.7a2.7 2.7 0 1 1 0-5.4 2.7 2.7 0 0 1 0 5.4z',
+  eyeOff:'M3.5 3.5l17 17M10.2 5.9A9.7 9.7 0 0 1 12 5.6c6 0 9.8 6.4 9.8 6.4a18 18 0 0 1-3.6 4.3M6.6 7.7A17.4 17.4 0 0 0 2.2 12S6 18.4 12 18.4c1.2 0 2.3-.2 3.3-.6M10.1 10.1a2.7 2.7 0 0 0 3.8 3.8'
+};
+// สร้าง SVG ไอคอนจาก path (stroke 1.7 ทุกตัว)
+function ic(name, cls, sw) {
+  return '<svg class="' + (cls || 'w-4 h-4') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="' + (sw || 1.7) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="' + P[name] + '"/></svg>';
+}
+// โลโก้ AIDC/SERVICE — สี่เหลี่ยมคมพร้อมตัว A เจาะ (inline SVG ไม่พึ่งไฟล์ภายนอก)
+function logoMark(size) {
+  const s = size || 32;
+  return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 32 32" aria-hidden="true" class="flex-none">' +
+    '<rect width="32" height="32" fill="var(--c-accent)"/>' +
+    '<path d="M7.5 24 16 7l8.5 17" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="miter"/>' +
+    '<path d="M11.6 18.4h8.8" fill="none" stroke="#fff" stroke-width="2.6"/>' +
+    '</svg>';
+}
+function logoLockup(size, sub) {
+  return '<div class="flex items-center gap-3">' + logoMark(size) +
+    '<div class="leading-none">' +
+      '<div class="font-display font-extrabold tracking-tight text-[15px]">AIDC<span class="text-accent-text">/</span>SERVICE</div>' +
+      '<div class="eyebrow mt-1.5">' + (sub || 'Group Service Desk') + '</div>' +
+    '</div></div>';
+}
+
+/* ─────────────────────────── 3. ยูทิลิตี ─────────────────────────── */
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+// เวลาที่หน้าเว็บเริ่มทำงาน — ใช้เดินนาฬิกา SLA จริงตามเวลาที่ผ่านไป
+const T0 = Date.now();
+const elapsedMin = () => (Date.now() - T0) / 60000;
+
+// แปลงนาทีคงเหลือเป็นข้อความ (P3/P4 คิดเป็นวันทำการ 9 ชม./วัน)
+function fmtRemain(m, asDays) {
+  if (m <= 0) return 'เกินเป้าหมาย';
+  if (asDays && m >= 540) return (m / BIZ_DAY_MIN).toFixed(1) + ' วันทำการ';
+  const h = Math.floor(m / 60), mm = Math.floor(m % 60);
+  if (h > 0) return h + ' ชม. ' + String(mm).padStart(2, '0') + ' น.';
+  return Math.max(0, Math.floor(m)) + ' นาที';
+}
+// นับถอยหลังละเอียดระดับวินาที (ใช้ในแผงรายละเอียด)
+function fmtClock(m) {
+  if (m <= 0) return '00:00:00';
+  const total = Math.floor(m * 60);
+  const h = Math.floor(total / 3600), mi = Math.floor((total % 3600) / 60), s = total % 60;
+  const p = n => String(n).padStart(2, '0');
+  return p(h) + ':' + p(mi) + ':' + p(s);
+}
+
+/* คำนวณสถานะ SLA ของ Ticket หนึ่งรายการ
+   — สถานะ "รอข้อมูลเพิ่ม" นาฬิกาหยุดชั่วคราว ตาม SLA ข้อ 5.4 (Pending User) */
+function slaOf(t) {
+  const p = PRIO(t.prio);
+  if (t.status === 'ปิดงานแล้ว') {
+    return { rem:0, pct:100, level:'done', paused:false,
+      text:'ปิดงานแล้ว', clock:'—',
+      note:'ปิดงานภายในเป้าหมาย SLA และส่งแบบประเมิน CSAT ให้ผู้แจ้งเรียบร้อย' };
+  }
+  const paused = t.status === 'รอข้อมูลเพิ่ม';
+  const rem = paused ? t.slaMins : Math.max(0, t.slaMins - elapsedMin());
+  const pct = Math.max(0, Math.min(100, 100 - (rem / t.totalMins) * 100));
+  let level = 'ok';
+  if (rem <= 0) level = 'breach';
+  else if (pct >= 80) level = 'crit';
+  else if (pct >= 60) level = 'warn';
+  const note = paused
+    ? 'นาฬิกา SLA หยุดชั่วคราว — รอข้อมูลจากผู้แจ้ง (Pending User) ตามข้อ 5.4 ของ AIDC-IT-SLA-001'
+    : level === 'breach'
+      ? 'เกินเป้าหมายเวลาแก้ไข — ระบบยกระดับไปยังหัวหน้าทีมและ Head of IT อัตโนมัติแล้ว'
+      : level === 'crit'
+        ? 'ใกล้ครบเป้าหมาย เหลือไม่ถึง 20% — แจ้งเตือนผู้รับผิดชอบทุก 5 นาทีผ่าน LINE OA และอีเมล'
+        : level === 'warn'
+          ? 'ใช้เวลาไปแล้วเกินครึ่งของเป้าหมายเวลาแก้ไข'
+          : 'อยู่ในกรอบเป้าหมายเวลาแก้ไข ' + p.res;
+  return { rem, pct, level, paused, text:fmtRemain(rem, p.resMin >= 1080), clock:fmtClock(rem), note };
+}
+
+// มาตรวัดความเร่งด่วน P1=4 ขีด … P4=1 ขีด — บอกระดับด้วยรูปทรง ไม่พึ่งสีอย่างเดียว
+function meter(prioKey) {
+  const n = PRIO(prioKey).rank;
+  let h = '';
+  for (let i = 1; i <= 4; i++) h += '<i class="' + (i <= n ? 'on' : '') + '"></i>';
+  return '<span class="meter ' + (prioKey === 'P1' ? 'crit' : '') + '" aria-hidden="true">' + h + '</span>';
+}
+// ป้ายความเร่งด่วนเต็มรูปแบบ: มาตรวัด + รหัส + คำไทย
+function prioTag(prioKey) {
+  const p = PRIO(prioKey);
+  const cls = prioKey === 'P1' ? 'tag-solid' : prioKey === 'P2' ? 'tag-soft' : 'tag-quiet';
+  return '<span class="inline-flex items-center gap-2">' + meter(prioKey) +
+    '<span class="tag ' + cls + '">' + p.key + ' · ' + p.th + '</span></span>';
+}
+// ตัวบ่งชี้สถานะ: จุดรูปทรงต่างกัน + ไอคอน + ข้อความ
+const ST_META = {
+  'รอรับเรื่อง':    { mod:'new',  icon:'clock' },
+  'กำลังดำเนินการ': { mod:'work', icon:'play' },
+  'รอข้อมูลเพิ่ม':  { mod:'hold', icon:'pause' },
+  'ปิดงานแล้ว':     { mod:'done', icon:'check' }
+};
+function statusTag(st) {
+  const m = ST_META[st] || ST_META['กำลังดำเนินการ'];
+  const tone = st === 'ปิดงานแล้ว' ? 'text-faint' : st === 'รอรับเรื่อง' ? 'text-accent-text' : 'text-ink';
+  return '<span class="inline-flex items-center gap-1.5 whitespace-nowrap ' + tone + '">' +
+    ic(m.icon, 'w-4 h-4 flex-none') + '<span class="text-[13.5px] font-medium">' + esc(st) + '</span></span>';
+}
+// แถบ SLA ที่เดินจริง — ผูก data-sla ไว้ให้ tick อัปเดตทุกวินาที
+function slaCell(t, withClock) {
+  const s = slaOf(t);
+  const cls = s.level === 'done' ? 'done' : s.level === 'ok' ? '' : (s.level === 'warn' ? 'warn' : 'crit');
+  return '<div data-sla="' + t.id + '" class="min-w-[128px]">' +
+    '<div class="flex items-baseline gap-1.5 whitespace-nowrap">' +
+      '<span data-slatext class="num text-[13.5px] font-semibold ' +
+        (s.level === 'breach' || s.level === 'crit' ? 'text-accent-text' : s.level === 'done' ? 'text-faint' : 'text-ink') + '">' +
+        (withClock ? s.clock : s.text) + '</span>' +
+      (s.paused ? '<span class="eyebrow">หยุดนับ</span>' : '') +
+    '</div>' +
+    '<div class="slabar ' + cls + ' mt-1.5"><i style="width:' + s.pct.toFixed(1) + '%"></i></div>' +
+  '</div>';
+}
+
+/* ─────────────────────────── 4. State ─────────────────────────── */
+
+const S = {
+  authed:false, role:'employee', view:'my',
+  q:'', cf:'ALL', statusF:'all',
+  openId:null, reply:'',
+  escOpen:false, escTo:'TECH', escWhy:'',
+  csatOpen:false, csatPick:0,
+  menuOpen:false, loading:false, fresh:true,
+  assetIdx:0, kbId:null, rr:0, attached:0,
+  disabledRules:{}, extra:[], deflected:false, dark:false,
+  login:{ user:'', pass:'', show:false, remember:true, eu:'', ep:'', tries:0, lockUntil:0, disc:false },
+  form:{ company:'HQ', dept:'การเงิน', cat:CATS.HQ[0], title:'', desc:'', prio:'P3', asset:'', gps:'' }
+};
+
+const me = () => ACCOUNTS.find(a => a.role === S.role) || ACCOUNTS[0];
+const allTickets = () => S.extra.concat(TICKETS);
+
+// ขอบเขตการมองเห็นตามสิทธิ์ (RBAC / Data Isolation)
+function visibleTickets() {
+  return allTickets().filter(t => {
+    if (S.role === 'employee') return t.mine;
+    if (S.role === 'agent') return t.company === 'HQ' || t.company === 'TECH';
+    return true;
+  });
+}
+// เมนูตามบทบาท
+function navModel() {
+  const vis = visibleTickets();
+  const nav = [
+    { key:'my',  icon:'inbox', label:S.role === 'employee' ? 'Ticket ของฉัน' : 'คิวงานของฉัน', short:'ของฉัน', badge:vis.length },
+    { key:'new', icon:'plus',  label:'แจ้งเรื่องใหม่', short:'แจ้งเรื่อง', badge:'' },
+    { key:'kb',  icon:'book',  label:'คลังความรู้', short:'คลังความรู้', badge:KB.length }
+  ];
+  if (S.role !== 'employee') {
+    nav.splice(1, 0, { key:'queue', icon:'layers', label:'Ticket ทั้งหมดในขอบเขต', short:'ทั้งหมด', badge:vis.filter(t => t.status !== 'ปิดงานแล้ว').length });
+    nav.push({ key:'assets', icon:'box', label:'ทรัพย์สิน / ITAM', short:'ทรัพย์สิน', badge:ASSETS.length });
+  }
+  if (S.role === 'central') {
+    nav.splice(2, 0, { key:'dash', icon:'gauge', label:'Executive Dashboard', short:'แดชบอร์ด', badge:'' });
+    nav.push({ key:'rules', icon:'sliders', label:'กฎการมอบหมาย & SLA', short:'กฎ / SLA', badge:RULES.length });
+  }
+  return nav;
+}
+const curView = () => (navModel().some(n => n.key === S.view) ? S.view : 'my');
+
+const TITLES = {
+  my:     () => [S.role === 'employee' ? 'Ticket ของฉัน' : 'คิวงานของฉัน', 'Self-Service', S.role === 'employee' ? 'ติดตามทุกเรื่องที่คุณแจ้งไว้ พร้อมเวลาคงเหลือตามเป้าหมาย SLA' : 'Ticket ที่มอบหมายให้คุณและทีมของคุณ'],
+  queue:  () => ['Ticket ทั้งหมดในขอบเขตที่มองเห็น', 'Ticket Queue', S.role === 'central' ? 'มุมมองรวมทั้งกลุ่ม — 7 บริษัทในเครือ' : 'Data Isolation — เห็นเฉพาะบริษัทที่คุณดูแล'],
+  new:    () => ['แจ้งปัญหา / ขอรับบริการ', 'Smart Intake', 'ฟอร์มปรับตามประเภทธุรกิจของบริษัทที่เลือก พร้อมผู้ช่วย AI ค้นคู่มือก่อนส่ง'],
+  dash:   () => ['Executive Dashboard', 'Analytics', 'ตัวชี้วัดตาม AIDC-IT-SLA-001 ข้อ 7.1 เทียบเป้าหมายรายบริษัท'],
+  assets: () => ['ทะเบียนทรัพย์สินและประวัติซ่อมบำรุง', 'ITAM', 'ผูก Ticket กับรหัสอุปกรณ์และเครื่องจักร พร้อมแผนบำรุงรักษาเชิงป้องกัน'],
+  kb:     () => ['คลังความรู้', 'Knowledge Base', 'คู่มือแก้ปัญหาเบื้องต้นที่ผู้ช่วย AI ใช้อ้างอิงเพื่อลดปริมาณ Ticket'],
+  rules:  () => ['กฎการมอบหมายงานและ SLA', 'Administration', 'Conditional Routing · Priority Matrix · Escalation ตามเอกสาร AIDC-IT-SLA-001']
+};
+
+/* ─────────────────────────── 5. Toast ─────────────────────────── */
+let toastTimer = null;
+function say(msg) {
+  const el = $('#toast');
+  el.innerHTML = ic('check', 'w-4 h-4 flex-none mt-0.5') + '<div>' + esc(msg) + '</div>';
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 4600);
+}
+
+/* ─────────────────────────── 6. หน้าเข้าสู่ระบบ ─────────────────────────── */
+
+/* โลโก้บริษัทเจ้าของระบบ — ฝังเป็น data URI (JPEG 516px กว้าง คุณภาพ 90 ≈ 27 KB)
+   ใช้เฉพาะบนแผงมืดฝั่งซ้าย ซึ่งเป็นพื้นที่ของ "เจ้าของระบบ"
+   ไม่แตะโลโก้ AIDC/SERVICE ที่เป็น mark ของตัวระบบเอง และไม่ดึงสีน้ำเงิน/ทองไปใช้ที่อื่น */
+const COMPANY_LOGO = 'data:image/jpeg;base64,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';
+
+/* นโยบายรหัสผ่านตามเอกสาร SOP: ผิดครบ 5 ครั้ง ล็อกบัญชี 15 นาที */
+const DEMO_PW = 'demo1234';
+const MAX_TRIES = 5;
+const LOCK_MIN = 15;
+
+// จับคู่ชื่อผู้ใช้กับบัญชีใน AD — รับได้ทั้ง "peerapol.t" และอีเมลเต็ม
+function loginAccountFor(user) {
+  const u = String(user || '').trim().toLowerCase().split('@')[0];
+  if (!u) return null;
+  return ACCOUNTS.find(a => a.mail.split('@')[0] === u) || null;
+}
+const lockLeft = () => Math.max(0, (S.login.lockUntil || 0) - Date.now());
+function fmtLock(ms) {
+  const t = Math.ceil(ms / 1000);
+  return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+}
+
+// ข้อความผิดพลาดใต้ช่องกรอก
+function fieldErr(id, msg) {
+  if (!msg) return '';
+  return '<p id="' + id + '" class="err-text" role="alert">' + ic('alert', '') + '<span>' + esc(msg) + '</span></p>';
+}
+
+function loginView() {
+  const L = S.login;
+  const locked = lockLeft() > 0;
+  const stats = [{ v:'7', k:'บริษัทในเครือ' }, { v:'5,240', k:'ผู้ใช้งาน' }, { v:'99.94%', k:'Uptime ระบบ Critical' }];
+
+  /* ── ฝั่งซ้าย: แผงแบรนด์ (พื้นมืดคงที่ทั้งสองธีม เป็นการตัดสินใจทางดีไซน์) ── */
+  const hero =
+  '<section class="login-hero relative hatch flex flex-col justify-between gap-9 p-7 sm:p-12 lg:p-14 xl:p-16" style="background:#201e1d;color:#f3f2f2">' +
+    '<div class="flex items-center gap-3">' + logoMark(32) +
+      '<div class="leading-none">' +
+        '<div class="font-display font-extrabold tracking-tight text-[15px]">AIDC<span style="color:#ff9783">/</span>SERVICE</div>' +
+        '<div class="eyebrow mt-1.5" style="color:#9b9797">AI Help Desk &amp; Support Portal</div>' +
+      '</div></div>' +
+
+    '<div class="flex-1 flex flex-col justify-center py-2">' +
+      '<div class="rule-accent mb-6"></div>' +
+      '<h1 class="display-xl">AIDC Tech<br>Support &amp; Service</h1>' +
+      '<p class="hidden lg:block lede mt-7 max-w-[46ch] text-[15px]" style="color:#bab6b6">' +
+        'ศูนย์บริการไอทีและงานซ่อมบำรุงกลางของกลุ่มบริษัท 7 แห่ง — ' +
+        'สิทธิ์การมองเห็นข้อมูลและขอบเขตบริษัทในเครือกำหนดจาก security group ของผู้ใช้โดยอัตโนมัติ</p>' +
+      '<dl class="mt-8 grid grid-cols-3 gap-px" style="background:#444141;border:1px solid #444141">' +
+        stats.map(s =>
+          '<div class="px-3.5 py-4 sm:px-4 sm:py-5" style="background:#201e1d">' +
+            '<dt class="stat-md num">' + s.v + '</dt>' +
+            '<dd class="eyebrow mt-2.5" style="color:#9b9797">' + s.k + '</dd>' +
+          '</div>').join('') +
+      '</dl>' +
+    '</div>' +
+
+    '<div class="flex flex-col gap-4">' +
+      '<div class="logo-plate">' +
+        '<img src="' + COMPANY_LOGO + '" width="516" height="317" decoding="async" ' +
+          'alt="โลโก้บริษัท เอไอดีซี เทค จำกัด — ตัวอักษร AIDC TECH สีขาว และคำว่า Sole Co., Ltd บนพื้นน้ำเงินเข้มลายแผงวงจร มีกราฟิกโหนดสีทองทางซ้าย">' +
+        '<div class="min-w-0">' +
+          '<div class="eyebrow" style="color:#9b9797">System owner</div>' +
+          '<p class="text-[12.5px] leading-[1.65] mt-1.5" style="color:#d7d3d3">บริษัท เอไอดีซี เทค จำกัด<br>' +
+            '<span style="color:#9b9797">AIDC TECH Sole Co., Ltd</span></p>' +
+        '</div>' +
+      '</div>' +
+      '<p class="text-[11.5px] leading-[1.7]" style="color:#9b9797">AIDC-IT-SLA-001 Rev. 1.1 · บังคับใช้ 1 สิงหาคม 2569 · ใช้ภายในองค์กรเท่านั้น</p>' +
+    '</div>' +
+  '</section>';
+
+  /* ── ฟอร์มชื่อผู้ใช้ / รหัสผ่าน ── */
+  const attempts = (L.tries > 0 && !locked)
+    ? '<p class="text-[11.5px] text-muted leading-relaxed">พยายามเข้าสู่ระบบผิด <span class="num font-semibold text-accent-text">' +
+        L.tries + '/' + MAX_TRIES + '</span> ครั้ง — ครบ ' + MAX_TRIES + ' ครั้งบัญชีจะถูกล็อก ' + LOCK_MIN + ' นาที</p>'
+    : '';
+
+  const lockBox = locked
+    ? '<div class="panel-flat p-4 flex items-start gap-3">' +
+        '<span class="flex-none text-accent-text mt-0.5">' + ic('lock', 'w-[18px] h-[18px]') + '</span>' +
+        '<div class="min-w-0">' +
+          '<p class="text-[13.5px] font-semibold">บัญชีถูกล็อกชั่วคราว</p>' +
+          '<p class="text-[12.5px] text-muted leading-relaxed mt-1">กรอกรหัสผ่านผิดครบ ' + MAX_TRIES + ' ครั้งตามนโยบายรหัสผ่านในเอกสาร SOP — ' +
+            'ลองใหม่ได้ในอีก <span data-lockleft class="num font-semibold text-ink">' + fmtLock(lockLeft()) + '</span> นาที ' +
+            'หรือรีเซ็ตรหัสผ่านเองที่ sspr.aidc-group.local</p>' +
+        '</div>' +
+      '</div>'
+    : '';
+
+  const form =
+  '<form id="loginForm" novalidate class="mt-7 flex flex-col gap-4">' +
+    '<div class="field">' +
+      '<label for="luser">ชื่อผู้ใช้ / อีเมลองค์กร</label>' +
+      '<input id="luser" data-act="lf" data-k="user" data-fkey="luser" type="text" autocomplete="username" ' +
+        'class="input" placeholder="peerapol.t หรือ อีเมลองค์กร" value="' + esc(L.user) + '"' +
+        (L.eu ? ' aria-invalid="true" aria-describedby="luser-err"' : '') + '>' +
+      fieldErr('luser-err', L.eu) +
+    '</div>' +
+
+    '<div class="field">' +
+      '<div class="flex items-baseline justify-between gap-3">' +
+        '<label for="lpass">รหัสผ่าน</label>' +
+        '<button type="button" data-act="forgot" class="btn btn-ghost btn-ghost-sm">ลืมรหัสผ่าน</button>' +
+      '</div>' +
+      '<div class="pw-wrap">' +
+        '<input id="lpass" data-act="lf" data-k="pass" data-fkey="lpass" type="' + (L.show ? 'text' : 'password') + '" ' +
+          'autocomplete="current-password" class="input input-pw" placeholder="รหัสผ่านบัญชีองค์กร" value="' + esc(L.pass) + '"' +
+          (L.ep ? ' aria-invalid="true" aria-describedby="lpass-err"' : '') + '>' +
+        '<button type="button" data-act="pwshow" data-fkey="pwshow" class="pw-toggle" ' +
+          'aria-pressed="' + (L.show ? 'true' : 'false') + '" aria-controls="lpass" ' +
+          'aria-label="' + (L.show ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน') + '">' +
+          ic(L.show ? 'eyeOff' : 'eye', 'w-[18px] h-[18px]') + '</button>' +
+      '</div>' +
+      fieldErr('lpass-err', L.ep) + attempts +
+    '</div>' +
+
+    (locked ? lockBox : '') +
+
+    '<div class="flex items-center justify-between gap-3 flex-wrap">' +
+      '<label class="check">' +
+        '<input type="checkbox" data-act="remember"' + (L.remember ? ' checked' : '') + '>' +
+        '<i aria-hidden="true"></i><span>จดจำอุปกรณ์นี้</span>' +
+      '</label>' +
+      '<span class="text-[11.5px] text-faint">ใช้กับอุปกรณ์ที่ลงทะเบียนแล้วเท่านั้น</span>' +
+    '</div>' +
+
+    '<button type="submit" data-act="dologin" class="btn btn-primary btn-lg w-full mt-1"' + (locked ? ' disabled' : '') + '>' +
+      ic('lock', 'w-[18px] h-[18px]') + 'เข้าสู่ระบบ</button>' +
+  '</form>';
+
+  /* ── รายชื่อบัญชีที่จดจำไว้ ยุบเป็น disclosure ── */
+  const remembered =
+  '<details class="disc panel mt-4"' + (L.disc ? ' open' : '') + '>' +
+    '<summary data-act="disc">' +
+      '<span class="flex-none text-faint">' + ic('user', 'w-4 h-4') + '</span>' +
+      '<span>บัญชีที่จดจำไว้บนอุปกรณ์นี้</span>' +
+      '<span class="tag tag-quiet num">' + ACCOUNTS.length + '</span>' +
+      '<span class="chev">' + ic('chevR', 'w-4 h-4') + '</span>' +
+    '</summary>' +
+    '<ul class="flex flex-col gap-px bg-hair-soft rule-in">' +
+      ACCOUNTS.map((a, i) =>
+        '<li><button type="button" data-act="login" data-i="' + i + '" class="group w-full flex items-center gap-3.5 p-3.5 text-left bg-card hover:bg-surface transition-colors" style="min-height:var(--tap)">' +
+          '<span class="flex-none w-10 h-10 grid place-items-center font-display font-bold text-[13.5px] bg-ink text-canvas">' + a.i + '</span>' +
+          '<span class="min-w-0 flex-1">' +
+            '<span class="block font-semibold text-[13.5px] truncate">' + esc(a.name) + '</span>' +
+            '<span class="block text-[11.5px] text-faint truncate">' + esc(a.mail) + '</span>' +
+            '<span class="block eyebrow mt-1 truncate">' + esc(a.group) + '</span>' +
+          '</span>' +
+          '<span class="flex-none text-faint group-hover:text-accent-text transition-colors">' + ic('chevR', 'w-4 h-4') + '</span>' +
+        '</button></li>').join('') +
+    '</ul>' +
+  '</details>';
+
+  const panel =
+  '<section class="flex flex-col justify-center p-7 sm:p-12 lg:p-14 bg-canvas">' +
+    '<div class="w-full max-w-[416px] mx-auto">' +
+      '<div class="eyebrow">Sign in</div>' +
+      '<h2 class="display-lg mt-2">เข้าสู่ระบบ</h2>' +
+      '<p class="lede mt-2">ใช้บัญชีองค์กรเดียวกับอีเมลและ Wi-Fi ของกลุ่มบริษัท</p>' +
+
+      form +
+
+      '<div class="divider-or my-7">หรือ</div>' +
+
+      '<button type="button" data-act="sso" class="btn btn-secondary btn-lg w-full">' +
+        ic('shield', 'w-[18px] h-[18px]') + 'เข้าสู่ระบบด้วย Active Directory (SSO)</button>' +
+
+      remembered +
+
+      '<p class="mt-4 text-[11.5px] text-faint leading-relaxed">ต้องยืนยัน MFA ผ่านแอปยืนยันตัวตนภายใน 60 วินาที · ' +
+        'ปัญหาการเข้าระบบ ดูคู่มือ KB-01 หรือติดต่อ IT Hotline (รับสายภายใน 3 นาที สำหรับเหตุ P1/P2)</p>' +
+
+      '<div class="devnote mt-4">' +
+        '<span class="eyebrow eyebrow-accent">Demo build</span>' +
+        '<p class="mt-1">บัญชีทดลอง <code>peerapol.t</code> / <code>demo1234</code> — เปลี่ยนชื่อผู้ใช้เป็น ' +
+          '<code>nattapon.s</code> หรือ <code>kamolchanok.j</code> เพื่อดูสิทธิ์ระดับอื่น (รหัสผ่านเดียวกัน)</p>' +
+        (locked ? '<button type="button" data-act="unlock" class="btn btn-ghost btn-ghost-sm mt-1">ปลดล็อกสำหรับการสาธิต</button>' : '') +
+      '</div>' +
+
+      '<div class="mt-7 pt-5 hair-t flex items-center justify-between gap-3">' +
+        '<span class="eyebrow">Appearance</span>' + themeToggle() +
+      '</div>' +
+    '</div>' +
+  '</section>';
+
+  return '<div class="min-h-screen grid lg:grid-cols-[1.08fr_1fr]">' + hero + panel + '</div>';
+}
+
+function themeToggle() {
+  return '<button data-act="theme" class="btn btn-secondary btn-sm" aria-pressed="' + (S.dark ? 'true' : 'false') + '">' +
+    ic(S.dark ? 'sun' : 'moon', 'w-4 h-4') + (S.dark ? 'โหมดสว่าง' : 'โหมดมืด') + '</button>';
+}
+
+/* ─────────────────────────── 7. โครงหน้าหลัก (shell) ─────────────────────────── */
+function shell() {
+  const view = curView();
+  const [title, kicker, sub] = TITLES[view]();
+  const nav = navModel();
+  const u = me();
+
+  // ── แถบข้างสำหรับจอใหญ่ ──
+  const sidebar =
+  '<aside class="hidden lg:flex flex-col w-[268px] flex-none bg-surface hair-r sticky top-0 h-screen">' +
+    '<div class="px-5 h-[76px] flex items-center hair-b">' + logoLockup(30, 'Group Service Desk') + '</div>' +
+    '<div class="px-5 py-4 hair-b">' +
+      '<div class="flex items-center gap-3">' +
+        '<span class="flex-none w-9 h-9 grid place-items-center font-display font-bold text-[13.5px] bg-ink text-canvas">' + u.i + '</span>' +
+        '<span class="min-w-0">' +
+          '<span class="block text-[13.5px] font-semibold truncate">' + esc(u.name) + '</span>' +
+          '<span class="block text-[11.5px] text-faint truncate">' + esc(u.scope) + '</span>' +
+        '</span>' +
+      '</div>' +
+      '<div class="mt-3 flex items-center gap-2 flex-wrap">' +
+        '<span class="tag tag-soft">' + esc(u.roleLabel) + '</span>' +
+        '<button data-act="signout" class="btn btn-ghost btn-ghost-sm">ออกจากระบบ</button>' +
+      '</div>' +
+      '<p class="mt-3 text-[11.5px] leading-relaxed text-faint">สิทธิ์ (RBAC) กำหนดจาก AD security group ตอนเข้าสู่ระบบ<br><span class="font-medium text-muted">' + esc(u.group) + '</span></p>' +
+    '</div>' +
+    '<nav class="flex-1 overflow-y-auto py-3" aria-label="เมนูหลัก">' +
+      nav.map(n =>
+        '<button data-act="nav" data-view="' + n.key + '" class="navitem" ' + (n.key === view ? 'aria-current="page"' : '') + '>' +
+          ic(n.icon, 'w-[18px] h-[18px] flex-none') +
+          '<span class="flex-1 truncate">' + esc(n.label) + '</span>' +
+          (n.badge === '' ? '' : '<span class="nb num">' + n.badge + '</span>') +
+        '</button>').join('') +
+    '</nav>' +
+    '<div class="px-5 py-4 hair-t">' +
+      '<div class="flex items-center gap-2 text-[11.5px] text-muted">' +
+        '<span class="w-1.5 h-1.5 bg-accent flex-none" aria-hidden="true"></span>SSO · Active Directory เชื่อมต่อแล้ว</div>' +
+      '<p class="mt-1 text-[11.5px] text-faint">7 บริษัทในเครือ · 5,240 ผู้ใช้ · Service Desk จ–ศ 08:30–17:30</p>' +
+      '<div class="mt-3">' + themeToggle() + '</div>' +
+    '</div>' +
+  '</aside>';
+
+  // ── แถบบน ──
+  const topbar =
+  '<header class="sticky top-0 z-30 bg-canvas hair-b">' +
+    '<div class="flex items-center gap-3 px-4 lg:px-8 h-[68px] lg:h-[76px]">' +
+      '<button data-act="menu" class="btn btn-icon btn-secondary lg:hidden flex-none" aria-label="เปิดเมนู">' + ic('menu', 'w-5 h-5') + '</button>' +
+      '<div class="lg:hidden flex-1 min-w-0">' + logoLockup(26, esc(title)) + '</div>' +
+      '<div class="hidden lg:block min-w-0 flex-1">' +
+        '<div class="eyebrow">' + esc(kicker) + '</div>' +
+        '<h1 class="display-md mt-1 truncate">' + esc(title) + '</h1>' +
+      '</div>' +
+      '<div class="hidden md:flex items-center gap-2 flex-none">' +
+        '<div class="relative">' +
+          '<span class="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none">' + ic('search', 'w-4 h-4') + '</span>' +
+          '<input data-act="q" data-fkey="q" value="' + esc(S.q) + '" class="input input-search w-[190px] xl:w-[230px]" placeholder="ค้นหา Ticket / อุปกรณ์" aria-label="ค้นหา">' +
+        '</div>' +
+        '<button data-act="nav" data-view="kb" class="btn btn-secondary btn-sm hidden xl:inline-flex">' + ic('book', 'w-4 h-4') + 'คลังความรู้</button>' +
+        '<button data-act="nav" data-view="new" class="btn btn-primary btn-sm">' + ic('plus', 'w-4 h-4') + 'แจ้งเรื่องใหม่</button>' +
+      '</div>' +
+      '<button data-act="nav" data-view="new" class="btn btn-primary btn-icon md:hidden flex-none" aria-label="แจ้งเรื่องใหม่">' + ic('plus', 'w-5 h-5') + '</button>' +
+    '</div>' +
+    '<div class="lg:hidden px-4 pb-3 flex items-center gap-2">' +
+      '<div class="relative flex-1">' +
+        '<span class="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none">' + ic('search', 'w-4 h-4') + '</span>' +
+        '<input data-act="q" data-fkey="qm" value="' + esc(S.q) + '" class="input input-search" placeholder="ค้นหา Ticket / อุปกรณ์" aria-label="ค้นหา">' +
+      '</div>' +
+    '</div>' +
+  '</header>';
+
+  // ── bottom nav มือถือ: เฉพาะงานที่ทำจากหน้างานจริง — แดชบอร์ด/ITAM/กฎ เป็นงานโต๊ะ ไปอยู่ในเมนู ──
+  const BOT_KEYS = ['my', 'queue', 'new', 'kb'];
+  const bn = nav.filter(n => BOT_KEYS.indexOf(n.key) >= 0);
+  const botnav =
+  '<nav class="botnav lg:hidden" aria-label="เมนูหลัก (มือถือ)">' +
+    bn.map(n =>
+      '<button data-act="nav" data-view="' + n.key + '" ' + (n.key === view ? 'aria-current="page"' : '') + '>' +
+        ic(n.icon, 'w-[19px] h-[19px]') + '<span class="truncate max-w-full px-1">' + esc(n.short) + '</span>' +
+      '</button>').join('') +
+    '<button data-act="menu">' + ic('menu', 'w-[19px] h-[19px]') + '<span>เมนู</span></button>' +
+  '</nav>';
+
+  return '<div class="flex min-h-screen">' + sidebar +
+    '<div class="flex-1 min-w-0 flex flex-col">' + topbar +
+      '<main id="main" class="flex-1 pad-bottom-nav">' +
+        '<div class="px-4 lg:px-8 py-6 lg:py-8 max-w-[1400px]">' +
+          '<div class="lg:hidden mb-5">' +
+            '<div class="eyebrow">' + esc(kicker) + '</div>' +
+            '<h1 class="display-lg mt-1.5">' + esc(title) + '</h1>' +
+            '<p class="lede mt-2 text-[13.5px]">' + esc(sub) + '</p>' +
+          '</div>' +
+          '<p class="hidden lg:block lede -mt-1 mb-7">' + esc(sub) + '</p>' +
+          (S.loading ? skeleton() : viewBody(view)) +
+        '</div>' +
+      '</main>' +
+    '</div>' + botnav + '</div>';
+}
+
+// โครงกระดูกระหว่างสลับหน้า
+function skeleton() {
+  return '<div class="flex flex-col gap-4" aria-hidden="true">' +
+    '<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">' +
+      [0,1,2,3].map(() => '<div class="skel h-[92px]"></div>').join('') + '</div>' +
+    '<div class="skel h-[34px] w-2/3"></div>' +
+    [0,1,2,3,4,5].map(() => '<div class="skel h-[58px]"></div>').join('') +
+  '</div>';
+}
+
+function viewBody(view) {
+  if (view === 'new') return newTicketView();
+  if (view === 'dash') return dashView();
+  if (view === 'assets') return assetsView();
+  if (view === 'rules') return rulesView();
+  if (view === 'kb') return kbView();
+  return listView();
+}
+
+/* ─────────────────────────── 8. หน้า: รายการ Ticket ─────────────────────────── */
+function filteredRows() {
+  let rows = visibleTickets();
+  if (S.statusF !== 'all') rows = rows.filter(t => t.status === S.statusF);
+  if (S.cf !== 'ALL') rows = rows.filter(t => t.company === S.cf);
+  const q = S.q.trim().toLowerCase();
+  if (q) rows = rows.filter(t => (t.title + t.id + t.cat + (t.asset || '')).toLowerCase().includes(q));
+  return rows;
+}
+
+function listView() {
+  const vis = visibleTickets();
+  const rows = filteredRows();
+  const countBy = st => vis.filter(t => st === 'all' ? true : t.status === st).length;
+  const r = S.fresh ? ' rise' : '';
+
+  // ชิปบริษัทในเครือ
+  const chips = [{ code:'ALL', name:'ทุกบริษัท' }].concat(CO).map(c => {
+    const n = c.code === 'ALL' ? vis.length : vis.filter(x => x.company === c.code).length;
+    const inScope = c.code === 'ALL' || n > 0 || S.role === 'central';
+    return '<button data-act="cf" data-code="' + c.code + '" class="chip' + (inScope ? '' : ' dimmed') + '" aria-pressed="' + (S.cf === c.code ? 'true' : 'false') + '">' +
+      esc(c.name) + '<span class="cn">' + n + '</span></button>';
+  }).join('');
+
+  const statusChips = ['all'].concat(STATUSES).map(st =>
+    '<button data-act="sf" data-st="' + esc(st) + '" class="chip" aria-pressed="' + (S.statusF === st ? 'true' : 'false') + '">' +
+      (st === 'all' ? 'ทั้งหมด' : esc(st)) + '<span class="cn">' + countBy(st) + '</span></button>').join('');
+
+  const empty =
+  '<div class="panel p-10 text-center">' +
+    '<div class="mx-auto w-11 h-11 grid place-items-center text-faint hair-all">' + ic('search', 'w-5 h-5') + '</div>' +
+    '<h3 class="display-md mt-4">ไม่พบ Ticket ที่ตรงกับเงื่อนไข</h3>' +
+    '<p class="lede mx-auto mt-2 text-[13.5px]">ลองล้างคำค้น เปลี่ยนตัวกรองสถานะ หรือเลือกบริษัทอื่นในเครือ</p>' +
+    '<div class="mt-5 flex flex-wrap gap-2 justify-center">' +
+      '<button data-act="clearf" class="btn btn-secondary btn-sm">' + ic('refresh', 'w-4 h-4') + 'ล้างตัวกรองทั้งหมด</button>' +
+      '<button data-act="nav" data-view="new" class="btn btn-primary btn-sm">' + ic('plus', 'w-4 h-4') + 'แจ้งเรื่องใหม่</button>' +
+    '</div>' +
+  '</div>';
+
+  // ตารางสำหรับ md ขึ้นไป
+  const table =
+  '<div class="panel hidden md:block">' +
+    '<div class="tbl-wrap">' +
+      '<table class="tbl tbl-sticky"><thead><tr>' +
+        '<th>Ticket</th><th class="min-w-[260px]">เรื่อง</th><th>บริษัท</th><th>ระดับ</th>' +
+        '<th>สถานะ</th><th>SLA คงเหลือ</th><th>ผู้รับผิดชอบ</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(t =>
+        '<tr class="clickable' + (S.openId === t.id ? ' is-active' : '') + '" data-act="open" data-id="' + t.id + '" tabindex="0" role="button" aria-label="เปิดรายละเอียด ' + esc(t.id) + '">' +
+          '<td class="num text-[12.5px] font-semibold text-muted whitespace-nowrap">' + esc(t.id) + '</td>' +
+          '<td><div class="cell-title font-medium leading-snug">' + esc(t.title) + '</div>' +
+              '<div class="text-[11.5px] text-faint mt-1 truncate max-w-[340px]">' + esc(t.cat + ' · ' + t.dept + (t.asset ? ' · ' + t.asset : '') + ' · ' + t.channel) + '</div></td>' +
+          '<td class="text-[13.5px] whitespace-nowrap">' + esc(CONAME(t.company)) + '</td>' +
+          '<td>' + prioTag(t.prio) + '</td>' +
+          '<td>' + statusTag(t.status) + '</td>' +
+          '<td>' + slaCell(t) + '</td>' +
+          '<td class="text-[13.5px] whitespace-nowrap">' + esc(t.assignee) + '</td>' +
+        '</tr>').join('') +
+      '</tbody></table>' +
+    '</div>' +
+  '</div>';
+
+  // การ์ดสำหรับมือถือ — อ่านง่ายกว่าตารางที่ต้องเลื่อน
+  const cards =
+  '<ul class="md:hidden flex flex-col gap-px bg-hair border border-hair">' +
+    rows.map(t =>
+      '<li><button data-act="open" data-id="' + t.id + '" class="w-full text-left bg-card p-4 hover:bg-surface transition-colors">' +
+        '<div class="flex items-center justify-between gap-2">' +
+          '<span class="eyebrow num">' + esc(t.id) + ' · ' + esc(CONAME(t.company)) + '</span>' +
+          prioTag(t.prio) +
+        '</div>' +
+        '<div class="font-semibold text-[15px] leading-snug mt-2">' + esc(t.title) + '</div>' +
+        '<div class="text-[11.5px] text-faint mt-1">' + esc(t.cat + ' · ' + t.dept + ' · ' + t.channel) + '</div>' +
+        '<div class="flex items-end justify-between gap-3 mt-3.5 pt-3.5 rule-in">' + statusTag(t.status) + slaCell(t) + '</div>' +
+      '</button></li>').join('') +
+  '</ul>';
+
+  return '' +
+  '<div class="flex flex-col gap-5' + r + '">' +
+    '<section>' +
+      '<div class="eyebrow mb-2">บริษัทในเครือ</div>' +
+      '<div class="chiprow">' + chips + '</div>' +
+    '</section>' +
+    '<section>' +
+      '<div class="eyebrow mb-2">สถานะ</div>' +
+      '<div class="chiprow">' + statusChips + '</div>' +
+    '</section>' +
+    (rows.length ? table + cards : empty) +
+    '<p class="text-[12.5px] text-faint flex items-start gap-2 leading-relaxed">' + ic('shield', 'w-4 h-4 flex-none mt-0.5') +
+      '<span>' + esc(
+        S.role === 'employee' ? 'ขอบเขตการมองเห็น: พนักงานทั่วไปเห็นเฉพาะ Ticket ที่ตนเองแจ้ง (Data Isolation)'
+        : S.role === 'agent' ? 'ขอบเขตการมองเห็น: เจ้าหน้าที่เห็น Ticket ของบริษัทที่ตนดูแล — AIDC HQ และ AIDC Tech'
+        : 'ขอบเขตการมองเห็น: Central IT เห็น Ticket ทุกบริษัทในเครือ · แสดง ' + rows.length + ' จาก ' + vis.length + ' รายการ') + '</span></p>' +
+  '</div>';
+}
+
+/* ─────────────────────────── 9. หน้า: แจ้งเรื่องใหม่ ─────────────────────────── */
+
+// ผู้ช่วย AI ค้นคู่มือจากข้อความที่พิมพ์แบบ real-time
+function aiHits() {
+  const txt = (S.form.title + ' ' + S.form.desc).toLowerCase();
+  if (txt.trim().length < 8) return [];
+  return KB.filter(a => a.keys.some(k => txt.includes(k.toLowerCase()))).slice(0, 2);
+}
+// กฎ routing ที่ตรงกับฟอร์มปัจจุบัน
+function ruleForForm() {
+  const cat = S.form.cat;
+  if (cat.indexOf('เครื่องจักร') === 0) return RULES[0];
+  if (cat.indexOf('สิทธิ์') === 0) return RULES[1];
+  if (cat.indexOf('ระบบ POS') === 0) return RULES[2];
+  if (cat.indexOf('ERP') === 0) return RULES[3];
+  if (cat.indexOf('GPS') === 0) return RULES[4];
+  return { cond:CONAME(S.form.company) + ' + ' + S.form.dept + ' + ' + cat, team:'Central IT — Service Desk', mode:'Round-Robin', prio:S.form.prio };
+}
+const formReady = () => S.form.title.trim().length > 3 && S.form.desc.trim().length > 8;
+
+function newTicketView() {
+  const f = S.form;
+  const cats = CATS[f.company] || CATS.HQ;
+  const needAsset = f.cat.indexOf('เครื่องจักร') === 0 || f.cat.indexOf('GPS') === 0 || f.cat.indexOf('อะไหล่') === 0;
+  const hits = aiHits();
+  const showAi = hits.length > 0 && !S.deflected;
+  const rule = ruleForForm();
+  const p = PRIO(f.prio);
+  const r = S.fresh ? ' rise' : '';
+
+  const form =
+  '<form class="panel p-5 sm:p-7 flex flex-col gap-5" novalidate>' +
+    '<div>' +
+      '<div class="eyebrow eyebrow-accent">Smart Ticket Creation</div>' +
+      '<h2 class="display-lg mt-2">แจ้งปัญหา / ขอรับบริการ</h2>' +
+      '<p class="lede mt-2 text-[13.5px]">หมวดหมู่และฟิลด์เพิ่มเติมจะเปลี่ยนตามประเภทธุรกิจของบริษัทที่เลือก</p>' +
+      '<div class="rule-accent mt-5"></div>' +
+    '</div>' +
+
+    '<div class="grid sm:grid-cols-2 gap-4">' +
+      '<div class="field"><label for="fco">บริษัท / Entity</label>' +
+        '<select id="fco" data-act="f" data-k="company" data-fkey="fco" class="input">' +
+          CO.map(c => '<option value="' + c.code + '"' + (c.code === f.company ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') +
+        '</select></div>' +
+      '<div class="field"><label for="fdept">แผนกผู้แจ้ง</label>' +
+        '<input id="fdept" data-act="f" data-k="dept" data-fkey="fdept" class="input" value="' + esc(f.dept) + '"></div>' +
+    '</div>' +
+
+    '<div class="field"><label for="fcat">หมวดหมู่ปัญหา</label>' +
+      '<select id="fcat" data-act="f" data-k="cat" data-fkey="fcat" class="input">' +
+        cats.map(c => '<option value="' + esc(c) + '"' + (c === f.cat ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+      '</select>' +
+      '<p class="text-[11.5px] text-faint">มี ' + cats.length + ' หมวดสำหรับ ' + esc(CONAME(f.company)) + '</p></div>' +
+
+    '<div class="field"><label for="ftitle">หัวเรื่อง</label>' +
+      '<input id="ftitle" data-act="f" data-k="title" data-fkey="ftitle" class="input" placeholder="สรุปปัญหาสั้น ๆ เช่น เครื่องพิมพ์ชั้น 3 พิมพ์ไม่ออก" value="' + esc(f.title) + '"></div>' +
+
+    '<div class="field"><label for="fdesc">รายละเอียด</label>' +
+      '<textarea id="fdesc" data-act="f" data-k="desc" data-fkey="fdesc" class="input" placeholder="อธิบายอาการ ช่วงเวลาที่เกิด และสิ่งที่ลองแก้ไปแล้ว">' + esc(f.desc) + '</textarea>' +
+      '<p class="text-[11.5px] text-faint">ยิ่งละเอียด ผู้ช่วย AI ยิ่งค้นคู่มือได้ตรงขึ้น และเจ้าหน้าที่ไม่ต้องถามซ้ำ</p></div>' +
+
+    // ฟิลด์ ITAM + GPS โผล่เฉพาะหมวดเครื่องจักร / GPS / อะไหล่
+    (needAsset ?
+    '<div class="panel-flat p-4 grid sm:grid-cols-2 gap-4 rise">' +
+      '<div class="sm:col-span-2 flex items-center gap-2 eyebrow eyebrow-accent">' + ic('box', 'w-4 h-4') + 'ฟิลด์เพิ่มเติมสำหรับงานเครื่องจักร / ไซต์งาน</div>' +
+      '<div class="field"><label for="fasset">รหัสอุปกรณ์ / เครื่องจักร (ITAM)</label>' +
+        '<input id="fasset" data-act="f" data-k="asset" data-fkey="fasset" class="input" placeholder="เช่น EXC-CON-118" value="' + esc(f.asset) + '" list="assetlist">' +
+        '<datalist id="assetlist">' + ASSETS.map(a => '<option value="' + a.code + '">' + esc(a.name) + '</option>').join('') + '</datalist></div>' +
+      '<div class="field"><label for="fgps">ตำแหน่งไซต์งาน (GPS)</label>' +
+        '<div class="flex gap-2">' +
+          '<input id="fgps" data-act="f" data-k="gps" data-fkey="fgps" class="input" placeholder="ยังไม่ระบุ" value="' + esc(f.gps) + '">' +
+          '<button type="button" data-act="pin" class="btn btn-secondary flex-none">' + ic('pin', 'w-4 h-4') + 'ปักหมุด</button>' +
+        '</div></div>' +
+    '</div>' : '') +
+
+    // ความเร่งด่วน P1–P4 พร้อมเป้าหมาย SLA จริง
+    '<fieldset class="field">' +
+      '<legend class="lbl mb-2">ความเร่งด่วน — เป้าหมาย SLA ตาม AIDC-IT-SLA-001</legend>' +
+      '<div class="grid sm:grid-cols-2 gap-2" role="radiogroup" aria-label="ความเร่งด่วน">' +
+        PRIOS.map(pp =>
+          '<button type="button" role="radio" data-act="prio" data-p="' + pp.key + '" class="prio-card" aria-checked="' + (f.prio === pp.key ? 'true' : 'false') + '">' +
+            '<span class="prio-radio" aria-hidden="true"><i></i></span>' +
+            meter(pp.key) +
+            '<span class="min-w-0 flex-1">' +
+              '<span class="block text-[13.5px] font-semibold">' + pp.key + ' · ' + pp.th + '</span>' +
+              '<span class="block text-[11.5px] text-faint leading-snug">ตอบรับ ' + pp.respShort + ' · แก้ไข ' + pp.resShort + '</span>' +
+            '</span>' +
+          '</button>').join('') +
+      '</div>' +
+      '<p class="mt-2 text-[11.5px] text-faint leading-relaxed">' + esc(p.key + ' — ' + p.desc) + '<br>' + esc(p.clock) + ' · ' + esc(p.report) + '</p>' +
+    '</fieldset>' +
+
+    '<div class="rule-in pt-5 flex flex-wrap items-center gap-3">' +
+      '<button type="button" data-act="attach" class="btn btn-secondary">' + ic('clip', 'w-4 h-4') + 'แนบไฟล์ / ภาพ / วิดีโอ</button>' +
+      '<span class="text-[12.5px] text-faint flex-1 min-w-[120px]">' +
+        (S.attached ? 'แนบแล้ว ' + S.attached + ' ไฟล์' : 'ยังไม่มีไฟล์แนบ · สูงสุด 25 MB ต่อไฟล์') + '</span>' +
+      '<button type="button" data-act="submit" class="btn btn-primary btn-lg"' + (formReady() ? '' : ' disabled') + '>' +
+        ic('arrowR', 'w-[18px] h-[18px]') + 'ส่ง Ticket</button>' +
+    '</div>' +
+    (formReady() ? '' : '<p class="text-[11.5px] text-faint -mt-2">กรอกหัวเรื่องอย่างน้อย 4 ตัวอักษร และรายละเอียดอย่างน้อย 9 ตัวอักษร จึงจะส่ง Ticket ได้</p>') +
+  '</form>';
+
+  // ── แผงผู้ช่วย AI + ผลการประเมิน routing ──
+  const ai =
+  '<div class="flex flex-col gap-4 lg:sticky lg:top-[92px]">' +
+    '<section class="panel p-5">' +
+      '<div class="flex items-start gap-2.5">' +
+        '<span class="flex-none text-accent-text mt-0.5">' + ic('spark', 'w-[18px] h-[18px]') + '</span>' +
+        '<div><div class="eyebrow eyebrow-accent">AI Knowledge Assistant</div>' +
+          '<p class="text-[12.5px] text-muted leading-relaxed mt-1.5">วิเคราะห์ข้อความก่อนส่ง Ticket เพื่อเสนอวิธีแก้เบื้องต้น (Ticket Deflection)</p></div>' +
+      '</div>' +
+      '<div class="mt-4 pt-4 rule-in">' +
+        (showAi ?
+          '<div class="rise">' +
+            '<div class="flex items-center justify-between gap-2 flex-wrap">' +
+              '<span class="tag tag-soft">พบ ' + hits.length + ' บทความที่ตรงกัน</span>' +
+              '<span class="eyebrow">ความเชื่อมั่น ' + (hits.length > 1 ? '92%' : '78%') + '</span>' +
+            '</div>' +
+            '<ul class="mt-3 flex flex-col gap-px bg-hair border border-hair">' +
+              hits.map(a =>
+                '<li class="bg-canvas p-3.5">' +
+                  '<div class="eyebrow">' + a.id + ' · ' + a.cat + '</div>' +
+                  '<div class="font-semibold text-[13.5px] leading-snug mt-1.5">' + esc(a.title) + '</div>' +
+                  '<p class="text-[12.5px] text-muted leading-relaxed mt-1.5">' + esc(a.steps[0]) + '</p>' +
+                  '<button data-act="kbopen" data-id="' + a.id + '" class="btn btn-ghost btn-ghost-sm mt-1.5">อ่านคู่มือทั้งหมด</button>' +
+                '</li>').join('') +
+            '</ul>' +
+            '<div class="mt-4 pt-4 rule-in">' +
+              '<p class="text-[13.5px] font-semibold">วิธีนี้ช่วยแก้ปัญหาได้หรือไม่</p>' +
+              '<div class="mt-2.5 flex flex-col gap-2">' +
+                '<button data-act="deflect" class="btn btn-ink btn-sm">' + ic('check', 'w-4 h-4') + 'แก้ได้แล้ว ไม่ต้องส่ง Ticket</button>' +
+                '<button data-act="keepgoing" class="btn btn-secondary btn-sm">ยังไม่หาย ส่งต่อเจ้าหน้าที่</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        :
+          '<div class="flex items-start gap-2.5 text-[12.5px] text-faint leading-relaxed">' +
+            ic('search', 'w-4 h-4 flex-none mt-0.5') +
+            '<span>' + (S.deflected ? 'ปิดคำแนะนำแล้ว — กรอกฟอร์มต่อได้เลย ระบบจะไม่เสนอคู่มือซ้ำสำหรับเรื่องนี้'
+              : 'พิมพ์หัวเรื่องหรือรายละเอียด — ผู้ช่วยจะค้นคู่มือที่เกี่ยวข้องให้อัตโนมัติขณะพิมพ์') + '</span>' +
+          '</div>') +
+      '</div>' +
+    '</section>' +
+
+    '<section class="panel p-5' + (formReady() ? '' : ' opacity-60') + '">' +
+      '<div class="flex items-center gap-2">' + ic('route', 'w-[18px] h-[18px] text-faint') +
+        '<div class="eyebrow">Auto Routing — ผลการประเมิน</div></div>' +
+      (formReady() ?
+        '<dl class="mt-3.5 flex flex-col gap-px bg-hair border border-hair">' +
+          [['กฎที่ตรง', rule.cond], ['ทีมผู้รับ', rule.team], ['เจ้าหน้าที่ (' + rule.mode + ')', AGENTS[S.rr % AGENTS.length]],
+           ['เป้าหมายตอบรับ', p.resp], ['เป้าหมายแก้ไข', p.res], ['บังคับใช้ตามเงื่อนไขของ', CONAME(f.company)]].map(kv =>
+            '<div class="bg-canvas px-3 py-2.5">' +
+              '<dt class="eyebrow">' + esc(kv[0]) + '</dt>' +
+              '<dd class="font-semibold text-[12.5px] leading-snug mt-1">' + esc(kv[1]) + '</dd></div>').join('') +
+        '</dl>'
+      : '<p class="mt-3 text-[12.5px] text-faint leading-relaxed">กรอกหัวเรื่องและรายละเอียดให้ครบ ระบบจะแสดงทีมผู้รับและเป้าหมาย SLA ที่จะบังคับใช้ก่อนส่งจริง</p>') +
+    '</section>' +
+  '</div>';
+
+  return '<div class="grid lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-5 items-start' + r + '">' + form + ai + '</div>';
+}
+
+/* ─────────────────────────── 10. หน้า: แดชบอร์ด ─────────────────────────── */
+function dashView() {
+  const maxTotal = Math.max.apply(null, CHART.map(c => c.total));
+  const r = S.fresh ? ' rise' : '';
+  const grow = S.fresh ? ' bargrow' : '';
+
+  const kpi =
+  '<section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-px bg-hair border border-hair">' +
+    KPIS.map(k =>
+      '<div class="bg-card p-5">' +
+        '<div class="flex items-start justify-between gap-2">' +
+          '<span class="eyebrow">' + esc(k.label) + '</span>' +
+          '<span class="tag ' + (k.pass ? 'tag-quiet' : 'tag-soft') + '">' +
+            ic(k.pass ? 'check' : 'alert', 'w-3.5 h-3.5') + (k.pass ? 'ถึงเป้า' : 'ต่ำกว่าเป้า') + '</span>' +
+        '</div>' +
+        '<div class="kpi-val stat-xl mt-3.5 ' + (k.pass ? '' : 'text-accent-text') + '">' + esc(k.value) + '</div>' +
+        '<div class="text-[12.5px] font-semibold mt-2.5">' + esc(k.target) + '</div>' +
+        '<p class="text-[11.5px] text-faint leading-relaxed mt-1">' + esc(k.note) + '</p>' +
+        '<p class="eyebrow mt-4 pt-3 rule-in">' + esc(k.freq) + '</p>' +
+      '</div>').join('') +
+  '</section>';
+
+  const chart =
+  '<section class="panel p-5">' +
+    '<div class="eyebrow">ปริมาณ Ticket รายบริษัท · 30 วันย้อนหลัง</div>' +
+    '<p class="text-[12.5px] text-faint mt-1.5">แท่งสีแบรนด์ = บริษัทที่ SLA Compliance ต่ำกว่าเป้าหมาย 95%</p>' +
+    '<div class="mt-5 pt-4 rule-in flex flex-col gap-4">' +
+      CHART.map(c => {
+        const under = c.sla < 95;
+        return '<div class="barrow">' +
+          '<div class="flex items-baseline justify-between gap-3 text-[12.5px]">' +
+            '<span class="font-medium truncate">' + esc(CONAME(c.code)) + '</span>' +
+            '<span class="num text-faint flex-none tabular-nums">' + c.total + ' รายการ · SLA ' + c.sla + '%</span>' +
+          '</div>' +
+          '<div class="mt-2 h-2.5 bg-surface relative">' +
+            '<div class="barfill absolute inset-y-0 left-0' + grow + '" style="width:' + Math.round((c.total / maxTotal) * 100) + '%;background:' +
+              (under ? 'var(--c-accent)' : 'var(--c-ink)') + '"></div>' +
+          '</div>' +
+        '</div>';
+      }).join('') +
+    '</div>' +
+  '</section>';
+
+  const perf =
+  '<section class="panel">' +
+    '<div class="panel-head"><div class="eyebrow">ประสิทธิภาพรายบริษัท</div>' +
+      '<p class="text-[12.5px] text-faint mt-1.5">MTTR / SLA Compliance / CSAT เทียบเป้าหมายองค์กร</p></div>' +
+    '<div class="tbl-wrap">' +
+      '<table class="tbl tbl-sticky"><thead><tr><th>บริษัท</th><th class="rt">ค้างอยู่</th><th class="rt">MTTR</th><th class="rt">SLA</th><th class="rt">CSAT</th></tr></thead><tbody>' +
+      CHART.map(c =>
+        '<tr>' +
+          '<td class="font-medium whitespace-nowrap">' + esc(CONAME(c.code)) + '</td>' +
+          '<td class="rt">' + c.open + '</td>' +
+          '<td class="rt whitespace-nowrap">' + esc(c.mttr) + '</td>' +
+          '<td class="rt"><span class="inline-flex items-center gap-1.5 ' + (c.sla < 95 ? 'text-accent-text font-semibold' : '') + '">' +
+            (c.sla < 95 ? ic('alert', 'w-3.5 h-3.5') : ic('check', 'w-3.5 h-3.5 text-faint')) + c.sla + '%</span></td>' +
+          '<td class="rt ' + (c.csat < 4.2 ? 'text-accent-text font-semibold' : '') + '">' + c.csat.toFixed(1) + '</td>' +
+        '</tr>').join('') +
+      '</tbody></table>' +
+    '</div>' +
+  '</section>';
+
+  const insights = [
+    { kicker:'ต้องดำเนินการ', title:'Heavy Machine ต่ำกว่าเป้า SLA 13 จุด', body:'Ticket เครื่องจักรรอช่างเข้าไซต์เฉลี่ย 7.6 ชม. สาเหตุหลักคือช่างประจำภาคตะวันออกมีเพียง 2 คน', meta:'เสนอเพิ่มช่าง on-call 1 อัตรา', hot:true },
+    { kicker:'Ticket ซ้ำ', title:'POS Cosi ชั้น 2 แจ้งซ้ำ 4 ครั้งใน 30 วัน', body:'ต้นทุนซ่อมสะสมเกินราคาเครื่องใหม่ 1.4 เท่า ระบบแนะนำเปลี่ยนอุปกรณ์แทนการซ่อม', meta:'ผูกกับ POS-COSI-21', hot:false },
+    { kicker:'ผลของ AI', title:'AI Assistant ลด Ticket ได้ 982 รายการ', body:'คิดเป็น 24% ของเรื่องที่พนักงานเริ่มพิมพ์ โดยหมวดรหัสผ่านและเครื่องพิมพ์ถูกเบี่ยงมากที่สุด', meta:'สะสม 6 เดือน', hot:false }
+  ].map(i =>
+    '<article class="panel p-5 flex flex-col gap-2">' +
+      '<div class="flex items-center gap-2">' +
+        (i.hot ? '<span class="text-accent-text flex-none">' + ic('alert', 'w-4 h-4') + '</span>' : '') +
+        '<div class="eyebrow ' + (i.hot ? 'eyebrow-accent' : '') + '">' + esc(i.kicker) + '</div></div>' +
+      '<h3 class="display-md leading-snug">' + esc(i.title) + '</h3>' +
+      '<p class="text-[13.5px] text-muted leading-relaxed">' + esc(i.body) + '</p>' +
+      '<p class="eyebrow mt-auto pt-3.5 rule-in">' + esc(i.meta) + '</p>' +
+    '</article>').join('');
+
+  return '<div class="flex flex-col gap-5' + r + '">' + kpi +
+    '<div class="grid lg:grid-cols-2 gap-5 items-start">' + chart + perf + '</div>' +
+    '<section class="grid md:grid-cols-2 xl:grid-cols-3 gap-5 items-stretch">' + insights + '</section>' +
+  '</div>';
+}
+
+/* ─────────────────────────── 11. หน้า: ทรัพย์สิน (ITAM) ─────────────────────────── */
+function assetsView() {
+  const a = ASSETS[S.assetIdx] || ASSETS[0];
+  const r = S.fresh ? ' rise' : '';
+  const stTag = st => st === 'รอซ่อม' ? 'tag-solid' : st === 'เฝ้าระวัง' ? 'tag-soft' : 'tag-quiet';
+  const stIcon = st => st === 'รอซ่อม' ? 'alert' : st === 'เฝ้าระวัง' ? 'clock' : 'check';
+
+  const table =
+  '<section class="panel">' +
+    '<div class="tbl-wrap">' +
+      '<table class="tbl tbl-sticky"><thead><tr><th>รหัส</th><th class="min-w-[210px]">อุปกรณ์ / เครื่องจักร</th><th>บริษัท</th><th class="rt">Ticket</th><th>สถานะ</th></tr></thead><tbody>' +
+      ASSETS.map((x, i) =>
+        '<tr class="clickable' + (i === S.assetIdx ? ' is-active' : '') + '" data-act="asset" data-i="' + i + '" tabindex="0" role="button">' +
+          '<td class="num text-[12.5px] font-semibold whitespace-nowrap">' + esc(x.code) + '</td>' +
+          '<td class="font-medium">' + esc(x.name) + '</td>' +
+          '<td class="text-[13.5px] whitespace-nowrap">' + esc(x.company) + '</td>' +
+          '<td class="rt">' + x.tickets + '</td>' +
+          '<td><span class="tag ' + stTag(x.st) + '">' + ic(stIcon(x.st), 'w-3.5 h-3.5') + esc(x.st) + '</span></td>' +
+        '</tr>').join('') +
+      '</tbody></table>' +
+    '</div>' +
+  '</section>';
+
+  const detail =
+  '<section class="panel p-5 lg:sticky lg:top-[92px]">' +
+    '<div class="eyebrow">Maintenance History</div>' +
+    '<h2 class="display-lg mt-2">' + esc(a.name) + '</h2>' +
+    '<p class="text-[12.5px] text-faint mt-1.5 num">' + esc(a.code) + ' · ' + esc(a.company) + ' · ติดตั้ง ' + esc(a.installed) + '</p>' +
+    '<dl class="grid grid-cols-3 gap-px bg-hair border border-hair mt-4">' +
+      [['Ticket สะสม', a.tickets], ['ครั้งที่ซ่อม', a.history.length], ['สถานะ', a.st]].map(kv =>
+        '<div class="bg-canvas px-3 py-3">' +
+          '<dt class="eyebrow">' + esc(kv[0]) + '</dt>' +
+          '<dd class="stat-val font-display font-bold text-[15px] mt-1.5 truncate">' + esc(kv[1]) + '</dd></div>').join('') +
+    '</dl>' +
+    '<div class="mt-5 pt-5 rule-in">' +
+      '<div class="eyebrow mb-3.5">ไทม์ไลน์การซ่อมบำรุง</div>' +
+      '<ol class="tl">' +
+        a.history.map((h, i) =>
+          '<li class="tl-item' + (i === 0 ? ' hot' : '') + '">' +
+            '<div class="num eyebrow">' + esc(h.date) + '</div>' +
+            '<div class="text-[13.5px] font-medium leading-snug mt-1">' + esc(h.what) + '</div>' +
+            '<div class="text-[11.5px] text-faint mt-0.5">' + esc(h.by) + '</div>' +
+          '</li>').join('') +
+      '</ol>' +
+    '</div>' +
+    '<div class="mt-5 p-3.5 panel-flat flex items-start gap-2.5">' +
+      '<span class="text-accent-text flex-none mt-0.5">' + ic('alert', 'w-4 h-4') + '</span>' +
+      '<p class="text-[12.5px] leading-relaxed">' + esc(a.pmNote) + '</p>' +
+    '</div>' +
+  '</section>';
+
+  return '<div class="grid lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-5 items-start' + r + '">' + table + detail + '</div>';
+}
+
+/* ─────────────────────────── 12. หน้า: กฎการมอบหมาย & SLA ─────────────────────────── */
+function rulesView() {
+  const r = S.fresh ? ' rise' : '';
+
+  const rulesTable =
+  '<section class="panel">' +
+    '<div class="panel-head"><div class="eyebrow">Conditional Routing</div>' +
+      '<h2 class="display-md mt-1.5">กฎการมอบหมายงานอัตโนมัติ</h2>' +
+      '<p class="text-[12.5px] text-faint mt-1.5">การเปิด/ปิดกฎทุกครั้งถูกบันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา</p></div>' +
+    '<div class="tbl-wrap">' +
+      '<table class="tbl"><thead><tr><th>#</th><th class="min-w-[280px]">เงื่อนไข (Company + Department + Category)</th><th>มอบหมายให้</th><th>วิธีกระจาย</th><th>ระดับ</th><th>เปิดใช้</th></tr></thead><tbody>' +
+      RULES.map((x, i) => {
+        const off = !!S.disabledRules[i];
+        return '<tr class="' + (off ? 'opacity-55' : '') + '">' +
+          '<td class="num text-faint text-[12.5px]">' + String(i + 1).padStart(2, '0') + '</td>' +
+          '<td class="font-medium">' + esc(x.cond) + '</td>' +
+          '<td class="text-[13.5px]">' + esc(x.team) + '</td>' +
+          '<td class="text-[12.5px] text-faint whitespace-nowrap">' + esc(x.mode) + '</td>' +
+          '<td>' + prioTag(x.prio) + '</td>' +
+          '<td><button data-act="rule" data-i="' + i + '" class="sw" role="switch" aria-checked="' + (off ? 'false' : 'true') + '" ' +
+            'aria-label="' + (off ? 'เปิดใช้' : 'ปิดใช้') + 'กฎข้อ ' + (i + 1) + '"><i></i></button></td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table>' +
+    '</div>' +
+  '</section>';
+
+  // ตาราง Priority Matrix ตาม SLA ข้อ 4
+  const matrix =
+  '<section class="panel">' +
+    '<div class="panel-head"><div class="eyebrow">AIDC-IT-SLA-001 · ข้อ 4</div>' +
+      '<h2 class="display-md mt-1.5">Priority Matrix — ผลกระทบ × ความเร่งด่วน</h2>' +
+      '<p class="text-[12.5px] text-faint mt-1.5">Service Desk กำหนดระดับเบื้องต้น ผู้รับบริการขอทบทวนระดับได้โดยระบุเหตุผลทางธุรกิจ</p></div>' +
+    '<div class="tbl-wrap">' +
+      '<table class="tbl tbl-sticky"><thead><tr><th class="min-w-[200px]">ผลกระทบ \\ ความเร่งด่วน</th>' +
+        MATRIX.cols.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' +
+        MATRIX.rows.map(row =>
+          '<tr><td class="font-medium">' + esc(row.label) + '</td>' +
+            row.cells.map(p => '<td>' + prioTag(p) + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table>' +
+    '</div>' +
+    '<div class="tbl-wrap rule-in">' +
+      '<table class="tbl tbl-sticky"><thead><tr><th>ระดับ</th><th>เวลาตอบรับ</th><th>เวลาแก้ไข</th><th>การรายงานสถานะ</th><th class="min-w-[260px]">คำอธิบาย</th></tr></thead><tbody>' +
+        PRIOS.map(p =>
+          '<tr>' +
+            '<td>' + prioTag(p.key) + '</td>' +
+            '<td class="num font-semibold whitespace-nowrap">' + esc(p.resp) + '</td>' +
+            '<td class="num font-semibold whitespace-nowrap">' + esc(p.res) + '</td>' +
+            '<td class="text-[12.5px] text-faint whitespace-nowrap">' + esc(p.report) + '</td>' +
+            '<td class="text-[12.5px] text-muted leading-relaxed">' + esc(p.desc) + '</td>' +
+          '</tr>').join('') +
+      '</tbody></table>' +
+    '</div>' +
+    '<p class="p-5 text-[11.5px] text-faint leading-relaxed rule-in">' +
+      'เวลาทำการ จันทร์–ศุกร์ 08:30–17:30 น. (ยกเว้นวันหยุดบริษัท) · P1 มีทีม On-call ตลอด 24 ชั่วโมงทุกวัน · ' +
+      'ปิดปรับปรุงตามแผน เสาร์ 20:00–24:00 น. แจ้งล่วงหน้าอย่างน้อย 3 วันทำการ · ' +
+      'นาฬิกา SLA หยุดชั่วคราวเมื่อรอข้อมูลจากผู้แจ้ง (Pending User) ตามข้อ 5.4</p>' +
+  '</section>';
+
+  // Escalation Tier 1/2/3 + Hierarchical
+  const escal =
+  '<section>' +
+    '<div class="eyebrow mb-3">Escalation · AIDC-IT-SLA-001 ข้อ 6</div>' +
+    '<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-5">' +
+      ESCALATION.map(e =>
+        '<article class="panel p-5 flex flex-col gap-2">' +
+          '<div class="flex items-center gap-2">' +
+            '<span class="tag ' + (e.kind === 'hier' ? 'tag-solid' : 'tag-outline') + '">' + esc(e.tier) + '</span>' +
+            '<span class="eyebrow">' + (e.kind === 'hier' ? 'Hierarchical' : 'Functional') + '</span>' +
+          '</div>' +
+          '<h3 class="display-md leading-snug mt-0.5">' + esc(e.who) + '</h3>' +
+          '<p class="text-[12.5px] text-muted leading-relaxed">' + esc(e.when) + '</p>' +
+        '</article>').join('') +
+    '</div>' +
+    '<div class="grid md:grid-cols-3 gap-5 mt-5">' +
+      [
+        { k:'Near-SLA Warning', t:'เตือนล่วงหน้าก่อนเกินเป้าหมาย', b:'เมื่อเวลาคงเหลือต่ำกว่า 20% ระบบแจ้งผู้รับผิดชอบทุก 5 นาทีผ่าน LINE OA และอีเมล พร้อมแจ้งหัวหน้าทีมเป็นสำเนา' },
+        { k:'Auto Escalation', t:'ไม่มีผู้รับเรื่องใน 15 นาที', b:'Ticket ระดับ P1 ที่ไม่มีผู้รับจะถูกดันขึ้นหัวหน้าทีมของบริษัทนั้น และหากยังไม่มีผู้รับอีก 15 นาที จะดันต่อไปที่ Head of IT' },
+        { k:'Cross-Company', t:'ส่งต่อข้ามบริษัทในเครือ', b:'Ticket ที่เกี่ยวเนื่องหลายบริษัทส่งต่อได้โดยคงประวัติเดิมทั้งหมด นาฬิกา SLA เริ่มนับใหม่ตามเงื่อนไขของบริษัทผู้รับ' }
+      ].map(c =>
+        '<article class="panel p-5">' +
+          '<div class="eyebrow eyebrow-accent">' + esc(c.k) + '</div>' +
+          '<h3 class="display-md mt-2 leading-snug">' + esc(c.t) + '</h3>' +
+          '<p class="text-[12.5px] text-muted leading-relaxed mt-2">' + esc(c.b) + '</p>' +
+        '</article>').join('') +
+    '</div>' +
+  '</section>';
+
+  return '<div class="flex flex-col gap-5' + r + '">' + rulesTable + matrix + escal + '</div>';
+}
+
+/* ─────────────────────────── 13. หน้า: คลังความรู้ ─────────────────────────── */
+function kbView() {
+  const r = S.fresh ? ' rise' : '';
+  if (S.kbId) {
+    const a = KB.find(x => x.id === S.kbId) || KB[0];
+    return '<div class="max-w-[68ch]' + r + '">' +
+      '<button data-act="kbclose" class="btn btn-secondary btn-sm">' + ic('arrowL', 'w-4 h-4') + 'กลับไปคลังความรู้</button>' +
+      '<div class="eyebrow eyebrow-accent mt-6">' + a.id + ' · ' + a.cat + '</div>' +
+      '<h2 class="display-lg mt-2.5">' + esc(a.title) + '</h2>' +
+      '<p class="text-[12.5px] text-faint mt-3 num">อัปเดต ' + esc(a.updated) + ' · เปิดอ่าน ' + a.views + ' ครั้ง · ลด Ticket ได้ ' + a.deflect + '</p>' +
+      '<div class="rule-accent mt-5 mb-6"></div>' +
+      '<ol class="flex flex-col gap-px bg-hair border border-hair">' +
+        a.steps.map((s, i) =>
+          '<li class="bg-card p-4 flex gap-3.5">' +
+            '<span class="flex-none w-7 h-7 grid place-items-center font-display font-bold text-[12.5px] bg-ink text-canvas num">' + (i + 1) + '</span>' +
+            '<span class="text-[15px] leading-relaxed pt-0.5">' + esc(s) + '</span>' +
+          '</li>').join('') +
+      '</ol>' +
+      '<div class="mt-6 panel-flat p-4 flex flex-wrap items-center gap-3">' +
+        '<p class="text-[12.5px] flex-1 min-w-[180px]">ทำตามขั้นตอนแล้วยังไม่หาย?</p>' +
+        '<button data-act="nav" data-view="new" class="btn btn-primary btn-sm">' + ic('plus', 'w-4 h-4') + 'แจ้งเรื่องใหม่</button>' +
+      '</div>' +
+    '</div>';
+  }
+  return '<div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-5' + r + '">' +
+    KB.map(a =>
+      '<button data-act="kbopen" data-id="' + a.id + '" class="panel hovercard p-5 text-left flex flex-col gap-2.5 h-full">' +
+        '<div class="eyebrow">' + a.id + ' · ' + a.cat + '</div>' +
+        '<h3 class="display-md leading-snug">' + esc(a.title) + '</h3>' +
+        '<p class="text-[12.5px] text-muted leading-relaxed line-clamp-3">' + esc(a.steps[0]) + '</p>' +
+        '<div class="mt-auto pt-3.5 rule-in flex items-center justify-between gap-2">' +
+          '<span class="num text-[11.5px] text-faint">อ่าน ' + a.views + ' · ลด Ticket ได้ ' + a.deflect + '</span>' +
+          '<span class="text-accent-text">' + ic('arrowR', 'w-4 h-4') + '</span>' +
+        '</div>' +
+      '</button>').join('') +
+  '</div>';
+}
+
+/* ─────────────────────────── 14. แผงรายละเอียด Ticket (drawer) ─────────────────────────── */
+
+// สร้าง audit trail ของ Ticket
+function timelineOf(t) {
+  const base = [
+    { what:'สร้าง Ticket ผ่าน ' + t.channel + ' — ' + t.cat, who:t.requester, when:'วันนี้ 06:42', hot:false },
+    { what:'AI Assistant เสนอคู่มือที่เกี่ยวข้อง 2 บทความ ผู้แจ้งเลือกส่ง Ticket ต่อ', who:'Knowledge Assistant', when:'วันนี้ 06:43', hot:false },
+    { what:'Auto Routing มอบหมายตามกฎ ' + CONAME(t.company) + ' + ' + t.cat, who:'Routing Engine', when:'วันนี้ 06:43', hot:false }
+  ];
+  if (t.assignee !== '—') base.push({ what:'รับเรื่องและเริ่มตรวจสอบ', who:t.assignee, when:'วันนี้ 07:05', hot:false });
+  if (t.status === 'รอรับเรื่อง') base.push({ what:'ยังไม่มีผู้รับเรื่อง — จะดันขึ้นหัวหน้าทีมอัตโนมัติเมื่อครบ 15 นาที', who:'SLA Service', when:'เมื่อสักครู่', hot:true });
+  if (t.status === 'รอข้อมูลเพิ่ม') base.push({ what:'ขอข้อมูลเพิ่มจากผู้แจ้ง — นาฬิกา SLA หยุดชั่วคราว (Pending User)', who:t.assignee, when:'วันนี้ 09:20', hot:true });
+  if (t.status === 'ปิดงานแล้ว') base.push({ what:'ปิดงานและส่งแบบประเมิน CSAT ให้ผู้แจ้ง', who:t.assignee, when:'เมื่อวาน 16:10', hot:false });
+  return base.reverse();
+}
+
+function drawerHtml(t) {
+  const s = slaOf(t), p = PRIO(t.prio);
+  const a = ASSETS.find(x => x.code === t.asset);
+  const canClaim = t.assignee === '—';
+  const canResolve = t.status !== 'ปิดงานแล้ว' && S.role !== 'employee';
+
+  return '' +
+  '<header class="flex-none p-5 hair-b flex items-start gap-3">' +
+    '<div class="min-w-0 flex-1">' +
+      '<div class="eyebrow num">' + esc(t.id) + ' · ' + esc(CONAME(t.company)) + '</div>' +
+      '<h2 class="font-display font-extrabold tracking-tight mt-2 text-[19px] sm:text-[22px] leading-snug">' + esc(t.title) + '</h2>' +
+      '<p class="text-[12.5px] text-faint mt-2 leading-relaxed">' + esc(t.cat + ' · ' + t.dept) +
+        ' · แจ้งโดย ' + esc(t.requester) + ' · ผ่าน ' + esc(t.channel) + '</p>' +
+    '</div>' +
+    '<button data-act="closedrawer" class="btn btn-icon btn-secondary flex-none" aria-label="ปิดแผงรายละเอียด">' + ic('close', 'w-5 h-5') + '</button>' +
+  '</header>' +
+
+  '<div class="flex-1 overflow-y-auto">' +
+    // สถานะ / ความเร่งด่วน / ผู้รับผิดชอบ
+    '<dl class="grid grid-cols-3 gap-px bg-hair border-b border-hair">' +
+      '<div class="bg-canvas p-4"><dt class="eyebrow">สถานะ</dt><dd class="mt-2">' + statusTag(t.status) + '</dd></div>' +
+      '<div class="bg-canvas p-4"><dt class="eyebrow">ความเร่งด่วน</dt><dd class="mt-2 flex items-center gap-2">' + meter(t.prio) +
+        '<span class="text-[13.5px] font-semibold">' + p.key + ' · ' + p.th + '</span></dd></div>' +
+      '<div class="bg-canvas p-4"><dt class="eyebrow">ผู้รับผิดชอบ</dt><dd class="mt-2 text-[13.5px] font-medium truncate">' + esc(t.assignee) + '</dd></div>' +
+    '</dl>' +
+
+    // SLA countdown เดินจริงทุกวินาที
+    '<section class="p-5 hair-b">' +
+      '<div class="flex items-baseline justify-between gap-3">' +
+        '<div class="eyebrow">SLA Countdown — เวลาแก้ไขคงเหลือ</div>' +
+        '<span class="eyebrow">เป้าหมาย ' + esc(p.res) + '</span>' +
+      '</div>' +
+      '<div data-sla="' + t.id + '" class="mt-3">' +
+        '<div class="flex items-baseline gap-2.5">' +
+          '<span data-slatext class="num stat-lg ' +
+            (s.level === 'breach' || s.level === 'crit' ? 'text-accent-text' : s.level === 'done' ? 'text-faint stat-md' : '') + '">' +
+            (s.level === 'done' ? s.text : s.clock) + '</span>' +
+          (s.paused ? '<span class="tag tag-soft">' + ic('pause', 'w-3.5 h-3.5') + 'นาฬิกาหยุด</span>' : '') +
+        '</div>' +
+        '<div class="slabar ' + (s.level === 'done' ? 'done' : s.level === 'ok' ? '' : (s.level === 'warn' ? 'warn' : 'crit')) + ' mt-3" style="height:6px">' +
+          '<i style="width:' + s.pct.toFixed(1) + '%"></i></div>' +
+      '</div>' +
+      '<p class="text-[12.5px] text-muted leading-relaxed mt-3">' + esc(s.note) + '</p>' +
+      '<p class="text-[11.5px] text-faint leading-relaxed mt-1.5">เป้าหมายตอบรับ ' + esc(p.resp) + ' · ' + esc(p.clock) + ' · ' + esc(p.report) + '</p>' +
+    '</section>' +
+
+    // ทรัพย์สินที่ผูก
+    (a ?
+    '<section class="p-5 hair-b flex flex-wrap items-center gap-3">' +
+      '<div class="min-w-0 flex-1">' +
+        '<div class="eyebrow">ผูกกับทรัพย์สิน (ITAM)</div>' +
+        '<div class="text-[13.5px] font-semibold mt-1.5 num">' + esc(a.code) + ' — ' + esc(a.name) + '</div>' +
+        '<div class="text-[12.5px] text-faint mt-0.5">Ticket สะสม ' + a.tickets + ' รายการ · ซ่อมล่าสุด ' + esc(a.history[0].date) + '</div>' +
+      '</div>' +
+      '<button data-act="viewasset" data-code="' + esc(a.code) + '" class="btn btn-secondary btn-sm flex-none">' +
+        ic('ext', 'w-4 h-4') + 'ดูประวัติซ่อมบำรุง</button>' +
+    '</section>' : '') +
+
+    // รายละเอียด + audit trail
+    '<section class="p-5">' +
+      '<div class="eyebrow">รายละเอียดและกิจกรรม (Audit Trail)</div>' +
+      '<p class="text-[13.5px] leading-relaxed mt-2.5">' + esc(t.desc) + '</p>' +
+      '<ol class="tl mt-5">' +
+        timelineOf(t).map(e =>
+          '<li class="tl-item' + (e.hot ? ' hot' : '') + '">' +
+            '<div class="text-[13.5px] leading-snug font-medium">' + esc(e.what) + '</div>' +
+            '<div class="text-[11.5px] text-faint mt-0.5">' + esc(e.who) + ' · ' + esc(e.when) + '</div>' +
+          '</li>').join('') +
+      '</ol>' +
+    '</section>' +
+  '</div>' +
+
+  // กล่องตอบกลับ + การกระทำ
+  '<footer class="flex-none p-5 hair-t bg-surface">' +
+    '<label for="dreply" class="lbl">ตอบกลับผู้แจ้ง / บันทึกภายใน</label>' +
+    '<textarea id="dreply" data-act="reply" data-fkey="dreply" class="input mt-1.5" style="min-height:80px" ' +
+      'placeholder="พิมพ์ข้อความถึงผู้แจ้ง — จะส่งไปที่ LINE OA และอีเมลองค์กรพร้อมกัน">' + esc(S.reply) + '</textarea>' +
+    '<div class="mt-3 flex flex-wrap gap-2">' +
+      '<button data-act="send" class="btn btn-primary btn-sm"' + (S.reply.trim() ? '' : ' disabled') + '>' + ic('arrowR', 'w-4 h-4') + 'ส่งข้อความ</button>' +
+      (canClaim ? '<button data-act="claim" class="btn btn-secondary btn-sm">' + ic('user', 'w-4 h-4') + 'รับเรื่อง</button>' : '') +
+      '<button data-act="escopen" class="btn btn-secondary btn-sm">' + ic('route', 'w-4 h-4') + 'ส่งต่อข้ามบริษัท</button>' +
+      (canResolve ? '<button data-act="resolve" class="btn btn-secondary btn-sm">' + ic('check', 'w-4 h-4') + 'ปิดงาน</button>' : '') +
+    '</div>' +
+  '</footer>';
+}
+
+function openDrawer(id) {
+  const t = allTickets().find(x => x.id === id);
+  if (!t) return;
+  S.openId = id; S.reply = '';
+  const d = $('#drawer');
+  d.innerHTML = drawerHtml(t);
+  d.setAttribute('aria-hidden', 'false');
+  d.classList.add('on');
+  $('#scrim').classList.add('on');
+  paint();
+  const btn = d.querySelector('[data-act="closedrawer"]');
+  if (btn) btn.focus();
+}
+function closeDrawer() {
+  S.openId = null; S.reply = '';
+  const d = $('#drawer');
+  d.classList.remove('on');
+  d.setAttribute('aria-hidden', 'true');
+  if (!S.escOpen && !S.csatOpen && !S.menuOpen) $('#scrim').classList.remove('on');
+  paint();
+}
+// วาดเฉพาะ footer ของ drawer ใหม่ (ไม่ทำลาย scroll position ของเนื้อหา)
+function refreshDrawerFooter() {
+  const d = $('#drawer');
+  if (!S.openId || !d.classList.contains('on')) return;
+  const btn = d.querySelector('[data-act="send"]');
+  if (btn) { if (S.reply.trim()) btn.removeAttribute('disabled'); else btn.setAttribute('disabled', ''); }
+}
+
+/* ─────────────────────────── 15. โมดัล: ส่งต่อข้ามบริษัท / CSAT ─────────────────────────── */
+function openModal(html) {
+  $('#modal').innerHTML = html;
+  const w = $('#modalWrap');
+  w.classList.add('on');
+  w.setAttribute('aria-hidden', 'false');
+  $('#scrim').classList.add('on');
+  const first = w.querySelector('button, select, textarea');
+  if (first) first.focus();
+}
+function closeModal() {
+  S.escOpen = false; S.csatOpen = false; S.csatPick = 0;
+  const w = $('#modalWrap');
+  w.classList.remove('on');
+  w.setAttribute('aria-hidden', 'true');
+  if (!S.openId && !S.menuOpen) $('#scrim').classList.remove('on');
+}
+function escModal() {
+  const t = allTickets().find(x => x.id === S.openId);
+  return '' +
+  '<div class="p-5 hair-b flex items-start gap-3">' +
+    '<div class="flex-1"><div class="eyebrow eyebrow-accent">Cross-Company Transfer</div>' +
+      '<h2 class="display-md mt-1.5">ส่งต่อ Ticket ข้ามบริษัท / ข้ามแผนก</h2></div>' +
+    '<button data-act="closemodal" class="btn btn-icon btn-secondary flex-none" aria-label="ปิด">' + ic('close', 'w-5 h-5') + '</button>' +
+  '</div>' +
+  '<div class="p-5 flex flex-col gap-4">' +
+    '<p class="text-[12.5px] text-muted leading-relaxed">' +
+      (t ? esc(t.id + ' · ' + t.title) + ' — ประวัติและไฟล์แนบทั้งหมดจะถูกส่งไปพร้อมกัน' : 'ประวัติและไฟล์แนบทั้งหมดจะถูกส่งไปพร้อมกัน') + '</p>' +
+    '<div class="field"><label for="escto">ส่งต่อไปยังบริษัท</label>' +
+      '<select id="escto" data-act="escto" data-fkey="escto" class="input">' +
+        CO.map(c => '<option value="' + c.code + '"' + (c.code === S.escTo ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') +
+      '</select></div>' +
+    '<div class="field"><label for="escwhy">เหตุผลในการส่งต่อ (บันทึกใน Audit Log)</label>' +
+      '<textarea id="escwhy" data-act="escwhy" data-fkey="escwhy" class="input" style="min-height:84px" ' +
+        'placeholder="เช่น อุปกรณ์อยู่ในความดูแลของบริษัทปลายทาง">' + esc(S.escWhy) + '</textarea></div>' +
+    '<p class="text-[11.5px] text-faint leading-relaxed panel-flat p-3">' +
+      'นาฬิกา SLA จะเริ่มนับใหม่ตามเงื่อนไขของบริษัทผู้รับ และเหตุผลนี้จะถูกบันทึกไว้ถาวรใน Audit Log</p>' +
+  '</div>' +
+  '<div class="p-5 hair-t flex justify-end gap-2 bg-surface">' +
+    '<button data-act="closemodal" class="btn btn-secondary">ยกเลิก</button>' +
+    '<button data-act="escgo" class="btn btn-primary">' + ic('route', 'w-4 h-4') + 'ยืนยันส่งต่อ</button>' +
+  '</div>';
+}
+function csatModal() {
+  const labels = ['ไม่พอใจมาก', 'ไม่พอใจ', 'พอใช้', 'พอใจ', 'พอใจมาก'];
+  return '' +
+  '<div class="p-5 hair-b flex items-start gap-3">' +
+    '<div class="flex-1"><div class="eyebrow eyebrow-accent">Customer Satisfaction</div>' +
+      '<h2 class="display-md mt-1.5">ปิดงานแล้ว — ขอประเมินความพึงพอใจ</h2></div>' +
+    '<button data-act="closemodal" class="btn btn-icon btn-secondary flex-none" aria-label="ปิด">' + ic('close', 'w-5 h-5') + '</button>' +
+  '</div>' +
+  '<div class="p-5">' +
+    '<p class="text-[12.5px] text-muted leading-relaxed">ให้คะแนนการให้บริการครั้งนี้ — คะแนนจะรวมเข้าค่า CSAT ของบริษัทและของเจ้าหน้าที่ (เป้าหมายองค์กร ≥ 4.2 / 5.0)</p>' +
+    '<div class="mt-5 grid grid-cols-5 gap-px bg-hair border border-hair" role="radiogroup" aria-label="คะแนนความพึงพอใจ">' +
+      [1,2,3,4,5].map(n =>
+        '<button data-act="csatpick" data-n="' + n + '" role="radio" aria-checked="' + (S.csatPick === n ? 'true' : 'false') + '" ' +
+          'class="flex flex-col items-center justify-center gap-1.5 py-4 transition-colors ' +
+          (S.csatPick === n ? 'bg-ink text-canvas' : 'bg-card hover:bg-surface') + '">' +
+          ic('star', 'w-5 h-5', S.csatPick >= n ? 2 : 1.4) +
+          '<span class="num font-display font-bold text-[15px]">' + n + '</span>' +
+          '<span class="text-[10.5px] leading-tight text-center px-1">' + labels[n - 1] + '</span>' +
+        '</button>').join('') +
+    '</div>' +
+  '</div>' +
+  '<div class="p-5 hair-t flex justify-end gap-2 bg-surface">' +
+    '<button data-act="closemodal" class="btn btn-secondary">ข้าม</button>' +
+    '<button data-act="csatsend" class="btn btn-primary"' + (S.csatPick ? '' : ' disabled') + '>ส่งคะแนน</button>' +
+  '</div>';
+}
+
+/* ─────────────────────────── 16. Sheet เมนูมือถือ ─────────────────────────── */
+function openMenu() {
+  S.menuOpen = true;
+  const u = me(), view = curView();
+  $('#sheet').innerHTML =
+    '<div class="p-4 hair-b flex items-center gap-3">' +
+      '<span class="flex-none w-10 h-10 grid place-items-center font-display font-bold text-[15px] bg-ink text-canvas">' + u.i + '</span>' +
+      '<div class="min-w-0 flex-1">' +
+        '<div class="text-[15px] font-semibold truncate">' + esc(u.name) + '</div>' +
+        '<div class="text-[11.5px] text-faint truncate">' + esc(u.scope) + '</div>' +
+      '</div>' +
+      '<button data-act="closemenu" class="btn btn-icon btn-secondary flex-none" aria-label="ปิดเมนู">' + ic('close', 'w-5 h-5') + '</button>' +
+    '</div>' +
+    '<nav class="py-2">' +
+      navModel().map(n =>
+        '<button data-act="nav" data-view="' + n.key + '" class="navitem" ' + (n.key === view ? 'aria-current="page"' : '') + '>' +
+          ic(n.icon, 'w-[18px] h-[18px] flex-none') + '<span class="flex-1 truncate">' + esc(n.label) + '</span>' +
+          (n.badge === '' ? '' : '<span class="nb num">' + n.badge + '</span>') + '</button>').join('') +
+    '</nav>' +
+    '<div class="p-4 hair-t flex flex-col gap-3">' +
+      '<div class="flex items-center gap-2 flex-wrap">' +
+        '<span class="tag tag-soft">' + esc(u.roleLabel) + '</span>' +
+        '<span class="eyebrow">' + esc(u.group) + '</span></div>' +
+      '<div class="flex gap-2">' + themeToggle() +
+        '<button data-act="signout" class="btn btn-secondary btn-sm flex-1">' + ic('logout', 'w-4 h-4') + 'ออกจากระบบ</button></div>' +
+    '</div>';
+  $('#sheet').classList.add('on');
+  $('#sheet').setAttribute('aria-hidden', 'false');
+  $('#scrim').classList.add('on');
+}
+function closeMenu() {
+  S.menuOpen = false;
+  $('#sheet').classList.remove('on');
+  $('#sheet').setAttribute('aria-hidden', 'true');
+  if (!S.openId && !S.escOpen && !S.csatOpen) $('#scrim').classList.remove('on');
+}
+
+/* ─────────────────────────── 17. Paint + คืนโฟกัส ─────────────────────────── */
+function paint() {
+  const a = document.activeElement;
+  const fkey = a && a.dataset ? a.dataset.fkey : null;
+  const ss = a && a.selectionStart, se = a && a.selectionEnd;
+
+  $('#app').innerHTML = S.authed ? shell() : loginView();
+  S.fresh = false;
+
+  if (fkey) {
+    const n = document.querySelector('#app [data-fkey="' + fkey + '"]');
+    if (n) {
+      n.focus();
+      try { if (ss != null && n.setSelectionRange) n.setSelectionRange(ss, se); } catch (e) {}
+    }
+  }
+  tickSla();
+}
+
+// สลับหน้าพร้อม skeleton สั้น ๆ เพื่อให้รู้สึกว่าระบบกำลังโหลดข้อมูลจริง
+// keepKb = true เมื่อผู้เรียกตั้ง S.kbId ไว้แล้ว (เช่น Ticket Deflection ที่ต้องเปิดบทความนั้นเลย)
+let loadTimer = null;
+function goView(v, keepKb) {
+  if (v === S.view && !S.loading) { if (!keepKb) S.kbId = null; paint(); return; }
+  S.view = v; if (!keepKb) S.kbId = null; S.loading = true;
+  paint();
+  clearTimeout(loadTimer);
+  loadTimer = setTimeout(() => { S.loading = false; S.fresh = true; paint(); window.scrollTo(0, 0); }, 230);
+}
+
+/* นาฬิกา SLA — อัปเดตทุกวินาทีเฉพาะโหนดที่แสดงอยู่จริง (ไม่ re-render ทั้งหน้า) */
+function tickSla() {
+  const nodes = document.querySelectorAll('[data-sla]');
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const t = allTickets().find(x => x.id === node.getAttribute('data-sla'));
+    if (!t) continue;
+    const s = slaOf(t);
+    const inDrawer = node.closest('#drawer');
+    const txt = node.querySelector('[data-slatext]');
+    if (txt) txt.textContent = (inDrawer && s.level !== 'done') ? s.clock : s.text;
+    const bar = node.querySelector('.slabar');
+    if (bar) {
+      bar.className = 'slabar ' + (s.level === 'done' ? 'done' : s.level === 'ok' ? '' : (s.level === 'warn' ? 'warn' : 'crit')) +
+        (inDrawer ? ' mt-3' : ' mt-1.5');
+      const fill = bar.querySelector('i');
+      if (fill) fill.style.width = s.pct.toFixed(1) + '%';
+    }
+  }
+}
+setInterval(tickSla, 1000);
+
+/* นาฬิกาปลดล็อกบัญชีหน้าเข้าสู่ระบบ — เดินทุกวินาทีเฉพาะตอนที่ถูกล็อกจริง */
+setInterval(function () {
+  const el = document.querySelector('[data-lockleft]');
+  if (!el) return;
+  const ms = lockLeft();
+  if (ms <= 0) { S.login.lockUntil = 0; S.login.tries = 0; paint(); return; }
+  el.textContent = fmtLock(ms);
+}, 1000);
+
+/* ─────────────────────────── 18. ตัวจัดการเหตุการณ์ (event delegation) ─────────────────────────── */
+
+const ACTIONS = {
+  // — เข้าสู่ระบบ —
+  login(el) {
+    const a = ACCOUNTS[+el.dataset.i];
+    Object.assign(S, { authed:true, role:a.role, view:'my', openId:null, statusF:'all', cf:'ALL', fresh:true });
+    paint();
+    say('เข้าสู่ระบบสำเร็จผ่าน Active Directory SSO — สิทธิ์ ' + a.roleLabel + ' จาก group ' + a.group);
+  },
+  sso() {
+    const a = ACCOUNTS[0];
+    Object.assign(S, { authed:true, role:a.role, view:'my', fresh:true });
+    paint();
+    say('เข้าสู่ระบบสำเร็จ — ' + a.name + ' · สิทธิ์ ' + a.roleLabel);
+  },
+  // — ฟอร์มชื่อผู้ใช้ / รหัสผ่าน —
+  lf(el) {
+    const k = el.dataset.k;
+    S.login[k] = el.value;
+    if (k === 'user') S.login.eu = ''; else S.login.ep = '';
+    paint();
+  },
+  pwshow() { S.login.show = !S.login.show; paint(); },
+  remember(el) { S.login.remember = !!el.checked; },
+  disc(el) { S.login.disc = !S.login.disc; if (el && el.parentNode) el.parentNode.open = S.login.disc; },
+  forgot() {
+    say('รีเซ็ตรหัสผ่านเองได้ที่ sspr.aidc-group.local — ยืนยันตัวตนด้วย MFA แล้วตั้งรหัสใหม่ 12 ตัวขึ้นไป (ขั้นตอนเต็มอยู่ในคู่มือ KB-01)');
+  },
+  dologin() {
+    const L = S.login;
+    if (lockLeft() > 0) return;
+    L.eu = L.user.trim() ? '' : 'กรุณากรอกชื่อผู้ใช้หรืออีเมลองค์กร';
+    L.ep = L.pass ? '' : 'กรุณากรอกรหัสผ่าน';
+    if (L.eu || L.ep) { paint(); return; }
+    if (L.pass !== DEMO_PW) {
+      L.tries++;
+      L.ep = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+      if (L.tries >= MAX_TRIES) {
+        L.lockUntil = Date.now() + LOCK_MIN * 60000;
+        L.ep = '';
+        paint();
+        say('บัญชีถูกล็อก 15 นาที เพราะกรอกรหัสผ่านผิดครบ 5 ครั้ง ตามนโยบายรหัสผ่านในเอกสาร SOP — รีเซ็ตเองได้ที่ sspr.aidc-group.local หรือติดต่อ IT Hotline');
+        return;
+      }
+      paint();
+      return;
+    }
+    const a = loginAccountFor(L.user) || ACCOUNTS[0];
+    const matched = !!loginAccountFor(L.user);
+    Object.assign(S, { authed:true, role:a.role, view:'my', openId:null, statusF:'all', cf:'ALL', fresh:true });
+    S.login = { user:'', pass:'', show:false, remember:L.remember, eu:'', ep:'', tries:0, lockUntil:0, disc:false };
+    paint();
+    say('เข้าสู่ระบบสำเร็จ — ' + a.name + ' · สิทธิ์ ' + a.roleLabel +
+        (matched ? ' จาก group ' + a.group : ' (ไม่พบชื่อผู้ใช้นี้ใน AD จึงเข้าเป็นพนักงานทั่วไป)') +
+        (L.remember ? ' · จดจำอุปกรณ์นี้ไว้ 30 วัน' : ''));
+  },
+  unlock() {
+    S.login.lockUntil = 0; S.login.tries = 0; S.login.ep = '';
+    paint();
+    say('ปลดล็อกบัญชีสำหรับการสาธิตแล้ว — ระบบจริงจะปลดอัตโนมัติเมื่อครบ 15 นาที');
+  },
+  signout() {
+    closeDrawer(); closeModal(); closeMenu();
+    Object.assign(S, { authed:false, view:'my', q:'', cf:'ALL', statusF:'all', kbId:null, fresh:true });
+    paint();
+    say('ออกจากระบบแล้ว — เซสชัน SSO ถูกยกเลิกบนอุปกรณ์นี้');
+  },
+  theme() {
+    S.dark = !S.dark;
+    document.documentElement.classList.toggle('dark', S.dark);
+    paint();
+    if (S.menuOpen) openMenu();
+    say(S.dark ? 'เปลี่ยนเป็นโหมดมืดแล้ว' : 'เปลี่ยนเป็นโหมดสว่างแล้ว');
+  },
+
+  // — เนวิเกชัน —
+  nav(el) { closeMenu(); goView(el.dataset.view); },
+  menu() { openMenu(); },
+  closemenu() { closeMenu(); },
+
+  // — ตัวกรอง —
+  q(el) { S.q = el.value; paint(); },
+  cf(el) { S.cf = el.dataset.code; paint(); },
+  sf(el) { S.statusF = el.dataset.st; paint(); },
+  clearf() { S.q = ''; S.cf = 'ALL'; S.statusF = 'all'; paint(); say('ล้างตัวกรองทั้งหมดแล้ว'); },
+
+  // — Ticket —
+  open(el) { openDrawer(el.dataset.id); },
+  closedrawer() { closeDrawer(); },
+  reply(el) { S.reply = el.value; refreshDrawerFooter(); },
+  send() {
+    if (!S.reply.trim()) return;
+    S.reply = '';
+    const d = $('#drawer'); const ta = d.querySelector('#dreply');
+    if (ta) ta.value = '';
+    refreshDrawerFooter();
+    say('ส่งข้อความถึงผู้แจ้งแล้ว — แจ้งเตือนไปที่ LINE OA และอีเมลองค์กรพร้อมกัน');
+  },
+  claim() {
+    const t = allTickets().find(x => x.id === S.openId);
+    if (!t) return;
+    t.assignee = me().name.split(' ')[0] + ' ' + (me().name.split(' ')[1] || '').charAt(0) + '.';
+    t.status = 'กำลังดำเนินการ';
+    $('#drawer').innerHTML = drawerHtml(t);
+    paint();
+    say('รับเรื่อง ' + t.id + ' แล้ว — สถานะเปลี่ยนเป็นกำลังดำเนินการ นาฬิกาตอบสนองแรกหยุดนับ');
+  },
+  resolve() {
+    const t = allTickets().find(x => x.id === S.openId);
+    if (t) { t.status = 'ปิดงานแล้ว'; t.slaMins = 0; }
+    closeDrawer();
+    S.csatOpen = true; S.csatPick = 0;
+    openModal(csatModal());
+  },
+  viewasset(el) {
+    const i = ASSETS.findIndex(a => a.code === el.dataset.code);
+    closeDrawer();
+    S.assetIdx = i < 0 ? 0 : i;
+    goView('assets');
+    say('เปิดประวัติซ่อมบำรุงของ ' + el.dataset.code + ' แล้ว');
+  },
+
+  // — ส่งต่อข้ามบริษัท —
+  escopen() { S.escOpen = true; S.escWhy = ''; openModal(escModal()); },
+  escto(el) { S.escTo = el.value; },
+  escwhy(el) { S.escWhy = el.value; },
+  escgo() {
+    const to = CONAME(S.escTo);
+    closeModal(); closeDrawer();
+    say('ส่งต่อไปยัง ' + to + ' แล้ว — นาฬิกา SLA เริ่มนับใหม่ตามเงื่อนไขของบริษัทผู้รับ และบันทึกเหตุผลใน Audit Log');
+  },
+
+  // — CSAT —
+  csatpick(el) { S.csatPick = +el.dataset.n; $('#modal').innerHTML = csatModal(); },
+  csatsend() {
+    const n = S.csatPick;
+    closeModal();
+    say('ขอบคุณสำหรับคะแนน ' + n + '/5 — บันทึกเข้า KPI ของบริษัทและเจ้าหน้าที่แล้ว');
+  },
+  closemodal() { closeModal(); },
+
+  // — ฟอร์มแจ้งเรื่องใหม่ —
+  f(el) {
+    const k = el.dataset.k;
+    S.form[k] = el.value;
+    if (k === 'company') {
+      // เปลี่ยนบริษัท → รีเซ็ตหมวดหมู่เป็นหมวดแรกของบริษัทนั้น (dynamic form)
+      S.form.cat = (CATS[el.value] || CATS.HQ)[0];
+      S.form.asset = ''; S.form.gps = '';
+    }
+    if (k === 'title' || k === 'desc') S.deflected = false;
+    paint();
+  },
+  prio(el) { S.form.prio = el.dataset.p; paint(); },
+  pin() {
+    S.form.gps = '13.7365, 100.5601';
+    paint();
+    say('ปักหมุดตำแหน่งไซต์งานจากอุปกรณ์แล้ว — พิกัดจะแนบไปกับ Ticket');
+  },
+  attach() {
+    S.attached++;
+    paint();
+    say('แนบไฟล์แล้ว — รองรับภาพ วิดีโอ และเอกสารสูงสุด 25 MB ต่อไฟล์');
+  },
+  submit() {
+    if (!formReady()) return;
+    const p = PRIO(S.form.prio);
+    const rule = ruleForForm();
+    const agent = AGENTS[S.rr % AGENTS.length];
+    const id = 'TCK-' + (2400 + S.extra.length);
+    S.extra.unshift({
+      id, company:S.form.company, title:S.form.title.trim(), cat:S.form.cat, prio:S.form.prio,
+      status:'กำลังดำเนินการ', slaMins:p.resMin, totalMins:p.resMin, assignee:agent,
+      requester:me().name, channel:'Web', dept:S.form.dept, asset:S.form.asset, mine:true, desc:S.form.desc.trim()
+    });
+    S.rr++; S.attached = 0; S.deflected = false;
+    S.form = Object.assign({}, S.form, { title:'', desc:'', asset:'', gps:'' });
+    goView('my');
+    say('สร้าง ' + id + ' แล้ว · กฎที่ตรง: ' + rule.team + ' · มอบหมายให้ ' + agent + ' (' + rule.mode + ') · เป้าหมายแก้ไข ' + p.res);
+  },
+
+  // — ผู้ช่วย AI —
+  deflect() {
+    const h = aiHits();
+    S.deflected = true;
+    S.kbId = h[0] ? h[0].id : KB[0].id;
+    goView('kb', true);   // คงบทความที่เลือกไว้ ไม่ให้ถูกล้างตอนสลับหน้า
+    say('ยอดเยี่ยม — บันทึกเป็น Ticket Deflection แล้ว ช่วยลดปริมาณ Ticket ซ้ำซ้อนของกลุ่มบริษัท');
+  },
+  keepgoing() { S.deflected = true; paint(); say('ปิดคำแนะนำแล้ว — กรอกฟอร์มต่อได้เลย'); },
+
+  // — คลังความรู้ —
+  kbopen(el) { S.kbId = el.dataset.id; S.view = 'kb'; S.fresh = true; paint(); window.scrollTo(0, 0); },
+  kbclose() { S.kbId = null; S.fresh = true; paint(); },
+
+  // — ทรัพย์สิน / กฎ —
+  asset(el) { S.assetIdx = +el.dataset.i; paint(); },
+  rule(el) {
+    const i = +el.dataset.i;
+    const off = !!S.disabledRules[i];
+    S.disabledRules[i] = !off;
+    paint();
+    say((off ? 'เปิดใช้' : 'ปิดใช้') + 'กฎข้อ ' + (i + 1) + ' แล้ว — บันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา');
+  }
+};
+
+// คลิก / แตะ
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act;
+  // input/select/textarea จัดการที่ event 'input'/'change' แทน
+  if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') return;
+  if (ACTIONS[act]) { e.preventDefault(); ACTIONS[act](el, e); }
+});
+// พิมพ์
+document.addEventListener('input', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  if (ACTIONS[el.dataset.act]) ACTIONS[el.dataset.act](el, e);
+});
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el || el.tagName !== 'SELECT') return;
+  if (ACTIONS[el.dataset.act]) ACTIONS[el.dataset.act](el, e);
+});
+// เปิดแถวตารางด้วยคีย์บอร์ด
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (S.escOpen || S.csatOpen) return closeModal();
+    if (S.menuOpen) return closeMenu();
+    if (S.openId) return closeDrawer();
+  }
+  if (e.key === 'Enter' || e.key === ' ') {
+    const el = e.target.closest('tr[data-act]');
+    if (el) { e.preventDefault(); ACTIONS[el.dataset.act](el, e); }
+  }
+});
+// กด Enter ในฟอร์มเข้าสู่ระบบให้เท่ากับกดปุ่ม "เข้าสู่ระบบ" (ไม่ใช่รีโหลดหน้า)
+document.addEventListener('submit', e => {
+  if (e.target && e.target.id === 'loginForm') { e.preventDefault(); ACTIONS.dologin(); }
+});
+
+// คลิกฉากหลังเพื่อปิด overlay
+$('#scrim').addEventListener('click', () => {
+  if (S.escOpen || S.csatOpen) return closeModal();
+  if (S.menuOpen) return closeMenu();
+  if (S.openId) return closeDrawer();
+});
+
+// เปิดตาราง action ให้เครื่องมือทดสอบอัตโนมัติตรวจว่าไม่มีปุ่มที่กดแล้วไม่เกิดอะไร (dead click)
+window.__ACTIONS__ = ACTIONS;
+
+/* ─────────────────────────── 19. เริ่มทำงาน ─────────────────────────── */
+// เคารพการตั้งค่าธีมของระบบผู้ใช้ตั้งแต่โหลดครั้งแรก
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  S.dark = true;
+  document.documentElement.classList.add('dark');
+}
+paint();
+</script>
+</body>
+</html>
