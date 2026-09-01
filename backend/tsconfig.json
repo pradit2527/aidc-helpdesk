@@ -4,8 +4,10 @@
     // ซึ่ง moduleResolution แบบ node10 อ่านไม่เข้าใจ
     // package.json ไม่มี "type": "module" TypeScript จึงยัง emit เป็น CommonJS ให้ NestJS ตามเดิม
     "module": "node16",
-    "target": "ES2023",
-    "lib": ["ES2023"],
+    // ES2022 ไม่ใช่ ES2023 เพราะ esbuild ที่ drizzle-kit ใช้ยังไม่รู้จัก es2023
+    // Node 20+ รองรับ ES2022 เต็มรูปแบบ จึงไม่เสียความสามารถอะไร
+    "target": "ES2022",
+    "lib": ["ES2022"],
     "moduleResolution": "node16",
     "declaration": false,
     "removeComments": false,
