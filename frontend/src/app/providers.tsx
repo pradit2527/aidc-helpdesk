@@ -5,6 +5,7 @@ import * as React from 'react';
 import { Toaster } from 'sonner';
 
 import { ApiError } from '@/lib/api';
+import { PreferencesProvider } from '@/lib/preferences';
 import { SessionProvider } from '@/lib/session';
 
 /**
@@ -39,15 +40,17 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider>
-        {children}
-        <Toaster
-          position="top-center"
-          // ข้อความแจ้งผลต้องอยู่นานพอให้อ่านภาษาลาวจบ ค่าเริ่มต้น 4 วินาทีสั้นไป
-          duration={6000}
-          toastOptions={{ className: 'text-body-sm' }}
-        />
-      </SessionProvider>
+      <PreferencesProvider>
+        <SessionProvider>
+          {children}
+          <Toaster
+            position="top-center"
+            // ข้อความแจ้งผลต้องอยู่นานพอให้อ่านภาษาลาวจบ ค่าเริ่มต้น 4 วินาทีสั้นไป
+            duration={6000}
+            toastOptions={{ className: 'text-body-sm' }}
+          />
+        </SessionProvider>
+      </PreferencesProvider>
     </QueryClientProvider>
   );
 }

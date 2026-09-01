@@ -5,7 +5,8 @@ import { KeyRound, Lock, Search, Upload, UserPlus } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
-import { ROLE_LABEL } from '@/components/layout/app-shell';
+import { ROLE_LABEL_KEY } from '@/components/layout/app-shell';
+import { useT } from '@/components/layout/preference-controls';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -26,6 +27,7 @@ import type { AdminUser } from '@/lib/types';
  */
 export default function AdminUsersPage(): React.JSX.Element {
   const { user } = useSession();
+  const t = useT();
   const [q, setQ] = React.useState('');
   const [company, setCompany] = React.useState('');
   const [role, setRole] = React.useState('');
@@ -75,7 +77,7 @@ export default function AdminUsersPage(): React.JSX.Element {
         <span className="flex flex-wrap gap-1">
           {u.roles.map((r) => (
             <span key={r} className="rounded-sm bg-subtle px-1.5 py-0.5 text-caption text-ink-2">
-              {ROLE_LABEL[r]}
+              {t(ROLE_LABEL_KEY[r])}
             </span>
           ))}
         </span>
@@ -198,9 +200,9 @@ export default function AdminUsersPage(): React.JSX.Element {
           </Select>
           <Select value={role} onChange={(e) => setRole(e.target.value)} aria-label="ກັ່ນຕອງຕາມບົດບາດ">
             <option value="">ທຸກບົດບາດ</option>
-            {Object.entries(ROLE_LABEL).map(([code, label]) => (
+            {Object.entries(ROLE_LABEL_KEY).map(([code, key]) => (
               <option key={code} value={code}>
-                {label}
+                {t(key)}
               </option>
             ))}
           </Select>

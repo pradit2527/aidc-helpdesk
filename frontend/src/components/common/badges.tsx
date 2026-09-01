@@ -17,8 +17,18 @@ import {
 import { cn } from '@/lib/cn';
 import { formatSlaRemaining } from '@/lib/format';
 
+/**
+ * ป้ายทุกชนิดต้องตัดบรรทัดได้เมื่อจำเป็น
+ *
+ * เดิมเป็น whitespace-nowrap ซึ่งดีตราบใดที่ข้อความสั้น แต่ป้ายบางอันยาวจริง
+ * เช่น "ລໍຖ້າອາໄຫຼ່ / ຜູ້ໃຫ້ບໍລິການພາຍນອກ" กว้าง 243px ซึ่งเกินจอ 320px
+ * และคำแปลไทยของบางป้ายก็ยาวกว่าลาว จึงยาวเกินได้อีกทาง
+ *
+ * flex-wrap จำเป็นคู่กับ whitespace-normal เพราะ inline-flex
+ * ไม่ขึ้นบรรทัดใหม่ให้เอง ไอคอนกับข้อความจะเรียงเป็นแถวยาวแถวเดียว
+ */
 const BADGE =
-  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-caption font-semibold whitespace-nowrap';
+  'inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full px-2.5 py-0.5 text-caption font-semibold';
 
 export function StatusBadge({
   status,
@@ -109,8 +119,17 @@ export function SlaBadge({
   const showRemaining = typeof remainingMinutes === 'number' && status !== 'paused';
 
   return (
-    <span className="inline-flex flex-col items-start gap-0.5">
-      <span className={cn(BADGE, meta.className, className)}>
+    <span className="inline-flex max-w-full flex-col items-start gap-0.5">
+      {/*
+        ป้ายนี้ยาวกว่าป้ายอื่นเพราะมีเวลาที่เหลือต่อท้าย เช่น
+        "ເກີນກຳນົດ · ເກີນມາ 1 ຊມ. 12 ນທ." ซึ่งบนจอ 320px กว้างเกินจอ
+        จึงยอมให้ตัดบรรทัดได้ ต่างจากป้ายสถานะอื่นที่สั้นพอเสมอ
+      */}
+      {/* flex-wrap จำเป็นด้วย เพราะ inline-flex ไม่ตัดบรรทัดให้เอง
+          whitespace-normal อย่างเดียวยังทำให้สามชิ้นในป้ายเรียงกันเป็นแถวยาวแถวเดียว */}
+      <span
+        className={cn(BADGE, 'max-w-full flex-wrap whitespace-normal', meta.className, className)}
+      >
         <Icon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
         {meta.label}
         {showRemaining && (

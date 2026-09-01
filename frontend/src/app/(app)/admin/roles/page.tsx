@@ -103,7 +103,61 @@ export default function RolesPage(): React.JSX.Element {
             </span>
           </CardHeader>
           <CardBody className="p-0">
-            <div className="overflow-x-auto">
+            {/*
+              บนจอเล็กแสดงเป็นรายการทีละสิทธิ์ ไม่ใช่เมทริกซ์ 5 คอลัมน์
+              เมทริกซ์กว้าง 720px บนจอ 375px ต้องปัดไปมาเพื่อจับคู่ช่องกับหัวคอลัมน์
+              ซึ่งอ่านผิดง่ายมากในเรื่องที่อ่านผิดไม่ได้อย่างสิทธิ์การใช้งาน
+            */}
+            <ul className="divide-y divide-hair lg:hidden">
+              {group.permissions.map((permission) => {
+                const rowLevelOnly = permission.code === 'approval.decide';
+                return (
+                  <li key={permission.code} className="px-4 py-3">
+                    <p className="font-mono text-caption text-ink-3">{permission.code}</p>
+                    <p className="text-body-sm text-ink">{permission.description}</p>
+                    {rowLevelOnly ? (
+                      <p className="mt-2 inline-flex items-center gap-1.5 text-caption text-ink-3">
+                        <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                        ກວດທີ່ລະດັບແຖວ ບໍ່ມອບຜ່ານບົດບາດ
+                      </p>
+                    ) : (
+                      <ul className="mt-2 flex flex-wrap gap-1.5">
+                        {ROLES.map((role) => {
+                          const base = role.permissions.includes(permission.code);
+                          const granted = isGranted(role.id, permission.code, base);
+                          return (
+                            <li key={role.id}>
+                              <button
+                                type="button"
+                                disabled={!canEdit}
+                                onClick={() => toggle(role.id, permission.code, base)}
+                                aria-pressed={granted}
+                                className={cn(
+                                  'inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3 text-caption font-semibold',
+                                  granted
+                                    ? 'bg-sla-ok-bg text-sla-ok'
+                                    : 'bg-subtle text-ink-3 line-through',
+                                  granted !== base && 'ring-2 ring-primary',
+                                )}
+                              >
+                                {granted ? (
+                                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                                ) : (
+                                  <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+                                )}
+                                {role.name_th}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[720px] border-collapse text-body-sm">
                 <caption className="sr-only">ເມທຣິກສິດຂອງກຸ່ມ {group.label}</caption>
                 <thead>

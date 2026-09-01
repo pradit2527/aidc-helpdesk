@@ -5,7 +5,8 @@ import { KeyRound, Lock, ShieldCheck, UserX } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
-import { ROLE_LABEL } from '@/components/layout/app-shell';
+import { ROLE_LABEL_KEY } from '@/components/layout/app-shell';
+import { useT } from '@/components/layout/preference-controls';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/field';
@@ -33,6 +34,7 @@ export default function UserDetailPage({
   if (!target) notFound();
 
   const isSuperAdmin = useHasRole('super_admin');
+  const t = useT();
   const roleOptions = isSuperAdmin ? [...ASSIGNABLE_ROLES, 'super_admin' as const] : ASSIGNABLE_ROLES;
 
   const [roles, setRoles] = React.useState<RoleCode[]>(target.roles);
@@ -142,7 +144,7 @@ export default function UserDetailPage({
                 }
                 className="h-4 w-4 rounded border-control"
               />
-              <span className="text-body-sm">{ROLE_LABEL[code]}</span>
+              <span className="text-body-sm">{t(ROLE_LABEL_KEY[code])}</span>
               {code === 'end_user' && (
                 <span className="ml-auto text-caption text-ink-3">ຖອນອອກບໍ່ໄດ້</span>
               )}

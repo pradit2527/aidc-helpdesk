@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Input } from '@/components/ui/field';
 import { Alert, Avatar, DefRow, MockNotice, PageHeader } from '@/components/ui/misc';
-import { ROLE_LABEL } from '@/components/layout/app-shell';
+import { ROLE_LABEL_KEY } from '@/components/layout/app-shell';
+import { useT } from '@/components/layout/preference-controls';
 import { useSession } from '@/lib/session';
 
 /**
@@ -20,6 +21,7 @@ import { useSession } from '@/lib/session';
  */
 export default function ProfilePage(): React.JSX.Element {
   const { user } = useSession();
+  const t = useT();
 
   const [channels, setChannels] = React.useState({
     in_app: true,
@@ -49,7 +51,7 @@ export default function ProfilePage(): React.JSX.Element {
             <DefRow label="ບໍລິສັດ">{user.company.name_th ?? user.company.code}</DefRow>
             <DefRow label="ພະແນກ">{user.department?.name ?? '—'}</DefRow>
             <DefRow label="ບົດບາດ">
-              {user.roles.map((r) => ROLE_LABEL[r]).join(' · ')}
+              {user.roles.map((r) => t(ROLE_LABEL_KEY[r])).join(' · ')}
             </DefRow>
             {user.scoped_companies.length > 0 && (
               <DefRow label="ຂອບເຂດບໍລິສັດ">

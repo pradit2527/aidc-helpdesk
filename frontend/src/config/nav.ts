@@ -38,14 +38,21 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+import type { MessageKey } from '@/config/i18n';
 import type { RoleCode } from '@/lib/types';
 
+/**
+ * เมนูเก็บ "คีย์คำแปล" ไม่ใช่ข้อความ
+ *
+ * ถ้าเก็บข้อความตายตัวไว้ตรงนี้ เมนูจะเป็นภาษาลาวเสมอแม้ผู้ใช้สลับเป็นไทย
+ * และจะกลายเป็นจุดเดียวในระบบที่สลับภาษาไม่ได้ ซึ่งสังเกตเห็นทันที
+ */
 export interface NavItem {
   href: string;
-  /** ข้อความเต็มบน sidebar */
-  label: string;
-  /** ข้อความสั้นบน bottom nav มือถือ — ยาวเกิน 2 พยางค์จะล้นช่อง */
-  short: string;
+  /** คีย์ของข้อความเต็มบน sidebar */
+  labelKey: MessageKey;
+  /** คีย์ของข้อความสั้นบน bottom nav มือถือ — ยาวเกิน 2 พยางค์จะล้นช่อง */
+  shortKey: MessageKey;
   icon: LucideIcon;
   roles: readonly RoleCode[];
   /** ให้เมนูยังไฮไลต์อยู่เมื่ออยู่ในหน้าลูก เช่น /tickets/1038 */
@@ -53,7 +60,7 @@ export interface NavItem {
 }
 
 export interface NavSection {
-  title: string | null;
+  titleKey: MessageKey | null;
   items: readonly NavItem[];
 }
 
@@ -80,52 +87,52 @@ const SUPER = ['super_admin'] as const satisfies readonly RoleCode[];
 
 export const NAV_SECTIONS: readonly NavSection[] = [
   {
-    title: null,
+    titleKey: null,
     items: [
       {
         href: '/tickets/my',
-        label: 'ເລື່ອງຂອງຂ້ອຍ',
-        short: 'ຂອງຂ້ອຍ',
+        labelKey: 'nav.myTickets',
+        shortKey: 'navShort.myTickets',
         icon: ClipboardList,
         roles: ALL_ROLES,
       },
       {
         href: '/queue',
-        label: 'ຄິວວຽກຂອງຂ້ອຍ',
-        short: 'ຄິວວຽກ',
+        labelKey: 'nav.queue',
+        shortKey: 'navShort.queue',
         icon: Inbox,
         roles: STAFF,
       },
       {
         href: '/tickets',
-        label: 'ເລື່ອງທັງໝົດ',
-        short: 'ທັງໝົດ',
+        labelKey: 'nav.allTickets',
+        shortKey: 'navShort.allTickets',
         icon: ListChecks,
         roles: STAFF_AND_VIEWER,
       },
       {
         href: '/approvals',
-        label: 'ລໍຖ້າອະນຸມັດ',
-        short: 'ອະນຸມັດ',
+        labelKey: 'nav.approvals',
+        shortKey: 'navShort.approvals',
         icon: CheckSquare,
         roles: ALL_ROLES,
       },
     ],
   },
   {
-    title: 'ພາບລວມ',
+    titleKey: 'navGroup.overview',
     items: [
       {
         href: '/dashboard',
-        label: 'ແດຊບອດ',
-        short: 'ແດຊບອດ',
+        labelKey: 'nav.dashboard',
+        shortKey: 'navShort.dashboard',
         icon: LayoutDashboard,
         roles: STAFF_AND_VIEWER,
       },
       {
         href: '/reports',
-        label: 'ສູນລາຍງານ',
-        short: 'ລາຍງານ',
+        labelKey: 'nav.reports',
+        shortKey: 'navShort.reports',
         icon: FileBarChart,
         roles: STAFF_AND_VIEWER,
         matchPrefix: true,
@@ -133,138 +140,138 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     ],
   },
   {
-    title: 'ຄວາມຮູ້',
+    titleKey: 'navGroup.knowledge',
     items: [
       {
         href: '/kb',
-        label: 'ຄັງຄວາມຮູ້',
-        short: 'ຄວາມຮູ້',
+        labelKey: 'nav.kb',
+        shortKey: 'navShort.kb',
         icon: BookOpen,
         roles: ALL_ROLES,
         matchPrefix: true,
       },
       {
         href: '/notifications',
-        label: 'ການແຈ້ງເຕືອນ',
-        short: 'ແຈ້ງເຕືອນ',
+        labelKey: 'nav.notifications',
+        shortKey: 'navShort.notifications',
         icon: Bell,
         roles: ALL_ROLES,
       },
     ],
   },
   {
-    title: 'ຜູ້ດູແລ',
+    titleKey: 'navGroup.admin',
     items: [
       {
         href: '/admin',
-        label: 'ສູນຄວບຄຸມ',
-        short: 'ຄວບຄຸມ',
+        labelKey: 'nav.adminConsole',
+        shortKey: 'nav.adminConsole',
         icon: SlidersHorizontal,
         roles: ADMIN,
       },
       {
         href: '/admin/users',
-        label: 'ຈັດການຜູ້ໃຊ້',
-        short: 'ຜູ້ໃຊ້',
+        labelKey: 'nav.users',
+        shortKey: 'navShort.users',
         icon: Users,
         roles: ADMIN,
         matchPrefix: true,
       },
       {
         href: '/admin/departments',
-        label: 'ຈັດການພະແນກ',
-        short: 'ພະແນກ',
+        labelKey: 'nav.departments',
+        shortKey: 'nav.departments',
         icon: FolderTree,
         roles: ADMIN,
       },
       {
         href: '/admin/categories',
-        label: 'ໝວດໝູ່ບັນຫາ',
-        short: 'ໝວດໝູ່',
+        labelKey: 'nav.categories',
+        shortKey: 'nav.categories',
         icon: FolderTree,
         roles: ADMIN,
       },
       {
         href: '/admin/roles',
-        label: 'ບົດບາດ ແລະ ສິດ',
-        short: 'ສິດ',
+        labelKey: 'nav.roles',
+        shortKey: 'nav.roles',
         icon: ShieldCheck,
         roles: ADMIN,
       },
       {
         href: '/admin/catalog',
-        label: 'ແຄັດຕາລັອກບໍລິການ',
-        short: 'ແຄັດຕາລັອກ',
+        labelKey: 'nav.catalog',
+        shortKey: 'nav.catalog',
         icon: Package,
         roles: ADMIN,
       },
       {
         href: '/admin/checklists',
-        label: 'ແມ່ແບບລາຍການກວດ',
-        short: 'ລາຍການກວດ',
+        labelKey: 'nav.checklists',
+        shortKey: 'nav.checklists',
         icon: ClipboardCheck,
         roles: ADMIN,
       },
       {
         href: '/admin/services',
-        label: 'ທະບຽນລະບົບງານ',
-        short: 'ລະບົບງານ',
+        labelKey: 'nav.services',
+        shortKey: 'nav.services',
         icon: Server,
         roles: STAFF,
       },
       {
         href: '/admin/problems',
-        label: 'Problem ແລະ RCA',
-        short: 'Problem',
+        labelKey: 'nav.problems',
+        shortKey: 'nav.problems',
         icon: Wrench,
         roles: STAFF,
       },
       {
         href: '/admin/audit-logs',
-        label: 'ບັນທຶກການໃຊ້ງານ',
-        short: 'ບັນທຶກ',
+        labelKey: 'nav.auditLogs',
+        shortKey: 'nav.auditLogs',
         icon: ScrollText,
         roles: ADMIN,
       },
       {
         href: '/admin/sla',
-        label: 'ຕັ້ງຄ່າ SLA',
-        short: 'SLA',
+        labelKey: 'nav.sla',
+        shortKey: 'nav.sla',
         icon: Timer,
         roles: SUPER,
       },
       {
         href: '/admin/business-hours',
-        label: 'ເວລາເຮັດວຽກ ແລະ ວັນພັກ',
-        short: 'ເວລາ',
+        labelKey: 'nav.businessHours',
+        shortKey: 'nav.businessHours',
         icon: CalendarClock,
         roles: SUPER,
       },
       {
         href: '/admin/escalation',
-        label: 'ກົດຍົກລະດັບ',
-        short: 'ຍົກລະດັບ',
+        labelKey: 'nav.escalation',
+        shortKey: 'nav.escalation',
         icon: Siren,
         roles: SUPER,
       },
       {
         href: '/admin/software',
-        label: 'ຊອບແວທີ່ອະນຸມັດ',
-        short: 'ຊອບແວ',
+        labelKey: 'nav.software',
+        shortKey: 'nav.software',
         icon: ListChecks,
         roles: SUPER,
       },
       {
         href: '/admin/companies',
-        label: 'ຈັດການບໍລິສັດ',
-        short: 'ບໍລິສັດ',
+        labelKey: 'nav.companies',
+        shortKey: 'nav.companies',
         icon: Building2,
         roles: SUPER,
       },
       {
         href: '/admin/system',
-        label: 'ຂໍ້ມູນລະບົບ',
-        short: 'ລະບົບ',
+        labelKey: 'nav.system',
+        shortKey: 'nav.system',
         icon: Server,
         roles: SUPER,
       },
@@ -328,8 +335,8 @@ export function bottomNavItems(roles: readonly RoleCode[]): NavItem[] {
         all.find((i) => i.href === href) ??
         ({
           href: '/profile',
-          label: 'ໂປຣໄຟລ໌ຂອງຂ້ອຍ',
-          short: 'ຂ້ອຍ',
+          labelKey: 'nav.profile',
+          shortKey: 'navShort.profile',
           icon: User,
           roles: ALL_ROLES,
         } satisfies NavItem),
@@ -344,45 +351,51 @@ export function isActive(item: Pick<NavItem, 'href' | 'matchPrefix'>, pathname: 
   return false;
 }
 
-/** ชื่อหน้าใช้เป็นหัวข้อบน topbar และ <title> */
-export const PAGE_TITLES: Record<string, string> = {
-  '/tickets/my': 'ເລື່ອງຂອງຂ້ອຍ',
-  '/tickets': 'ເລື່ອງທັງໝົດ',
-  '/tickets/new': 'ແຈ້ງບັນຫາ',
-  '/queue': 'ຄິວວຽກຂອງຂ້ອຍ',
-  '/approvals': 'ລໍຖ້າອະນຸມັດ',
-  '/dashboard': 'ແດຊບອດ',
-  '/reports': 'ສູນລາຍງານ',
-  '/reports/sla-compliance': 'ລາຍງານ SLA ລາຍເດືອນ',
-  '/kb': 'ຄັງຄວາມຮູ້',
-  '/kb/new': 'ຂຽນບົດຄວາມໃໝ່',
-  '/notifications': 'ການແຈ້ງເຕືອນ',
-  '/profile': 'ໂປຣໄຟລ໌ ແລະ ການຕັ້ງຄ່າ',
-  '/change-password': 'ປ່ຽນລະຫັດຜ່ານ',
-  '/admin': 'ສູນຄວບຄຸມຜູ້ດູແລລະບົບ',
-  '/admin/users': 'ຈັດການຜູ້ໃຊ້',
-  '/admin/escalation': 'ກົດຍົກລະດັບ ແລະ ຜູ້ຮັບແຈ້ງ',
-  '/admin/catalog': 'ແຄັດຕາລັອກບໍລິການ',
-  '/admin/checklists': 'ແມ່ແບບລາຍການກວດ',
-  '/admin/services': 'ທະບຽນລະບົບງານ',
-  '/admin/problems': 'Problem ແລະ RCA',
-  '/admin/software': 'ຊອບແວທີ່ອະນຸມັດ',
-  '/admin/users/import': 'ນຳເຂົ້າຜູ້ໃຊ້ຈາກໄຟລ໌',
-  '/admin/departments': 'ຈັດການພະແນກ',
-  '/admin/categories': 'ໝວດໝູ່ບັນຫາ',
-  '/admin/roles': 'ບົດບາດ ແລະ ສິດ',
-  '/admin/audit-logs': 'ບັນທຶກການໃຊ້ງານ',
-  '/admin/sla': 'ຕັ້ງຄ່າ SLA',
-  '/admin/business-hours': 'ເວລາເຮັດວຽກ ແລະ ວັນພັກ',
-  '/admin/companies': 'ຈັດການບໍລິສັດ',
-  '/admin/system': 'ຂໍ້ມູນລະບົບ',
+/**
+ * หัวข้อหน้าเป็น "คีย์คำแปล" ไม่ใช่ข้อความ
+ *
+ * ก่อนหน้านี้เก็บเป็นข้อความลาวตายตัว ผลคือแถบบนกับหัวเรื่องยังเป็นลาว
+ * ทั้งที่เมนูข้าง ๆ เปลี่ยนเป็นไทยแล้ว ซึ่งเห็นได้ทันทีว่าแปลไม่ครบ
+ */
+export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
+  '/tickets/my': 'nav.myTickets',
+  '/tickets': 'nav.allTickets',
+  '/tickets/new': 'page.newTicket',
+  '/queue': 'nav.queue',
+  '/approvals': 'nav.approvals',
+  '/dashboard': 'nav.dashboard',
+  '/reports': 'nav.reports',
+  '/reports/sla-compliance': 'page.slaReport',
+  '/kb': 'nav.kb',
+  '/kb/new': 'page.newArticle',
+  '/notifications': 'nav.notifications',
+  '/profile': 'page.profile',
+  '/change-password': 'page.changePassword',
+  '/admin': 'page.adminConsole',
+  '/admin/users': 'nav.users',
+  '/admin/users/import': 'page.importUsers',
+  '/admin/departments': 'nav.departments',
+  '/admin/categories': 'nav.categories',
+  '/admin/roles': 'nav.roles',
+  '/admin/audit-logs': 'nav.auditLogs',
+  '/admin/sla': 'nav.sla',
+  '/admin/business-hours': 'nav.businessHours',
+  '/admin/escalation': 'nav.escalation',
+  '/admin/catalog': 'nav.catalog',
+  '/admin/checklists': 'nav.checklists',
+  '/admin/services': 'nav.services',
+  '/admin/problems': 'nav.problems',
+  '/admin/software': 'nav.software',
+  '/admin/companies': 'nav.companies',
+  '/admin/system': 'nav.system',
 };
 
-export function pageTitle(pathname: string): string {
-  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
-  if (/^\/tickets\/\d+$/.test(pathname)) return 'ລາຍລະອຽດເລື່ອງ';
-  if (/^\/kb\/\d+$/.test(pathname)) return 'ບົດຄວາມ';
-  if (/^\/kb\/\d+\/edit$/.test(pathname)) return 'ແກ້ໄຂບົດຄວາມ';
-  if (/^\/admin\/users\/\d+$/.test(pathname)) return 'ລາຍລະອຽດຜູ້ໃຊ້';
-  return 'AIDC Service Desk';
+export function pageTitleKey(pathname: string): MessageKey {
+  const exact = PAGE_TITLE_KEYS[pathname];
+  if (exact) return exact;
+  if (/^\/tickets\/\d+$/.test(pathname)) return 'page.ticketDetail';
+  if (/^\/kb\/\d+$/.test(pathname)) return 'page.kbArticle';
+  if (/^\/kb\/\d+\/edit$/.test(pathname)) return 'page.kbEdit';
+  if (/^\/admin\/users\/\d+$/.test(pathname)) return 'page.userDetail';
+  return 'page.fallback';
 }

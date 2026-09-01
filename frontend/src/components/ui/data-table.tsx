@@ -55,56 +55,94 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-body-sm">
-        {caption && <caption className="sr-only">{caption}</caption>}
-        <thead>
-          <tr className="border-b border-hair text-left">
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                scope="col"
-                style={col.width ? { width: col.width } : undefined}
-                className={cn(
-                  'px-3 py-2.5 text-caption font-semibold text-ink-2',
-                  col.align === 'right' && 'text-right',
-                  col.align === 'center' && 'text-center',
-                  col.hideBelow && HIDE_CLASS[col.hideBelow],
-                )}
-              >
-                {col.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={rowKey(row)}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={cn(
-                'border-b border-hair last:border-0',
-                onRowClick && 'cursor-pointer hover:bg-subtle',
+    <>
+      {/*
+        บนจอเล็กแปลงเป็นการ์ด ไม่ใช่ตารางที่ปัดซ้ายขวา
+        ตารางกว้าง 640–720px บนจอ 375px อ่านได้ทีละสองคอลัมน์ ต้องปัดไปมา
+        เพื่อจับคู่ค่ากับหัวคอลัมน์ ซึ่งใช้งานจริงไม่ไหว
+        คอลัมน์แรกกลายเป็นหัวการ์ด ที่เหลือเป็นคู่ ป้ายกำกับ–ค่า
+      */}
+      <ul className="flex flex-col gap-3 lg:hidden">
+        {rows.map((row) => (
+          <li
+            key={rowKey(row)}
+            onClick={onRowClick ? () => onRowClick(row) : undefined}
+            className={cn(
+              'rounded-lg border border-hair bg-surface p-4 shadow-card',
+              onRowClick && 'cursor-pointer',
+            )}
+          >
+            {columns[0] && <div className="mb-2">{columns[0].render(row)}</div>}
+            <dl className="divide-y divide-hair">
+              {columns.slice(1).map((col) =>
+                col.header ? (
+                  <div key={col.key} className="flex items-baseline justify-between gap-3 py-1.5">
+                    <dt className="flex-none text-caption text-ink-3">{col.header}</dt>
+                    <dd className="min-w-0 text-right text-body-sm">{col.render(row)}</dd>
+                  </div>
+                ) : (
+                  // คอลัมน์ที่ไม่มีหัวข้อคือคอลัมน์ปุ่ม วางเต็มแถวไม่ต้องมีป้ายกำกับ
+                  <div key={col.key} className="pt-2">
+                    {col.render(row)}
+                  </div>
+                ),
               )}
-            >
+            </dl>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="w-full min-w-[640px] border-collapse text-body-sm">
+          {caption && <caption className="sr-only">{caption}</caption>}
+          <thead>
+            <tr className="border-b border-hair text-left">
               {columns.map((col) => (
-                <td
+                <th
                   key={col.key}
+                  scope="col"
+                  style={col.width ? { width: col.width } : undefined}
                   className={cn(
-                    'px-3 py-3 align-middle',
+                    'px-3 py-2.5 text-caption font-semibold text-ink-2',
                     col.align === 'right' && 'text-right',
                     col.align === 'center' && 'text-center',
                     col.hideBelow && HIDE_CLASS[col.hideBelow],
                   )}
                 >
-                  {col.render(row)}
-                </td>
+                  {col.header}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={rowKey(row)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={cn(
+                  'border-b border-hair last:border-0',
+                  onRowClick && 'cursor-pointer hover:bg-subtle',
+                )}
+              >
+                {columns.map((col) => (
+                  <td
+                    key={col.key}
+                    className={cn(
+                      'px-3 py-3 align-middle',
+                      col.align === 'right' && 'text-right',
+                      col.align === 'center' && 'text-center',
+                      col.hideBelow && HIDE_CLASS[col.hideBelow],
+                    )}
+                  >
+                    {col.render(row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

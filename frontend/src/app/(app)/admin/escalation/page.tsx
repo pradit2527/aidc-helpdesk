@@ -211,7 +211,8 @@ function RulesTable({ activeKeys }: { activeKeys: Set<string> }): React.JSX.Elem
           type="button"
           onClick={() => toast.success(`${r.is_active ? 'ປິດ' : 'ເປີດ'}ກົດ ${r.code} ແລ້ວ`)}
           className={cn(
-            'rounded-full px-2.5 py-0.5 text-caption font-semibold',
+            // เป็นปุ่มกดจริง ไม่ใช่ป้ายสถานะ จึงต้องสูงพอให้แตะด้วยนิ้วได้ (กฎ M-1)
+            'inline-flex min-h-[36px] items-center rounded-full px-3 text-caption font-semibold',
             r.is_active ? 'bg-sla-ok-bg text-sla-ok' : 'bg-subtle text-ink-3',
           )}
         >

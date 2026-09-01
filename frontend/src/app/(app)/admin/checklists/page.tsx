@@ -4,7 +4,8 @@ import { FileText, Paperclip, Pencil, Plus } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
-import { ROLE_LABEL } from '@/components/layout/app-shell';
+import { ROLE_LABEL_KEY } from '@/components/layout/app-shell';
+import { useT } from '@/components/layout/preference-controls';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
@@ -20,6 +21,8 @@ import type { RoleCode } from '@/lib/types';
  * การตรวจสอบภายในถามหาหลักฐานย้อนหลัง เช่นการปิดสิทธิ์วันพนักงานลาออก
  */
 export default function ChecklistsPage(): React.JSX.Element {
+  const t = useT();
+
   return (
     <div className="flex flex-col gap-4">
       <BackLink href="/admin" label="ກັບໄປສູນຄວບຄຸມ" />
@@ -100,7 +103,7 @@ export default function ChecklistsPage(): React.JSX.Element {
                           {item.default_role_code && (
                             <span className="text-ink-3">
                               ຜູ້ຮັບຜິດຊອບ{' '}
-                              {ROLE_LABEL[item.default_role_code as RoleCode] ??
+                              {t(ROLE_LABEL_KEY[item.default_role_code as RoleCode]) ??
                                 item.default_role_code}
                             </span>
                           )}

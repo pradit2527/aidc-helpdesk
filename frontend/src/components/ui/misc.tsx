@@ -19,8 +19,13 @@ export function PageHeader({
   return (
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="text-h1">{title}</h1>
-        {description && <p className="mt-1 text-body-sm text-ink-2">{description}</p>}
+        {/*
+          แถบบนแสดงชื่อหน้าอยู่แล้ว การพิมพ์ซ้ำอีกรอบตรงนี้ทำให้เห็นคำเดียวกัน
+          สองที่ติดกัน และยังได้ h1 สองตัวในหน้าเดียว ซึ่งผิดโครงสร้างหัวข้อ
+          จึงเหลือไว้ให้โปรแกรมอ่านหน้าจอเท่านั้น
+        */}
+        <h1 className="sr-only">{title}</h1>
+        {description && <p className="text-body-sm text-ink-2">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

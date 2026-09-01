@@ -59,13 +59,85 @@
   color-scheme: light;
 }
 
-/* โหมดมืดยังไม่ทำในเฟส 1 (ADR-003) — แต่ประกาศเป็น variable ไว้แล้ว
-   จึงเพิ่มภายหลังได้โดยนิยาม token ชุดใหม่ใต้ :root[data-theme="dark"]
-   ไม่ต้องแตะ component แม้แต่ตัวเดียว */
+/* ══════════════════════════════════════════════════════════════════════
+   โหมดมืด
+
+   นิยามเฉพาะ token ที่ต้องเปลี่ยน ไม่แตะ component แม้แต่ตัวเดียว
+   ซึ่งเป็นเหตุผลที่ตั้งแต่แรกทุกสีชี้ไปที่ตัวแปร ไม่ได้เขียนค่าสีลงในคลาส
+
+   ⚠️ ไม่ได้กลับสีจากโหมดสว่างตรง ๆ
+      สีพื้นของป้ายสถานะในโหมดสว่างเป็นสีอ่อน (เช่น #fee2e2) ถ้าเอามาใช้
+      บนพื้นเข้มจะกลายเป็นแถบสว่างจ้าที่แย่งสายตาไปหมด จึงใช้สีเข้มที่มี
+      ความอิ่มตัวต่ำเป็นพื้น แล้วให้ตัวอักษรเป็นเฉดสว่างของสีเดียวกันแทน
+   ══════════════════════════════════════════════════════════════════════ */
+:root[data-theme='dark'] {
+  --bg-page: #0d1526;
+  --bg-surface: #131d33;
+  --bg-subtle: #1b2740;
+
+  --text-primary: #eef2f8;   /* 14.8:1 บนพื้นการ์ด — AAA */
+  --text-secondary: #b6c3d6; /*  8.1:1 — AAA */
+  --text-muted: #8b9ab2;     /*  4.9:1 — AA */
+  --text-inverse: #0d1526;
+
+  --border: #23324f;
+  --border-control: #47597a; /* ขอบ input ต้องผ่าน 3:1 บนพื้นการ์ด */
+
+  /* ครามเข้มของโหมดสว่างจมไปกับพื้นมืด จึงเลื่อนขึ้นสองขั้น */
+  --primary: #3b82f6;
+  --primary-hover: #60a5fa;
+  --primary-subtle: #17274a;
+  --focus-ring: #60a5fa;
+
+  --p1-fg: #fca5a5;  --p1-bg: #3b1a1d;  --p1-solid: #ef4444;
+  --p2-fg: #fdba74;  --p2-bg: #3a2417;  --p2-solid: #f97316;
+  --p3-fg: #fde047;  --p3-bg: #362e13;  --p3-solid: #eab308;
+  --p4-fg: #86efac;  --p4-bg: #17301f;  --p4-solid: #22c55e;
+
+  --st-new-fg: #93c5fd;        --st-new-bg: #17274a;
+  --st-assigned-fg: #c4b5fd;   --st-assigned-bg: #241f45;
+  --st-progress-fg: #7dd3fc;   --st-progress-bg: #12283c;
+  --st-pending-fg: #fcd34d;    --st-pending-bg: #35290f;
+  --st-resolved-fg: #86efac;   --st-resolved-bg: #17301f;
+  --st-closed-fg: #cbd5e1;     --st-closed-bg: #22304b;
+  --st-cancelled-fg: #94a3b8;  --st-cancelled-bg: #1b2740;
+
+  --sla-ok-fg: #86efac;      --sla-ok-bg: #17301f;
+  --sla-risk-fg: #fdba74;    --sla-risk-bg: #3a2417;
+  --sla-breach-fg: #fca5a5;  --sla-breach-bg: #3b1a1d;  --sla-breach-solid: #ef4444;
+  --sla-paused-fg: #94a3b8;  --sla-paused-bg: #1b2740;
+
+  /* เส้นกราฟต้องสว่างพอบนพื้นมืด และยังแยกกันได้เมื่อจำลองภาวะตาบอดสี */
+  --chart-1: #60a5fa;  --chart-2: #22d3ee;  --chart-3: #a78bfa;
+  --chart-4: #fb923c;  --chart-5: #4ade80;  --chart-6: #f472b6;
+
+  /* บอกเบราว์เซอร์ให้ใช้ชุดมืดกับสิ่งที่จัดสไตล์เองไม่ได้
+     เช่นสกรอลบาร์ ตัวเลือกใน dropdown และปฏิทินของ input[type=date] */
+  color-scheme: dark;
+}
+
+/* เงาบนพื้นมืดต้องเข้มกว่ามาก มิฉะนั้นจะมองไม่เห็นเลย */
+:root[data-theme='dark'] .shadow-card {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.5),
+    0 2px 6px -1px rgb(0 0 0 / 0.45),
+    0 10px 24px -14px rgb(0 0 0 / 0.7);
+}
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /*
+     * กันหน้าเว็บเลื่อนซ้ายขวาโดยไม่ตั้งใจ
+     *
+     * ตารางกว้างอยู่ในกล่องที่เลื่อนเองได้อยู่แล้ว แต่ก็ยังมีบางกรณีที่ความกว้าง
+     * รั่วออกมาถึงระดับหน้า ทำให้ผู้ใช้ปัดไปเจอพื้นที่ว่างเปล่าทางขวา
+     *
+     * ใช้ clip ไม่ใช่ hidden เพราะ hidden จะทำให้ html กลายเป็น scroll container
+     * แล้ว position: sticky ของแถบเมนูและหัวตารางจะหยุดทำงาน
+     * ส่วน clip ตัดทิ้งเฉย ๆ โดยไม่สร้าง scroll container
+     */
+    overflow-x: clip;
   }
 
   body {
@@ -266,21 +338,21 @@
    * เส้นขาวพาดกลางเมนู ซึ่งเด่นกว่าตัวเมนูเอง จึงบางลงและกลืนไปกับพื้น
    * แล้วค่อยชัดขึ้นตอนชี้เมาส์
    */
-  .app-sidebar-nav {
+  .app-sidebar {
     scrollbar-width: thin;
     scrollbar-color: var(--side-hair) transparent;
   }
-  .app-sidebar-nav::-webkit-scrollbar {
+  .app-sidebar::-webkit-scrollbar {
     width: 6px;
   }
-  .app-sidebar-nav::-webkit-scrollbar-track {
+  .app-sidebar::-webkit-scrollbar-track {
     background: transparent;
   }
-  .app-sidebar-nav::-webkit-scrollbar-thumb {
+  .app-sidebar::-webkit-scrollbar-thumb {
     background: var(--side-hair);
     border-radius: 3px;
   }
-  .app-sidebar-nav:hover::-webkit-scrollbar-thumb {
+  .app-sidebar:hover::-webkit-scrollbar-thumb {
     background: #3d5680;
   }
 

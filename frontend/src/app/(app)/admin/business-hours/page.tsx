@@ -72,7 +72,9 @@ export default function BusinessHoursPage(): React.JSX.Element {
               </label>
 
               {row.is_working_day ? (
-                <span className="flex items-center gap-2">
+                // ช่องเวลาต้องยืดหดได้ ไม่ใช่ความกว้างตายตัว
+                // สองช่อง × 130px + ตัวคั่น รวมแล้วกว้างกว่าจอ 320px
+                <span className="flex min-w-0 flex-1 items-center gap-2">
                   <Input
                     type="time"
                     value={row.start_time}
@@ -86,7 +88,7 @@ export default function BusinessHoursPage(): React.JSX.Element {
                         ),
                       )
                     }
-                    className="w-[130px]"
+                    className="w-full min-w-0"
                   />
                   <span aria-hidden="true" className="text-ink-3">
                     –
@@ -102,7 +104,7 @@ export default function BusinessHoursPage(): React.JSX.Element {
                         ),
                       )
                     }
-                    className="w-[130px]"
+                    className="w-full min-w-0"
                   />
                 </span>
               ) : (
