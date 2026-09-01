@@ -21,6 +21,7 @@ import {
   smallint,
   text,
   timestamp,
+  unique,
   varchar,
 } from 'drizzle-orm/pg-core';
 
@@ -66,6 +67,9 @@ export const ticketCategory = pgTable(
   (t) => [
     check('ck_ticket_category_impact_valid', inList('default_impact', IMPACT)),
     check('ck_ticket_category_urgency_valid', inList('default_urgency', URGENCY)),
+    // code ต้องไม่ซ้ำในขอบเขตเดียวกัน มิฉะนั้น seed จะสร้างหมวดหมู่ซ้ำทุกครั้งที่รัน
+    // และ ticket ที่อ้าง 'NETWORK' จะไม่รู้ว่าหมายถึงแถวไหน
+    unique('uq_ticket_category_company_code').on(t.companyId, t.code).nullsNotDistinct(),
     index('ix_ticket_category_company').on(t.companyId),
   ],
 );

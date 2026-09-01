@@ -15,6 +15,13 @@
       "when": 1788232493118,
       "tag": "0001_search_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788233704919,
+      "tag": "0002_natural_keys",
+      "breakpoints": true
     }
   ]
 }

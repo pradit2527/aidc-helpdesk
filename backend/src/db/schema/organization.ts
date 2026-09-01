@@ -216,7 +216,7 @@ export const escalationContact = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique('uq_escalation_contact').on(t.companyId, t.contactKey, t.userId),
+    unique('uq_escalation_contact').on(t.companyId, t.contactKey, t.userId).nullsNotDistinct(),
     check('ck_escalation_contact_key_valid', inList('contact_key', CONTACT_KEY)),
     index('ix_escalation_contact_key').on(t.contactKey),
   ],

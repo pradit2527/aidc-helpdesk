@@ -60,7 +60,13 @@ export const slaPolicy = pgTable(
     effectiveTo: date('effective_to'), // null = ยังบังคับใช้อยู่
     ...timestamps,
   },
-  (t) => [index('ix_sla_policy_company').on(t.companyId)],
+  (t) => [
+    // คีย์ธรรมชาติเป็น doc_ref + doc_version ไม่ใช่ name โดยตั้งใจ
+    // เพราะการขึ้นเวอร์ชันใหม่ต้อง INSERT แถวใหม่ที่ชื่อเดียวกัน
+    // ถ้าใช้ name เป็นคีย์ จะบล็อกวิธีทำเวอร์ชันที่เอกสารกำหนดไว้เอง
+    unique('uq_sla_policy_company_doc').on(t.companyId, t.docRef, t.docVersion).nullsNotDistinct(),
+    index('ix_sla_policy_company').on(t.companyId),
+  ],
 );
 
 export const slaTarget = pgTable(
@@ -101,7 +107,10 @@ export const businessHours = pgTable(
     isWorkingDay: boolean('is_working_day').default(true).notNull(),
   },
   (t) => [
-    unique('uq_business_hours_company_dow').on(t.companyId, t.dayOfWeek),
+    // company_id = NULL หมายถึง "ใช้ทั้งกลุ่ม" ซึ่งเป็นค่าที่ seed ใช้จริง
+    // ปกติ Postgres ถือว่า NULL แต่ละตัวไม่เท่ากัน unique จึงไม่กันซ้ำให้เลย
+    // และเปิดทางให้มีแถวระดับกลุ่มซ้ำกันได้ ต้องบังคับ NULLS NOT DISTINCT
+    unique('uq_business_hours_company_dow').on(t.companyId, t.dayOfWeek).nullsNotDistinct(),
     check('ck_business_hours_dow_range', sql`day_of_week BETWEEN 0 AND 6`),
     check('ck_business_hours_order', sql`start_time < end_time`),
     index('ix_business_hours_company').on(t.companyId),
@@ -117,7 +126,7 @@ export const holiday = pgTable(
     name: varchar('name', { length: 150 }).notNull(),
   },
   (t) => [
-    unique('uq_holiday_company_date').on(t.companyId, t.holidayDate),
+    unique('uq_holiday_company_date').on(t.companyId, t.holidayDate).nullsNotDistinct(),
     index('ix_holiday_date').on(t.holidayDate),
   ],
 );
@@ -148,7 +157,7 @@ export const slaEscalationRule = pgTable(
     isActive: boolean('is_active').default(true).notNull(),
     ...timestamps,
   },
-  (t) => [unique('uq_escalation_rule_company_code').on(t.companyId, t.code)],
+  (t) => [unique('uq_escalation_rule_company_code').on(t.companyId, t.code).nullsNotDistinct()],
 );
 
 /** ทะเบียนระบบงาน (SLA ข้อ 2) — จำเป็นต่อ KPI-6 Uptime และ SOP-03 ขั้นอนุมัติที่ 2 */
@@ -169,7 +178,7 @@ export const service = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique('uq_service_company_code').on(t.companyId, t.code),
+    unique('uq_service_company_code').on(t.companyId, t.code).nullsNotDistinct(),
     check('ck_service_tier_valid', inList('service_tier', SERVICE_TIER)),
     check('ck_service_group_valid', inList('service_group', SERVICE_GROUP)),
     index('ix_service_company').on(t.companyId),

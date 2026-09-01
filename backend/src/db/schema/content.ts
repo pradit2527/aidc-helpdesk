@@ -35,13 +35,19 @@ const timestamps = {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 };
 
-export const kbCategory = pgTable('kb_category', {
-  id: bigserial('id', { mode: 'number' }).primaryKey(),
-  parentId: bigint('parent_id', { mode: 'number' }),
-  nameTh: varchar('name_th', { length: 150 }).notNull(),
-  sortOrder: integer('sort_order').default(0).notNull(),
-  isActive: boolean('is_active').default(true).notNull(),
-});
+export const kbCategory = pgTable(
+  'kb_category',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    parentId: bigint('parent_id', { mode: 'number' }),
+    nameTh: varchar('name_th', { length: 150 }).notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+  },
+  // ชื่อซ้ำภายใต้แม่เดียวกันไม่ได้ — parent_id เป็น NULL สำหรับหมวดระดับบนสุด
+  // ซึ่งเป็นกรณีที่ต้องกันซ้ำมากที่สุด จึงต้อง NULLS NOT DISTINCT
+  (t) => [unique('uq_kb_category_parent_name').on(t.parentId, t.nameTh).nullsNotDistinct()],
+);
 
 export const kbArticle = pgTable(
   'kb_article',

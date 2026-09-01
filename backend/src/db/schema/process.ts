@@ -48,7 +48,7 @@ export const checklistTemplate = pgTable(
     isActive: boolean('is_active').default(true).notNull(),
     ...timestamps,
   },
-  (t) => [unique('uq_checklist_template_company_code').on(t.companyId, t.code)],
+  (t) => [unique('uq_checklist_template_company_code').on(t.companyId, t.code).nullsNotDistinct()],
 );
 
 export const checklistItem = pgTable(
@@ -106,7 +106,7 @@ export const serviceCatalogItem = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique('uq_catalog_item_company_code').on(t.companyId, t.code),
+    unique('uq_catalog_item_company_code').on(t.companyId, t.code).nullsNotDistinct(),
     check('ck_catalog_target_mode_valid', inList('target_mode', TARGET_MODE)),
     check('ck_catalog_clock_start_valid', inList('clock_start_event', CLOCK_START_EVENT)),
     check('ck_catalog_priority_valid', inList('default_priority', PRIORITY)),
@@ -222,6 +222,10 @@ export const ticketChecklistItem = pgTable(
       'ck_checklist_item_done_complete',
       sql`NOT is_done OR (done_by IS NOT NULL AND done_at IS NOT NULL)`,
     ),
+    // ข้อจากเทมเพลตต้องปรากฏได้ครั้งเดียวต่อ checklist
+    // ปล่อยให้ NULL ซ้ำได้โดยตั้งใจ (ไม่ใส่ nullsNotDistinct) เพราะ
+    // checklist_item_id = NULL คือข้อที่เพิ่มเองเฉพาะ ticket นั้น ซึ่งมีกี่ข้อก็ได้
+    unique('uq_ticket_checklist_item').on(t.ticketChecklistId, t.checklistItemId),
     index('ix_ticket_checklist_item_parent').on(t.ticketChecklistId),
   ],
 );
@@ -244,5 +248,9 @@ export const approvedSoftware = pgTable(
     isActive: boolean('is_active').default(true).notNull(),
     ...timestamps,
   },
-  (t) => [index('ix_approved_software_name').on(t.name), index('ix_approved_software_company').on(t.companyId)],
+  (t) => [
+    unique('uq_approved_software').on(t.companyId, t.name, t.version).nullsNotDistinct(),
+    index('ix_approved_software_name').on(t.name),
+    index('ix_approved_software_company').on(t.companyId),
+  ],
 );
