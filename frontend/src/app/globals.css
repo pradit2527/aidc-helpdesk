@@ -175,6 +175,12 @@
     --side-active: rgb(255 255 255 / 0.11);
     /* สีของแถบบอกตำแหน่ง — สว่างกว่า --primary เพราะครามเข้มจมไปกับพื้นกรมท่า */
     --side-accent: #60a5fa;
+    /*
+     * เฉดสว่างกว่าสำหรับ "ตัวอักษร" ที่ใช้สีเน้น
+     * แถบบอกตำแหน่งเป็นกราฟิก เกณฑ์ contrast อยู่ที่ 3:1 แต่ตัวอักษรต้อง 4.5:1
+     * ซึ่ง #60a5fa บนพื้นแผงหัวได้ 4.48:1 — ต่ำกว่าเกณฑ์อยู่นิดเดียว
+     */
+    --side-accent-ink: #9ec9fd;
 
     position: relative;
     background: linear-gradient(176deg, #1d3357 0%, #162744 48%, #101d33 100%);
@@ -215,8 +221,42 @@
     position: relative;
   }
 
+  /*
+   * หัวแถบเมนู — โลโก้กับผู้ใช้ที่ล็อกอินอยู่
+   *
+   * ยกเป็นแผงของตัวเองที่สว่างกว่าพื้น แล้วทิ้งเงาลงบนรายการเมนูข้างล่าง
+   * เพื่อให้อ่านเป็นสองชั้น: "นี่คือระบบอะไร ใครใช้อยู่" มาก่อน แล้วจึงเป็นเมนู
+   * ถ้าใช้พื้นเดียวกันหมด สามส่วนนี้จะไหลรวมเป็นบล็อกเดียวจนหาจุดเริ่มไม่เจอ
+   */
+  .app-sidebar-head {
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.1) 0%, rgb(255 255 255 / 0.035) 100%);
+    border-bottom: 1px solid var(--side-hair);
+    box-shadow: 0 10px 20px -14px rgb(0 0 0 / 0.75);
+  }
+
+  /* เส้นสีเน้นพาดบนสุด เป็นตัวปิดหัวแถบและย้ำว่าส่วนนี้คือตัวแบรนด์ */
+  .app-sidebar-head::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--side-accent) 0%, rgb(96 165 250 / 0) 78%);
+  }
+
   .side-hair {
     border-color: var(--side-hair);
+  }
+
+  /*
+   * ชิปบอกบทบาทของผู้ใช้
+   *
+   * เขียนเป็นคลาสเองแทน bg-[color:var(--side-accent)]/15 เพราะ Tailwind
+   * ใส่ค่า opacity ให้สีที่มาจาก var() แบบนั้นไม่ได้ ผลคือพื้นหลังโปร่งใส
+   * color-mix ผสมเองจึงยังผูกกับ --side-accent อยู่ ถ้าเปลี่ยนสีเน้นก็ตามไปด้วย
+   */
+  .side-role-chip {
+    background: color-mix(in srgb, var(--side-accent) 18%, transparent);
+    color: var(--side-accent-ink);
   }
 
   /*

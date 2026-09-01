@@ -175,40 +175,54 @@ function Sidebar({
     <aside
       className={cn('app-sidebar sticky top-0 h-screen w-[264px] flex-none flex-col', className)}
     >
-      <div className="side-hair flex h-[72px] flex-none items-center border-b px-5">
-        <Brand className="min-w-0 flex-1" tone="dark" />
-        {onClose && (
-          /* วางทับมุมขวาบนแทนที่จะกินคอลัมน์ในแถว
-             เพราะลิ้นชักแคบกว่าแถบเมนูปกติ ถ้าเบียดในแถวเดียวกัน
-             ชื่อระบบจะถูกตัดเหลือ "AIDC Service …" */
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="ປິດເມນູ"
-            className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded text-[color:var(--side-ink-2)] hover:bg-white/10 hover:text-[color:var(--side-ink)]"
-          >
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
-        )}
-      </div>
+      <div className="app-sidebar-head flex-none">
+        <div className={cn('flex h-[76px] items-center px-5', onClose && 'pr-14')}>
+          <Brand className="min-w-0 flex-1" tone="dark" size="lg" />
+          {onClose && (
+            /* วางทับมุมขวาบนแทนที่จะกินคอลัมน์ในแถว
+               เพราะลิ้นชักแคบกว่าแถบเมนูปกติ ถ้าเบียดในแถวเดียวกัน
+               ชื่อระบบจะถูกตัดเหลือ "AIDC Service …" */
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="ປິດເມນູ"
+              className="absolute right-2 top-2.5 grid h-9 w-9 place-items-center rounded text-[color:var(--side-ink-2)] hover:bg-white/10 hover:text-[color:var(--side-ink)]"
+            >
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
 
-      <Link
-        href="/profile"
-        className="side-hair flex flex-none items-center gap-3 border-b px-5 py-4 transition-colors hover:bg-white/5"
-      >
-        <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white/10 text-caption font-semibold text-[color:var(--side-ink)]">
-          {initials(user.full_name)}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-body-sm font-semibold text-[color:var(--side-ink)]">
-            {user.full_name}
+        <Link
+          href="/profile"
+          className="side-hair flex items-center gap-3 border-t px-5 py-3.5 transition-colors hover:bg-white/[0.07]"
+        >
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-full bg-white/[0.14] text-body-sm font-bold text-[color:var(--side-ink)] ring-1 ring-white/15">
+            {initials(user.full_name)}
           </span>
-          <span className="block truncate text-caption text-[color:var(--side-ink-3)]">
-            {ROLE_LABEL[primaryRole(user.roles)]}
-            {user.scoped_companies.length > 0 && ` · ${user.scoped_companies.length} ບໍລິສັດ`}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-body font-semibold leading-snug text-[color:var(--side-ink)]">
+              {user.full_name}
+            </span>
+            {/* บทบาทของผู้ใช้เอง มาจาก session ไม่ใช่ตัวเลือก
+                ผู้ใช้เปลี่ยนบทบาทตัวเองไม่ได้ — ต้องให้ผู้ดูแลมอบให้ผ่านหน้าจัดการผู้ใช้ */}
+            <span className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span className="side-role-chip rounded-sm px-1.5 py-0.5 text-caption font-semibold">
+                {ROLE_LABEL[primaryRole(user.roles)]}
+              </span>
+              {user.scoped_companies.length > 0 && (
+                <span className="tabular text-caption text-[color:var(--side-ink-3)]">
+                  {user.scoped_companies.length} ບໍລິສັດ
+                </span>
+              )}
+            </span>
           </span>
-        </span>
-      </Link>
+        </Link>
+
+        <p className="side-hair border-t px-5 py-2.5 text-caption text-[color:var(--side-ink-3)]">
+          ເວລາເຮັດວຽກ ຈັນ–ສຸກ 08:30–17:30 ນ.
+        </p>
+      </div>
 
       <nav className="app-sidebar-nav flex-1 overflow-y-auto py-2" aria-label="ເມນູຫຼັກ">
         {sections.map((section, index) => (
@@ -237,65 +251,16 @@ function Sidebar({
         ))}
       </nav>
 
-      <div className="side-hair flex-none border-t px-5 py-4">
-        <RoleSwitcher />
-        <p className="mt-3 text-caption leading-relaxed text-[color:var(--side-ink-3)]">
-          ເວລາເຮັດວຽກ ຈັນ–ສຸກ 08:30–17:30 ນ.
-        </p>
+      <div className="side-hair flex-none border-t px-5 py-3">
         <Link
           href="/login"
-          className="mt-2 inline-flex min-h-[36px] items-center gap-2 text-caption text-[color:var(--side-ink-2)] transition-colors hover:text-[color:var(--side-ink)]"
+          className="inline-flex min-h-tap items-center gap-2 text-body-sm text-[color:var(--side-ink-2)] transition-colors hover:text-[color:var(--side-ink)]"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
           ອອກຈາກລະບົບ
         </Link>
       </div>
     </aside>
-  );
-}
-
-/**
- * ตัวสลับบทบาทสำหรับตรวจงานระหว่างพัฒนา
- *
- * มีไว้เพราะเมนูและปุ่มต่างกันมากใน 5 บทบาท การตรวจว่าครบต้องสลับดูจริง
- * ต้องถอดออกก่อนขึ้นใช้งานจริง — ตอนนี้ยังไม่มี /auth/me จึงยังไม่มีบทบาทจริงให้ใช้
- */
-function RoleSwitcher(): React.JSX.Element {
-  const { user, setRoles } = useSession();
-  const current = primaryRole(user.roles);
-
-  const options: RoleCode[] = [
-    'end_user',
-    'agent',
-    'company_admin',
-    'manager_viewer',
-    'super_admin',
-  ];
-
-  return (
-    <label className="block">
-      <span className="mb-1 block text-caption text-[color:var(--side-ink-3)]">
-        ເບິ່ງເປັນບົດບາດ (ສຳລັບທົດສອບ)
-      </span>
-      <select
-        value={current}
-        onChange={(e) => {
-          const role = e.target.value as RoleCode;
-          // ทุกคนมี end_user เป็นพื้นฐานเสมอ (docs/04-rbac-sla.md §1.1 ข้อ 1)
-          setRoles(role === 'end_user' ? ['end_user'] : ['end_user', role]);
-        }}
-        // ตัวเลือกใน dropdown เป็นของระบบปฏิบัติการ จัดสไตล์ไม่ได้
-        // จึงต้องบอกเบราว์เซอร์ผ่าน color-scheme ว่าให้ใช้ชุดโทนมืด
-        style={{ colorScheme: 'dark' }}
-        className="w-full rounded border border-white/15 bg-white/5 px-2 py-1.5 text-caption text-[color:var(--side-ink)]"
-      >
-        {options.map((role) => (
-          <option key={role} value={role}>
-            {ROLE_LABEL[role]}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 

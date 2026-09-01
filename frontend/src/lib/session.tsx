@@ -8,30 +8,26 @@ import type { RoleCode, SessionUser } from '@/lib/types';
 /**
  * ผู้ใช้ที่ล็อกอินอยู่ ใช้ร่วมกันทั้งแอป
  *
- * ตอนนี้อ่านจากข้อมูลจำลอง เมื่อ /auth/me พร้อมให้เปลี่ยนเฉพาะใน SessionProvider
- * หน้าจอทุกหน้าเรียกผ่าน useSession() จึงไม่ต้องแก้ตาม
+ * ตอนนี้อ่านจากข้อมูลจำลอง เมื่อ GET /auth/me พร้อมให้เปลี่ยนเฉพาะใน
+ * SessionProvider หน้าจอทุกหน้าเรียกผ่าน useSession() จึงไม่ต้องแก้ตาม
  *
- * สลับบทบาทได้จาก UI เพื่อให้ตรวจเมนูและปุ่มของแต่ละ role ได้จริงระหว่างพัฒนา
- * ⚠️ ตัวสลับนี้เปลี่ยนแค่สิ่งที่ "เห็น" ไม่ได้เปลี่ยนสิทธิ์จริง
- *    การกันจริงอยู่ที่ backend ทุกเส้นทาง (docs/04-rbac-sla.md §1.1 ข้อ 6)
+ * ⚠️ ไม่มีทางเปลี่ยนบทบาทของตัวเองจากฝั่งนี้โดยตั้งใจ
+ *    บทบาทมาจาก session เท่านั้น การให้ผู้ใช้เลือกบทบาทเองเท่ากับ
+ *    ยกระดับสิทธิ์ตัวเองได้ การมอบบทบาททำที่หน้าจัดการผู้ใช้ ซึ่งต้องใช้
+ *    สิทธิ์ user.assign_role และถูกบันทึกลง audit log ทุกครั้ง
+ *
+ *    ระหว่างพัฒนา ถ้าต้องการดูหน้าจอในมุมของบทบาทอื่น ให้แก้ SESSION.roles
+ *    ใน src/mocks/data.ts ชั่วคราว
  */
 
 interface SessionContextValue {
   user: SessionUser;
-  /** ใช้เฉพาะตอนพัฒนา — จะถูกถอดออกเมื่อผูก /auth/me จริง */
-  setRoles: (roles: RoleCode[]) => void;
 }
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
 
 export function SessionProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const [roles, setRoles] = React.useState<RoleCode[]>(SESSION.roles);
-
-  const value = React.useMemo<SessionContextValue>(
-    () => ({ user: { ...SESSION, roles }, setRoles }),
-    [roles],
-  );
-
+  const value = React.useMemo<SessionContextValue>(() => ({ user: SESSION }), []);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
