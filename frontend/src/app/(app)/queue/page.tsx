@@ -4,10 +4,10 @@ import { PriorityBadge, SlaBadge, StatusBadge } from '@/components/common/badges
 import { PRIORITY, TICKET_TYPE } from '@/config/enums';
 import { MOCK_TICKETS, QUEUE_TABS, type TicketListItem } from '@/lib/mock';
 
-export const metadata = { title: 'คิวงานของฉัน' };
+export const metadata = { title: 'ຄິວວຽກຂອງຂ້ອຍ' };
 
 /**
- * คิวงานเจ้าหน้าที่
+ * ຄິວວຽກเจ้าหน้าที่
  *
  * เดสก์ท็อป = ตาราง · มือถือ = การ์ด (กฎ M-3 ห้าม scroll แนวนอนกับข้อมูลหลัก)
  *
@@ -41,7 +41,7 @@ export default function QueuePage() {
             </button>
           );
         })}
-        <span className="ml-auto text-caption text-ink-3">อัปเดตล่าสุด 12:31 น.</span>
+        <span className="ml-auto text-caption text-ink-3">ອັບເດດຫຼ້າສຸດ 12:31 ນ.</span>
       </div>
 
       {/* ── ตาราง (md ขึ้นไป) ── */}
@@ -49,17 +49,17 @@ export default function QueuePage() {
         <div className="overflow-x-auto">
           <table className="w-full text-body-sm">
             <caption className="sr-only">
-              รายการเรื่องที่แจ้งในคิวงานของฉัน {MOCK_TICKETS.length} รายการ
+              ລາຍການເລື່ອງທີ່ແຈ້ງໃນຄິວວຽກຂອງຂ້ອຍ {MOCK_TICKETS.length} ລາຍການ
             </caption>
             <thead>
               <tr className="border-b border-hair bg-subtle text-left text-caption text-ink-3">
-                <th scope="col" className="px-4 py-3 font-semibold">เลขที่</th>
-                <th scope="col" className="min-w-[280px] px-4 py-3 font-semibold">เรื่อง</th>
-                <th scope="col" className="px-4 py-3 font-semibold">ประเภท</th>
-                <th scope="col" className="px-4 py-3 font-semibold">สถานะ</th>
-                <th scope="col" className="px-4 py-3 font-semibold">ระดับ</th>
-                <th scope="col" className="min-w-[190px] px-4 py-3 font-semibold">เวลาตามข้อตกลง</th>
-                <th scope="col" className="px-4 py-3 font-semibold">ผู้รับผิดชอบ</th>
+                <th scope="col" className="px-4 py-3 font-semibold">ເລກທີ</th>
+                <th scope="col" className="min-w-[280px] px-4 py-3 font-semibold">ເລື່ອງ</th>
+                <th scope="col" className="px-4 py-3 font-semibold">ປະເພດ</th>
+                <th scope="col" className="px-4 py-3 font-semibold">ສະຖານະ</th>
+                <th scope="col" className="px-4 py-3 font-semibold">ລະດັບ</th>
+                <th scope="col" className="min-w-[190px] px-4 py-3 font-semibold">ເວລາຕາມຂໍ້ຕົກລົງ</th>
+                <th scope="col" className="px-4 py-3 font-semibold">ຜູ້ຮັບຜິດຊອບ</th>
               </tr>
             </thead>
             <tbody>
@@ -93,7 +93,7 @@ export default function QueuePage() {
                       {t.reopen_count > 0 && (
                         <span className="inline-flex items-center gap-1 text-p2-fg">
                           <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                          เปิดซ้ำ {t.reopen_count}
+                          ເປີດຄືນ {t.reopen_count}
                         </span>
                       )}
                     </div>
@@ -127,7 +127,7 @@ export default function QueuePage() {
                           type="button"
                           className="min-h-9 rounded border border-control px-2.5 text-caption font-semibold text-ink hover:bg-subtle"
                         >
-                          รับงาน
+                          ຮັບວຽກ
                         </button>
                       </span>
                     )}
@@ -166,8 +166,8 @@ export default function QueuePage() {
                 />
               </div>
               <p className="mt-3 border-t border-hair pt-2 text-caption text-ink-3">
-                {t.assignee ? `ผู้รับผิดชอบ ${t.assignee.full_name}` : 'ยังไม่มีผู้รับผิดชอบ'}
-                {' · อัปเดต '}
+                {t.assignee ? `ຜູ້ຮັບຜິດຊອບ ${t.assignee.full_name}` : 'ຍັງບໍ່ມີຜູ້ຮັບຜິດຊອບ'}
+                {' · ອັບເດດ '}
                 {t.updated_at}
               </p>
             </article>
@@ -178,9 +178,9 @@ export default function QueuePage() {
       <p className="flex items-start gap-2 text-caption leading-relaxed text-ink-3">
         <span aria-hidden="true">ⓘ</span>
         <span>
-          ขอบเขตการมองเห็น: คุณเห็นเรื่องของบริษัทที่ดูแลเท่านั้น (AIDC-LOG, AIDC-CON) ·
-          เวลาที่แสดงเป็น<strong className="font-semibold text-ink-2">นาทีทำการ</strong>
-          จ–ศ 08:30–17:30 ยกเว้นระดับ P1 ที่นับต่อเนื่อง 24 ชั่วโมง
+          ຂອບເຂດການເບິ່ງເຫັນ: ທ່ານເຫັນເລື່ອງຂອງບໍລິສັດທີ່ດູແລເທົ່ານັ້ນ (AIDC-LOG, AIDC-CON) ·
+          ເວລາທີ່ສະແດງເປັນ<strong className="font-semibold text-ink-2">ນາທີເຮັດວຽກ</strong>
+          จ–ศ 08:30–17:30 ຍົກເວັ້ນລະດັບ P1 ທີ່ນັບຕໍ່ເນື່ອງ 24 ຊົ່ວໂມງ
         </span>
       </p>
     </div>

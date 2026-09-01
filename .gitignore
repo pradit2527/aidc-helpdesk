@@ -20,3 +20,6 @@ Thumbs.db
 
 # venv ของ backend
 backend/.venv/
+
+# NestJS
+backend/dist/

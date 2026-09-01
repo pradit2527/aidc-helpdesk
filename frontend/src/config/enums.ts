@@ -1,12 +1,12 @@
 /**
- * metadata สำหรับแสดงผลของทุก enum ในระบบ — แหล่งความจริงเดียวของ UI
+ * metadata ສຳລັບການສະແດງຜົນຂອງທຸກ enum ໃນລະບົບ — ແຫຼ່ງຄວາມຈິງດຽວຂອງ UI
  *
- * กฎที่ยึด (21-ui-ux-design.md §5 / ADR-003):
- *   ทุกสถานะต้องสื่อด้วย **สี + ไอคอน + ข้อความ** ครบสามอย่างเสมอ
- *   ห้ามตัดอันใดอันหนึ่งออกแม้ในตารางที่แน่น — ผู้ใช้ตาบอดสีต้องอ่านออก
+ * ກົດທີ່ຍຶດ (21-ui-ux-design.md §5 / ADR-003):
+ *   ທຸກສະຖານະຕ້ອງສື່ດ້ວຍ **ສີ + ໄອຄອນ + ຂໍ້ຄວາມ** ຄົບສາມຢ່າງສະເໝີ
+ *   ຫ້າມຕັດອັນໃດອັນໜຶ່ງອອກ ເຖິງແມ່ນໃນຕາຕະລາງທີ່ແໜ້ນ — ຜູ້ໃຊ້ຕາບອດສີຕ້ອງອ່ານອອກ
  *
- * คำที่ใช้ต้องเป็นคำที่พนักงานหน้างานเข้าใจ ห้ามศัพท์ ITIL (NFR-32)
- *   "เรื่องที่แจ้ง" ไม่ใช่ "incident" · "ผู้รับผิดชอบ" ไม่ใช่ "assignee"
+ * ຄຳທີ່ໃຊ້ຕ້ອງເປັນຄຳທີ່ພະນັກງານໜ້າງານເຂົ້າໃຈ ຫ້າມສັບ ITIL (NFR-32)
+ *   "ເລື່ອງທີ່ແຈ້ງ" ບໍ່ແມ່ນ "incident" · "ຜູ້ຮັບຜິດຊອບ" ບໍ່ແມ່ນ "assignee"
  */
 
 import {
@@ -27,113 +27,113 @@ import {
 } from 'lucide-react';
 
 export interface DisplayMeta {
-  /** ข้อความที่ผู้ใช้เห็น */
+  /** ຂໍ້ຄວາມທີ່ຜູ້ໃຊ້ເຫັນ */
   label: string;
   icon: LucideIcon;
-  /** class ของ Tailwind ที่ชี้ไป design token */
+  /** class ຂອງ Tailwind ທີ່ຊີ້ໄປ design token */
   className: string;
 }
 
-// ── สถานะเรื่อง 7 ค่า ────────────────────────────────────────────────
+// ── ສະຖານະເລື່ອງ 7 ຄ່າ ──────────────────────────────────────────────
 export const TICKET_STATUS = {
-  new: { label: 'ใหม่', icon: Circle, className: 'bg-st-new-bg text-st-new-fg' },
+  new: { label: 'ໃໝ່', icon: Circle, className: 'bg-st-new-bg text-st-new-fg' },
   assigned: {
-    label: 'มอบหมายแล้ว',
+    label: 'ມອບໝາຍແລ້ວ',
     icon: UserCheck,
     className: 'bg-st-assigned-bg text-st-assigned-fg',
   },
   in_progress: {
-    label: 'กำลังดำเนินการ',
+    label: 'ກຳລັງດຳເນີນການ',
     icon: Settings,
     className: 'bg-st-progress-bg text-st-progress-fg',
   },
   pending_user: {
-    label: 'รอผู้แจ้ง',
+    label: 'ລໍຖ້າຜູ້ແຈ້ງ',
     icon: PauseCircle,
     className: 'bg-st-pending-bg text-st-pending-fg',
   },
   resolved: {
-    label: 'แก้ไขเสร็จ',
+    label: 'ແກ້ໄຂແລ້ວ',
     icon: CheckCircle2,
     className: 'bg-st-resolved-bg text-st-resolved-fg',
   },
-  closed: { label: 'ปิดแล้ว', icon: Archive, className: 'bg-st-closed-bg text-st-closed-fg' },
+  closed: { label: 'ປິດແລ້ວ', icon: Archive, className: 'bg-st-closed-bg text-st-closed-fg' },
   cancelled: {
-    label: 'ยกเลิก',
+    label: 'ຍົກເລີກ',
     icon: XCircle,
-    // closed กับ cancelled ใช้โทนเทาใกล้กันโดยตั้งใจ (ทั้งคู่คือ "จบแล้ว")
-    // แยกกันด้วยไอคอนคนละตัว + เส้นขอบประ เพื่อให้ต่างกันแม้พิมพ์ขาวดำ
+    // closed ກັບ cancelled ໃຊ້ໂທນເທົາໃກ້ກັນໂດຍຕັ້ງໃຈ (ທັງຄູ່ຄື "ຈົບແລ້ວ")
+    // ແຍກກັນດ້ວຍໄອຄອນຄົນລະຕົວ + ເສັ້ນຂອບຂີດ ເພື່ອໃຫ້ຕ່າງກັນເຖິງພິມຂາວດຳ
     className: 'bg-st-cancelled-bg text-st-cancelled-fg border border-dashed border-control',
   },
 } as const satisfies Record<string, DisplayMeta>;
 
 export type TicketStatus = keyof typeof TICKET_STATUS;
 
-/** เหตุผลที่หยุดนับเวลา — แสดงต่อท้ายสถานะ "รอผู้แจ้ง" ให้ชัดว่ารออะไร */
+/** ເຫດຜົນທີ່ຢຸດນັບເວລາ — ສະແດງແທນຄຳວ່າ "ລໍຖ້າຜູ້ແຈ້ງ" ໃຫ້ຮູ້ວ່າລໍຖ້າຫຍັງ */
 export const PENDING_REASON = {
-  user: 'รอข้อมูลจากผู้แจ้ง',
-  vendor: 'รออะไหล่ / ผู้ให้บริการภายนอก',
-  approval: 'รออนุมัติ',
+  user: 'ລໍຖ້າຂໍ້ມູນຈາກຜູ້ແຈ້ງ',
+  vendor: 'ລໍຖ້າອາໄຫຼ່ / ຜູ້ໃຫ້ບໍລິການພາຍນອກ',
+  approval: 'ລໍຖ້າອະນຸມັດ',
 } as const;
 
-// ── ระดับความสำคัญ P1–P4 ────────────────────────────────────────────
+// ── ລະດັບຄວາມສຳຄັນ P1–P4 ──────────────────────────────────────────
 export interface PriorityMeta extends DisplayMeta {
-  /** จำนวนขีดที่ติดในมาตรวัด — ความสูงบอกระดับได้โดยไม่ต้องพึ่งสี */
+  /** ຈຳນວນຂີດທີ່ຕິດໃນມາດວັດ — ຄວາມສູງບອກລະດັບໄດ້ໂດຍບໍ່ຕ້ອງເບິ່ງສີ */
   bars: 1 | 2 | 3 | 4;
-  /** ความหนาแถบซ้ายของแถว (21-ui-ux-design.md §5.2) */
+  /** ຄວາມໜາແຖບຊ້າຍຂອງແຖວ (21-ui-ux-design.md §5.2) */
   railClass: string;
-  /** เกณฑ์ตามเอกสารควบคุม — แสดงเป็น tooltip ให้ผู้ใช้เข้าใจว่าทำไมได้ระดับนี้ */
+  /** ເກນຕາມເອກະສານຄວບຄຸມ — ສະແດງເປັນ tooltip ໃຫ້ຜູ້ໃຊ້ເຂົ້າໃຈວ່າເປັນຫຍັງໄດ້ລະດັບນີ້ */
   criteria: string;
 }
 
 export const PRIORITY = {
   P1: {
-    label: 'P1 – วิกฤต',
+    label: 'P1 – ວິກິດ',
     icon: AlertTriangle,
     className: 'bg-p1-bg text-p1-fg',
     bars: 4,
     railClass: 'prio-rail-p1',
-    criteria: 'ระบบสำคัญหยุดให้บริการทั้งองค์กร ไม่มีทางเลี่ยง',
+    criteria: 'ລະບົບສຳຄັນຢຸດໃຫ້ບໍລິການທັງອົງກອນ ບໍ່ມີທາງລ່ຽງ',
   },
   P2: {
-    label: 'P2 – สูง',
+    label: 'P2 – ສູງ',
     icon: ArrowUp,
     className: 'bg-p2-bg text-p2-fg',
     bars: 3,
     railClass: 'prio-rail-p2',
-    criteria: 'ใช้ไม่ได้ทั้งแผนก หรือระบบสำคัญที่ยังมีทางเลี่ยงชั่วคราว',
+    criteria: 'ໃຊ້ບໍ່ໄດ້ທັງພະແນກ ຫຼື ລະບົບສຳຄັນທີ່ຍັງມີທາງລ່ຽງຊົ່ວຄາວ',
   },
   P3: {
-    label: 'P3 – ปานกลาง',
+    label: 'P3 – ປານກາງ',
     icon: Minus,
     className: 'bg-p3-bg text-p3-fg',
     bars: 2,
     railClass: 'prio-rail-p3',
-    criteria: 'กระทบผู้ใช้รายบุคคล ทำงานไม่ได้หรือไม่สะดวก',
+    criteria: 'ກະທົບຜູ້ໃຊ້ລາຍບຸກຄົນ ເຮັດວຽກບໍ່ໄດ້ ຫຼື ບໍ່ສະດວກ',
   },
   P4: {
-    label: 'P4 – ต่ำ',
+    label: 'P4 – ຕ່ຳ',
     icon: ArrowDown,
     className: 'bg-p4-bg text-p4-fg',
     bars: 1,
     railClass: 'prio-rail-p4',
-    criteria: 'คำขอบริการทั่วไปหรือคำปรึกษาที่ไม่กระทบงานเร่งด่วน',
+    criteria: 'ຄຳຂໍບໍລິການທົ່ວໄປ ຫຼື ຄຳປຶກສາທີ່ບໍ່ກະທົບວຽກຮີບດ່ວນ',
   },
 } as const satisfies Record<string, PriorityMeta>;
 
 export type Priority = keyof typeof PRIORITY;
 
-// ── สถานะ SLA 4 ค่า ─────────────────────────────────────────────────
+// ── ສະຖານະ SLA 4 ຄ່າ ────────────────────────────────────────────────
 export const SLA_STATUS = {
-  on_track: { label: 'ตรงเวลา', icon: CheckCircle2, className: 'bg-sla-ok-bg text-sla-ok' },
-  at_risk: { label: 'ใกล้ครบกำหนด', icon: Clock, className: 'bg-sla-risk-bg text-sla-risk' },
+  on_track: { label: 'ຕົງເວລາ', icon: CheckCircle2, className: 'bg-sla-ok-bg text-sla-ok' },
+  at_risk: { label: 'ໃກ້ຄົບກຳນົດ', icon: Clock, className: 'bg-sla-risk-bg text-sla-risk' },
   breached: {
-    label: 'เกินกำหนด',
+    label: 'ເກີນກຳນົດ',
     icon: AlertOctagon,
     className: 'bg-sla-breach-bg text-sla-breach',
   },
   paused: {
-    label: 'หยุดนับชั่วคราว',
+    label: 'ຢຸດນັບຊົ່ວຄາວ',
     icon: PauseCircle,
     className: 'bg-sla-paused-bg text-sla-paused',
   },
@@ -141,39 +141,39 @@ export const SLA_STATUS = {
 
 export type SlaStatus = keyof typeof SLA_STATUS;
 
-// ── ประเภทงานและช่องทาง ─────────────────────────────────────────────
+// ── ປະເພດວຽກ ແລະ ຊ່ອງທາງ ───────────────────────────────────────────
 export const TICKET_TYPE = {
-  incident: 'เหตุขัดข้อง',
-  service_request: 'คำขอบริการ',
+  incident: 'ເຫດຂັດຂ້ອງ',
+  service_request: 'ຄຳຂໍບໍລິການ',
 } as const;
 
-/** 4 ช่องทางตามเอกสารควบคุม — ไม่มี LINE (LINE ใช้แจ้งเตือนขาออกเท่านั้น) */
+/** 4 ຊ່ອງທາງຕາມເອກະສານຄວບຄຸມ — ບໍ່ມີ LINE (LINE ໃຊ້ແຈ້ງເຕືອນຂາອອກເທົ່ານັ້ນ) */
 export const CHANNEL = {
-  portal: 'ระบบออนไลน์',
-  email: 'อีเมล',
-  phone: 'โทรศัพท์',
-  walk_in: 'ติดต่อด้วยตนเอง',
+  portal: 'ລະບົບອອນລາຍ',
+  email: 'ອີເມວ',
+  phone: 'ໂທລະສັບ',
+  walk_in: 'ຕິດຕໍ່ດ້ວຍຕົນເອງ',
 } as const;
 
-// ── คำถามที่ผู้แจ้งตอบแทนการเลือกระดับเอง (SLA ข้อ 4) ───────────────
+// ── ຄຳຖາມທີ່ຜູ້ແຈ້ງຕອບແທນການເລືອກລະດັບເອງ (SLA ຂໍ້ 4) ──────────────
 export const IMPACT_OPTIONS = [
-  { value: 'individual', label: 'เฉพาะฉันคนเดียว' },
-  { value: 'department', label: 'ทั้งแผนก หรือหลายคน' },
-  { value: 'org_wide', label: 'ทั้งบริษัท หรือระบบสำคัญหยุดทำงาน' },
+  { value: 'individual', label: 'ສະເພາະຂ້ອຍຄົນດຽວ' },
+  { value: 'department', label: 'ທັງພະແນກ ຫຼື ຫຼາຍຄົນ' },
+  { value: 'org_wide', label: 'ທັງບໍລິສັດ ຫຼື ລະບົບສຳຄັນຢຸດເຮັດວຽກ' },
 ] as const;
 
 export const URGENCY_OPTIONS = [
-  { value: 'high', label: 'เร่งด่วนมาก' },
-  { value: 'medium', label: 'เร่งด่วนปานกลาง' },
-  { value: 'low', label: 'ไม่เร่งด่วน' },
+  { value: 'high', label: 'ຮີບດ່ວນຫຼາຍ' },
+  { value: 'medium', label: 'ຮີບດ່ວນປານກາງ' },
+  { value: 'low', label: 'ບໍ່ຮີບດ່ວນ' },
 ] as const;
 
 /**
- * เมทริกซ์เดียวกับที่ backend ใช้ (SLA ข้อ 4)
+ * ເມທຣິກດຽວກັນກັບທີ່ backend ໃຊ້ (SLA ຂໍ້ 4)
  *
- * ที่มีอยู่ฝั่ง frontend ด้วยเพื่อ **แสดงตัวอย่างระดับให้ผู้ใช้เห็นทันทีขณะกรอกฟอร์ม**
- * เท่านั้น — ค่าจริงที่บันทึกมาจาก backend เสมอ ถ้าสองฝั่งไม่ตรงกัน
- * ให้ยึดค่าที่ backend ส่งกลับมาใน response
+ * ທີ່ມີຢູ່ຝັ່ງ frontend ນຳ ເພື່ອ **ສະແດງຕົວຢ່າງລະດັບໃຫ້ຜູ້ໃຊ້ເຫັນທັນທີຂະນະກອກຟອມ**
+ * ເທົ່ານັ້ນ — ຄ່າຈິງທີ່ບັນທຶກມາຈາກ backend ສະເໝີ ຖ້າສອງຝັ່ງບໍ່ຕົງກັນ
+ * ໃຫ້ຍຶດຄ່າທີ່ backend ສົ່ງກັບມາໃນ response
  */
 export const PRIORITY_MATRIX: Record<string, Record<string, Priority>> = {
   org_wide: { high: 'P1', medium: 'P2', low: 'P3' },

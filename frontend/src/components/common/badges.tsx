@@ -1,8 +1,8 @@
 /**
- * ป้ายสถานะทั้งหมดของระบบ
+ * ป้ายສະຖານະທັງໝົດของระบบ
  *
  * กฎเดียวที่ห้ามละเมิด: ทุกป้าย = **สี + ไอคอน + ข้อความ** ครบสามอย่าง
- * ทดสอบโดยเปิดหน้าในโหมด grayscale แล้วต้องยังอ่านสถานะได้ครบ (21-ui-ux-design.md §5)
+ * ทดสอบโดยเปิดหน้าในโหมด grayscale แล้วต้องยังอ่านສະຖານະได้ครบ (21-ui-ux-design.md §5)
  */
 
 import {
@@ -29,7 +29,7 @@ export function StatusBadge({
 }) {
   const meta = TICKET_STATUS[status];
   const Icon = meta.icon;
-  // "รอผู้แจ้ง" อย่างเดียวไม่พอ — ผู้ใช้ต้องรู้ว่ารออะไรอยู่ (G-06)
+  // "ລໍຖ້າຜູ້ແຈ້ງ" อย่างเดียวไม่พอ — ผู้ใช้ต้องรู้ว่ารออะไรอยู่ (G-06)
   const label =
     status === 'pending_user' && pendingReason ? PENDING_REASON[pendingReason] : meta.label;
 
@@ -87,7 +87,7 @@ export function PriorityBadge({
 /**
  * ป้าย SLA
  *
- * ⚠️ ห้ามทำนาฬิกานับถอยหลัง — remainingMinutes เป็น "นาทีทำการ"
+ * ⚠️ ห้ามทำนาฬิกานับถอยหลัง — remainingMinutes เป็น "ນາທີເຮັດວຽກ"
  * ตอน 17:31 หรือวันเสาร์นาฬิกาต้องหยุด ซึ่ง client คำนวณเองไม่ได้ (FE-07)
  * จึงแสดงค่าคงที่ที่ backend ส่งมา แล้ว refetch ทุก 60 วินาทีแทน
  */
@@ -111,37 +111,37 @@ export function SlaBadge({
       <span className={cn(BADGE, meta.className, className)}>
         <Icon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
         {meta.label}
-        {/* แสดงเวลาที่เหลือเฉพาะตอนที่ยังมีเวลาเหลือจริง
-            ถ้าเกินกำหนดแล้ว คำว่า "เกินกำหนด" ในป้ายบอกครบอยู่แล้ว
-            ไม่ต้องต่อท้ายว่า "เหลือ เกินกำหนดแล้ว" ให้ซ้ำซ้อน */}
+        {/* แสดงเวลาที่ເຫຼືອเฉพาะตอนที่ยังมีเวลาເຫຼືອจริง
+            ถ้าເກີນກຳນົດແລ້ວ คำว่า "ເກີນກຳນົດ" ในป้ายบอกครบอยู่แล้ว
+            ไม่ต้องต่อท้ายว่า "ເຫຼືອ ເກີນກຳນົດແລ້ວ" ให้ซ้ำซ้อน */}
         {typeof remainingMinutes === 'number' &&
           remainingMinutes > 0 &&
           status !== 'paused' && (
             <span className="tabular font-normal">
-              · เหลือ {formatMinutes(remainingMinutes)}
-              {remainingUnit === 'business_minutes' ? 'ทำการ' : ''}
+              · ເຫຼືອ {formatMinutes(remainingMinutes)}
+              {remainingUnit === 'business_minutes' ? 'ເຮັດວຽກ' : ''}
             </span>
           )}
         {typeof remainingMinutes === 'number' && remainingMinutes < 0 && (
           <span className="tabular font-normal">
-            · เกินมา {formatMinutes(Math.abs(remainingMinutes))}
+            · ເກີນມາ {formatMinutes(Math.abs(remainingMinutes))}
             {remainingUnit === 'business_minutes' ? 'ทำการ' : ''}
           </span>
         )}
       </span>
       {dueAt && (
-        <span className="text-caption text-ink-3 tabular">ครบกำหนด {dueAt}</span>
+        <span className="text-caption text-ink-3 tabular">ຄົບກຳນົດ {dueAt}</span>
       )}
     </span>
   );
 }
 
-/** นาที -> "3 ชม. 20 น." · เกิน 1 วันทำการแสดงเป็นวันเพื่อให้อ่านง่าย */
+/** ນາທີ -> "3 ຊມ. 20 ນ." · เกิน 1 ວັນทำการแสดงเป็นวันเพื่อให้อ่านง่าย */
 function formatMinutes(m: number): string {
-  if (m <= 0) return '0 นาที';
+  if (m <= 0) return '0 ນາທີ';
   const BUSINESS_DAY = 540;
-  if (m >= BUSINESS_DAY) return `${(m / BUSINESS_DAY).toFixed(1)} วัน`;
+  if (m >= BUSINESS_DAY) return `${(m / BUSINESS_DAY).toFixed(1)} ວັນ`;
   const h = Math.floor(m / 60);
   const mm = Math.floor(m % 60);
-  return h > 0 ? `${h} ชม. ${String(mm).padStart(2, '0')} น.` : `${Math.floor(m)} นาที`;
+  return h > 0 ? `${h} ຊມ. ${String(mm).padStart(2, '0')} ນ.` : `${Math.floor(m)} ນາທີ`;
 }
