@@ -153,6 +153,325 @@
   .field-label {
     @apply mb-1.5 block text-label text-ink;
   }
+
+  /* ── เนื้อหาบทความคลังความรู้ที่มาจาก Markdown ──
+     ไม่ได้ติดตั้งปลั๊กอิน typography ของ Tailwind เพราะต้องคุมระยะบรรทัด
+     ให้พอดีกับสระบน/ล่างของภาษาลาว ซึ่งค่ามาตรฐานของปลั๊กอินแน่นเกินไป */
+  .kb-body > * + * {
+    @apply mt-4;
+  }
+  .kb-body h2 {
+    @apply mt-6 text-h2;
+  }
+  .kb-body h3 {
+    @apply mt-5 text-h3;
+  }
+  .kb-body ol {
+    @apply list-decimal space-y-1.5 pl-6;
+  }
+  .kb-body ul {
+    @apply list-disc space-y-1.5 pl-6;
+  }
+  .kb-body a {
+    @apply text-primary underline underline-offset-4;
+  }
+  .kb-body code {
+    @apply rounded-sm bg-subtle px-1.5 py-0.5 font-mono text-body-sm;
+  }
+  .kb-body pre {
+    @apply overflow-x-auto rounded bg-subtle p-4 text-body-sm;
+  }
+  .kb-body blockquote {
+    @apply border-l-4 border-primary bg-primary-subtle px-4 py-2 text-ink-2;
+  }
+  .kb-body table {
+    @apply w-full border-collapse text-body-sm;
+  }
+  .kb-body th,
+  .kb-body td {
+    @apply border border-hair px-3 py-2 text-left;
+  }
+  .kb-body img {
+    @apply max-w-full rounded;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     หน้าเข้าสู่ระบบ — ยกทั้งชุดจาก prototype/AIDC_Helpdesk_Portal_v2.html
+     (ฟังก์ชัน loginView และ token ชุด --c-* / --n-* / --a-*)
+
+     ชุดสีที่นี่เป็น "โทนอุ่น + ส้มแดง" ซึ่งคนละชุดกับหน้าอื่นในระบบ
+     ที่ยังใช้แนวทาง B (คราม/เทาเย็น) ตาม docs/08-adr-003-ui-direction.md
+     จึงประกาศไว้ใต้ .proto แทนที่จะทับ :root — ถ้าตัดสินใจเปลี่ยนทั้งระบบ
+     ให้ย้ายบล็อกนี้ขึ้นไปไว้ที่ :root ที่เดียว ไม่ต้องแก้ component ใด
+     ══════════════════════════════════════════════════════════════════ */
+  .proto {
+    --bg-page: #f3f2f2;
+    --bg-surface: #f8f4f4;
+    --bg-subtle: #eae9e9;
+
+    --text-primary: #201e1d;
+    --text-secondary: #444141;
+    --text-muted: #605d5d;
+    --text-inverse: #f3f2f2;
+
+    --border: #d7d3d3;
+    --border-control: #7d7979;
+
+    /* --primary ถูกใช้เป็น "สีเน้น" ทั่วทุก component อยู่แล้ว
+       จึงชี้มาที่สีปุ่มของต้นแบบ (#dd2b0f — ตัวอักษรขาวได้ 4.74:1 ผ่าน AA) */
+    --primary: #dd2b0f;
+    --primary-hover: #ae1800;
+    --primary-subtle: #ffe0d9;
+    --focus-ring: #ae1800;
+
+    --sla-breach-fg: #ae1800;
+    --sla-breach-bg: #ffe0d9;
+    --sla-breach-solid: #dd2b0f;
+
+    /* พื้นมืดของแผงแบรนด์ — คงที่ ไม่ผูกกับธีม เป็นการตัดสินใจเดียวกับต้นแบบ */
+    --hero-bg: #201e1d;
+    --hero-deep: #161514;
+    --hero-ink: #f3f2f2;
+    --hero-muted: #bab6b6;
+    --hero-faint: #9b9797;
+    --hero-hair: #444141;
+
+    background: var(--bg-page);
+    color: var(--text-primary);
+  }
+
+  /* ต้นแบบใช้มุมเหลี่ยมทั้งหมด ไม่มีการมนมุมแม้แต่จุดเดียว */
+  .proto *,
+  .proto *::before,
+  .proto *::after {
+    border-radius: 0 !important;
+  }
+
+  .login-hero {
+    background: var(--hero-bg);
+    color: var(--hero-ink);
+  }
+
+  /* ลายเส้นทแยงบาง ๆ ให้แผงมืดไม่เป็นพื้นเรียบตาย */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgb(243 242 242 / 0.055) 0 1px,
+      transparent 1px 9px
+    );
+  }
+
+  .rule-accent {
+    height: 3px;
+    width: 34px;
+    background: #ec3013;
+  }
+
+  .eyebrow {
+    font-family: var(--font-archivo), system-ui, sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1.45;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+
+  /* หัวเรื่องแผงแบรนด์ — ละตินล้วน จึงใช้ Archivo ได้เต็มที่ */
+  .display-xl {
+    font-family: var(--font-archivo), var(--font-noto-lao), system-ui, sans-serif;
+    font-size: clamp(2.15rem, 5.1vw, 3.85rem);
+    font-weight: 800;
+    line-height: 0.98;
+    letter-spacing: -0.038em;
+    text-wrap: balance;
+  }
+
+  .display-lg {
+    font-family: var(--font-noto-lao), var(--font-archivo), system-ui, sans-serif;
+    font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+  }
+
+  .stat-md {
+    font-family: var(--font-archivo), system-ui, sans-serif;
+    font-size: 1.55rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.028em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* กรอบโลโก้บริษัทบนแผงมืด — ขอบบางและมีระยะหายใจ ไม่แย่งสายตาจากหัวเรื่อง */
+  .logo-plate {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    padding: 0.95rem 1.1rem;
+    background: var(--hero-deep);
+    border: 1px solid var(--hero-hair);
+  }
+  .logo-plate img {
+    width: 158px;
+    flex: none;
+  }
+  .logo-plate > div {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-left: 1.1rem;
+    border-left: 1px solid var(--hero-hair);
+  }
+  @media (max-width: 400px) {
+    .logo-plate {
+      gap: 0.75rem;
+      padding: 0.8rem 0.85rem;
+    }
+    .logo-plate img {
+      width: 110px;
+    }
+    .logo-plate > div {
+      padding-left: 0.75rem;
+    }
+  }
+
+  /* ตัวคั่น "ຫຼື" ที่มีเส้นสองข้าง */
+  .divider-or {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    font-family: var(--font-archivo), system-ui, sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .divider-or::before,
+  .divider-or::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ปุ่มแสดง/ซ่อนรหัสผ่านที่วางทับขอบขวาของช่องกรอก */
+  .pw-wrap {
+    position: relative;
+  }
+  .pw-toggle {
+    position: absolute;
+    inset: 1px 1px 1px auto;
+    display: grid;
+    width: 44px;
+    place-items: center;
+    color: var(--text-muted);
+    border-left: 1px solid var(--border);
+  }
+  .pw-toggle:hover {
+    background: var(--bg-subtle);
+    color: var(--text-primary);
+  }
+
+  /* checkbox มุมคม ทำเอง ไม่พึ่ง appearance เริ่มต้นของเบราว์เซอร์ */
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 36px;
+    cursor: pointer;
+    font-size: 13.5px;
+  }
+  .check input {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+  }
+  .check i {
+    flex: none;
+    display: grid;
+    width: 17px;
+    height: 17px;
+    place-items: center;
+    background: var(--bg-page);
+    border: 1.5px solid var(--border-control);
+    transition:
+      background-color 0.16s ease,
+      border-color 0.16s ease;
+  }
+  .check i::after {
+    content: '';
+    width: 9px;
+    height: 5px;
+    margin-top: -2px;
+    border-left: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    transform: rotate(-45deg) scale(0.6);
+    transform-origin: center;
+    opacity: 0;
+    transition:
+      opacity 0.16s ease,
+      transform 0.16s ease;
+  }
+  .check input:checked + i {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+  .check input:checked + i::after {
+    opacity: 1;
+    transform: rotate(-45deg) scale(1);
+  }
+  .check input:focus-visible + i {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* กล่องหมายเหตุสำหรับผู้ทดสอบระบบ — ต้องดูไม่เหมือนเนื้อหาจริง */
+  .devnote {
+    border: 1px dashed #bab6b6;
+    background: var(--bg-subtle);
+    padding: 0.7rem 0.85rem;
+    font-size: 11.5px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+  }
+  .devnote code {
+    font-family: var(--font-archivo), ui-monospace, monospace;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    padding: 0.05rem 0.3rem;
+  }
+
+  /* รายการบัญชีที่จดจำไว้ — disclosure ที่ลูกศรหมุนตอนเปิด */
+  .disc > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 48px;
+    padding: 0 1rem;
+    cursor: pointer;
+    list-style: none;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .disc > summary::-webkit-details-marker {
+    display: none;
+  }
+  .disc > summary .chev {
+    margin-left: auto;
+    color: var(--text-muted);
+    transition: transform 0.18s ease;
+  }
+  .disc[open] > summary .chev {
+    transform: rotate(90deg);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════

@@ -78,7 +78,11 @@ const config: Config = {
 
       fontFamily: {
         // ฟอนต์เดียวทั้งระบบ ตรงกับที่ backend ใช้สร้าง PDF (ADR-003)
-        sans: ['var(--font-noto-thai)', 'system-ui', 'sans-serif'],
+        //
+        // ต้องเป็น --font-noto-lao ให้ตรงกับที่ layout.tsx ประกาศไว้
+        // ก่อนหน้านี้ชี้ไปที่ --font-noto-thai ซึ่งไม่มีใครนิยาม
+        // ทั้งระบบจึงตกไปใช้ system-ui เงียบ ๆ โดยที่หน้ายังดูปกติ
+        sans: ['var(--font-noto-lao)', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Cascadia Code', 'monospace'],
       },
 

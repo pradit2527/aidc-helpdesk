@@ -1,188 +1,70 @@
-import { Paperclip, MessageSquare, RotateCcw } from 'lucide-react';
+'use client';
 
-import { PriorityBadge, SlaBadge, StatusBadge } from '@/components/common/badges';
-import { PRIORITY, TICKET_TYPE } from '@/config/enums';
-import { MOCK_TICKETS, QUEUE_TABS, type TicketListItem } from '@/lib/mock';
+import * as React from 'react';
 
-export const metadata = { title: 'ຄິວວຽກຂອງຂ້ອຍ' };
+import { TicketList } from '@/components/tickets/ticket-list';
+import { Card } from '@/components/ui/card';
+import { PageHeader, Tabs, MockNotice } from '@/components/ui/misc';
+import { useSession } from '@/lib/session';
+import { TICKETS } from '@/mocks/data';
+
+type QueueTab = 'unassigned' | 'mine' | 'pending' | 'breached';
 
 /**
- * ຄິວວຽກเจ้าหน้าที่
+ * คิวงานของเจ้าหน้าที่ — หน้าทำงานหลักของ agent (US-03)
  *
- * เดสก์ท็อป = ตาราง · มือถือ = การ์ด (กฎ M-3 ห้าม scroll แนวนอนกับข้อมูลหลัก)
- *
- * หน้าจริงจะเป็น Client Component เพราะต้อง poll ทุก 60 วินาที + bulk action
- * ตอนนี้ยังเป็น Server Component เพราะข้อมูลเป็น mock
+ * แท็บเรียงตามลำดับที่ควรหยิบงาน ไม่ใช่ตามตัวอักษร
+ * "ยังไม่มีคนรับ" มาก่อนเสมอ เพราะเรื่องที่ยังไม่มีเจ้าของคือความเสี่ยงที่แท้จริง
  */
-export default function QueuePage() {
+export default function QueuePage(): React.JSX.Element {
+  const { user } = useSession();
+  const [tab, setTab] = React.useState<QueueTab>('unassigned');
+
+  const buckets = React.useMemo(() => {
+    const open = TICKETS.filter((t) => !['resolved', 'closed', 'cancelled'].includes(t.status));
+    return {
+      unassigned: open.filter((t) => t.assignee === null),
+      mine: open.filter((t) => t.assignee?.id === user.id),
+      pending: open.filter((t) => t.status === 'pending_user'),
+      breached: open.filter((t) => t.sla.is_resolution_breached),
+    };
+  }, [user.id]);
+
+  const tabs = [
+    { key: 'unassigned' as const, label: 'ຍັງບໍ່ມີຄົນຮັບ', count: buckets.unassigned.length },
+    { key: 'mine' as const, label: 'ວຽກຂອງຂ້ອຍ', count: buckets.mine.length },
+    { key: 'pending' as const, label: 'ລໍຖ້າຜູ້ແຈ້ງ', count: buckets.pending.length },
+    { key: 'breached' as const, label: 'ເກີນກຳນົດ', count: buckets.breached.length },
+  ];
+
+  const emptyHint: Record<QueueTab, string> = {
+    unassigned: 'ທຸກເລື່ອງມີຜູ້ຮັບຜິດຊອບແລ້ວ',
+    mine: 'ທ່ານຍັງບໍ່ໄດ້ຮັບມອບໝາຍວຽກໃດ',
+    pending: 'ບໍ່ມີເລື່ອງທີ່ລໍຖ້າຜູ້ແຈ້ງຢູ່',
+    breached: 'ບໍ່ມີເລື່ອງໃດເກີນກຳນົດ SLA',
+  };
+
   return (
-    <div className="flex flex-col gap-5">
-      {/* ── แท็บ ── */}
-      <div className="flex flex-wrap items-center gap-2">
-        {QUEUE_TABS.map((tab, i) => {
-          const active = i === 0;
-          const danger = tab.key === 'breached';
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              aria-pressed={active}
-              className={[
-                'inline-flex min-h-tap items-center gap-2 rounded-full px-4 text-body-sm font-semibold transition-colors',
-                active
-                  ? 'bg-primary text-white'
-                  : danger
-                    ? 'bg-p1-bg text-p1-fg'
-                    : 'border border-hair bg-surface text-ink-2 hover:bg-subtle',
-              ].join(' ')}
-            >
-              {tab.label}
-              <span className="tabular opacity-90">{tab.count}</span>
-            </button>
-          );
-        })}
-        <span className="ml-auto text-caption text-ink-3">ອັບເດດຫຼ້າສຸດ 12:31 ນ.</span>
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="ຄິວວຽກຂອງຂ້ອຍ"
+        description={`ຂອບເຂດ ${user.scoped_companies.map((c) => c.code).join(' · ')}`}
+      />
 
-      {/* ── ตาราง (md ขึ้นไป) ── */}
-      <div className="hidden overflow-hidden rounded border border-hair bg-surface shadow-card md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full text-body-sm">
-            <caption className="sr-only">
-              ລາຍການເລື່ອງທີ່ແຈ້ງໃນຄິວວຽກຂອງຂ້ອຍ {MOCK_TICKETS.length} ລາຍການ
-            </caption>
-            <thead>
-              <tr className="border-b border-hair bg-subtle text-left text-caption text-ink-3">
-                <th scope="col" className="px-4 py-3 font-semibold">ເລກທີ</th>
-                <th scope="col" className="min-w-[280px] px-4 py-3 font-semibold">ເລື່ອງ</th>
-                <th scope="col" className="px-4 py-3 font-semibold">ປະເພດ</th>
-                <th scope="col" className="px-4 py-3 font-semibold">ສະຖານະ</th>
-                <th scope="col" className="px-4 py-3 font-semibold">ລະດັບ</th>
-                <th scope="col" className="min-w-[190px] px-4 py-3 font-semibold">ເວລາຕາມຂໍ້ຕົກລົງ</th>
-                <th scope="col" className="px-4 py-3 font-semibold">ຜູ້ຮັບຜິດຊອບ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_TICKETS.map((t) => (
-                <tr
-                  key={t.id}
-                  className={`border-b border-hair last:border-0 hover:bg-subtle ${PRIORITY[t.priority].railClass}`}
-                >
-                  <td className="tabular whitespace-nowrap px-4 py-3 font-semibold text-ink-2">
-                    {t.ticket_no.slice(-7)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium leading-snug">{t.subject}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-ink-3">
-                      <span>
-                        {t.category.name_th}
-                        {t.department ? ` · ${t.department.name}` : ''}
-                      </span>
-                      {t.comment_count > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <MessageSquare className="h-3 w-3" aria-hidden="true" />
-                          {t.comment_count}
-                        </span>
-                      )}
-                      {t.attachment_count > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <Paperclip className="h-3 w-3" aria-hidden="true" />
-                          {t.attachment_count}
-                        </span>
-                      )}
-                      {t.reopen_count > 0 && (
-                        <span className="inline-flex items-center gap-1 text-p2-fg">
-                          <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                          ເປີດຄືນ {t.reopen_count}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-subtle px-2.5 py-0.5 text-caption text-ink-2">
-                      {TICKET_TYPE[t.ticket_type]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={t.status} pendingReason={t.pending_reason} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <PriorityBadge priority={t.priority} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <SlaBadge
-                      status={t.sla.status}
-                      remainingMinutes={t.sla.remaining_minutes}
-                      remainingUnit={t.sla.remaining_unit}
-                      dueAt={t.sla.resolution_due_at}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {t.assignee ? (
-                      t.assignee.full_name
-                    ) : (
-                      <span className="inline-flex items-center gap-2 text-ink-3">
-                        —
-                        <button
-                          type="button"
-                          className="min-h-9 rounded border border-control px-2.5 text-caption font-semibold text-ink hover:bg-subtle"
-                        >
-                          ຮັບວຽກ
-                        </button>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <MockNotice endpoint="GET /tickets?queue=" />
+
+      <Card>
+        <div className="px-4 pt-1 lg:px-5">
+          <Tabs tabs={tabs} value={tab} onChange={setTab} label="ກຸ່ມວຽກໃນຄິວ" />
         </div>
-      </div>
-
-      {/* ── การ์ด (มือถือ) ── */}
-      <ul className="flex flex-col gap-3 md:hidden">
-        {MOCK_TICKETS.map((t) => (
-          <li key={t.id}>
-            <article
-              className={`rounded border border-hair bg-surface p-4 shadow-card ${PRIORITY[t.priority].railClass}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="tabular text-caption font-semibold text-ink-3">
-                  {t.ticket_no}
-                </span>
-                <PriorityBadge priority={t.priority} withMeter={false} />
-              </div>
-              <h2 className="mt-2 text-body font-medium leading-snug">{t.subject}</h2>
-              <p className="mt-1 text-caption text-ink-3">
-                {t.category.name_th}
-                {t.department ? ` · ${t.department.name}` : ''}
-              </p>
-              <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-                <StatusBadge status={t.status} pendingReason={t.pending_reason} />
-                <SlaBadge
-                  status={t.sla.status}
-                  remainingMinutes={t.sla.remaining_minutes}
-                  remainingUnit={t.sla.remaining_unit}
-                />
-              </div>
-              <p className="mt-3 border-t border-hair pt-2 text-caption text-ink-3">
-                {t.assignee ? `ຜູ້ຮັບຜິດຊອບ ${t.assignee.full_name}` : 'ຍັງບໍ່ມີຜູ້ຮັບຜິດຊອບ'}
-                {' · ອັບເດດ '}
-                {t.updated_at}
-              </p>
-            </article>
-          </li>
-        ))}
-      </ul>
-
-      <p className="flex items-start gap-2 text-caption leading-relaxed text-ink-3">
-        <span aria-hidden="true">ⓘ</span>
-        <span>
-          ຂອບເຂດການເບິ່ງເຫັນ: ທ່ານເຫັນເລື່ອງຂອງບໍລິສັດທີ່ດູແລເທົ່ານັ້ນ (AIDC-LOG, AIDC-CON) ·
-          ເວລາທີ່ສະແດງເປັນ<strong className="font-semibold text-ink-2">ນາທີເຮັດວຽກ</strong>
-          จ–ศ 08:30–17:30 ຍົກເວັ້ນລະດັບ P1 ທີ່ນັບຕໍ່ເນື່ອງ 24 ຊົ່ວໂມງ
-        </span>
-      </p>
+        <div className="p-4 lg:p-5">
+          <TicketList
+            tickets={buckets[tab]}
+            emptyTitle="ບໍ່ມີເລື່ອງໃນລາຍການນີ້"
+            emptyHint={emptyHint[tab]}
+          />
+        </div>
+      </Card>
     </div>
   );
 }

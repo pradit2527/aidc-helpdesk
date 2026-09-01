@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Noto_Sans_Lao } from 'next/font/google';
+import { Archivo, Noto_Sans_Lao } from 'next/font/google';
+
+import { Providers } from './providers';
 import './globals.css';
 
 /**
@@ -16,6 +18,19 @@ const notoSansLao = Noto_Sans_Lao({
   weight: ['400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-noto-lao',
+});
+
+/**
+ * ฟอนต์หัวเรื่องและตัวเลข ตามต้นแบบ (prototype ใช้ Archivo)
+ *
+ * ใช้เฉพาะข้อความละตินและตัวเลข — Archivo ไม่มีอักษรลาว
+ * ข้อความลาวจึงตกไปที่ Noto Sans Lao ตามลำดับ fallback เสมอ
+ */
+const archivo = Archivo({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
+  variable: '--font-archivo',
 });
 
 export const metadata: Metadata = {
@@ -35,7 +50,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="lo" className={notoSansLao.variable}>
+    <html lang="lo" className={`${notoSansLao.variable} ${archivo.variable}`}>
       <body>
         {/* ລິ້ງຂ້າມໄປເນື້ອຫາຫຼັກຕ້ອງເປັນ element ທຳອິດຂອງໜ້າ (WCAG 2.4.1) */}
         <a
@@ -45,7 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           ຂ້າມໄປຫາເນື້ອຫາຫຼັກ
         </a>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
