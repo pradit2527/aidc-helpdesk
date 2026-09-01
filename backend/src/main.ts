@@ -1,4 +1,13 @@
 import 'reflect-metadata';
+/**
+ * ต้องโหลด .env ก่อนบรรทัด import อื่นทั้งหมด
+ *
+ * db/client.ts อ่าน DATABASE_URL ตอนโมดูลถูก import ซึ่งเกิดก่อน
+ * NestFactory.create() และก่อนที่ ConfigModule จะได้ทำงาน
+ * ถ้าโหลดทีหลัง แอปจะตายตอนบูตด้วยข้อความว่าไม่ได้ตั้ง DATABASE_URL
+ * ทั้งที่ไฟล์ .env มีค่าอยู่ครบ
+ */
+import 'dotenv/config';
 
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';

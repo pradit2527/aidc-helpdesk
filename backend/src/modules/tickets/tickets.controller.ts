@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBody,
   ApiOperation,
@@ -16,6 +25,8 @@ import {
   TICKET_TYPE,
 } from '../../common/constants';
 import { ErrorResponseDto } from '../../common/dto/common.dto';
+import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
+import type { AccessScope } from '../../common/scope';
 import {
   ChangePriorityDto,
   ChangeStatusDto,
@@ -27,6 +38,7 @@ import { TicketsService } from './tickets.service';
 
 @ApiTags('Tickets')
 @Controller('tickets')
+@UseGuards(ScopeGuard)
 export class TicketsController {
   constructor(private readonly tickets: TicketsService) {}
 
@@ -55,8 +67,11 @@ export class TicketsController {
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'page_size', required: false, type: Number, example: 20 })
   @ApiResponse({ status: 200, type: TicketListResponseDto })
-  list(@Query() query: Record<string, string>): TicketListResponseDto {
-    return this.tickets.list(query);
+  list(
+    @CurrentScope() scope: AccessScope,
+    @Query() query: Record<string, string>,
+  ): Promise<TicketListResponseDto> {
+    return this.tickets.list(scope, query);
   }
 
   @Post()
@@ -80,8 +95,11 @@ export class TicketsController {
   @ApiBody({ type: CreateTicketDto })
   @ApiResponse({ status: 201, type: TicketDetailDto })
   @ApiResponse({ status: 422, type: ErrorResponseDto, description: 'ข้อมูลไม่ผ่านการตรวจสอบ' })
-  create(@Body() dto: CreateTicketDto): TicketDetailDto {
-    return this.tickets.create(dto);
+  create(
+    @CurrentScope() scope: AccessScope,
+    @Body() dto: CreateTicketDto,
+  ): Promise<TicketDetailDto> {
+    return this.tickets.create(scope, dto);
   }
 
   @Get(':id')
@@ -98,8 +116,11 @@ export class TicketsController {
   @ApiParam({ name: 'id', example: 1042 })
   @ApiResponse({ status: 200, type: TicketDetailDto })
   @ApiResponse({ status: 404, type: ErrorResponseDto })
-  detail(@Param('id', ParseIntPipe) id: number): TicketDetailDto {
-    return this.tickets.detail(id);
+  detail(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<TicketDetailDto> {
+    return this.tickets.detail(scope, id);
   }
 
   @Post(':id/status')
@@ -126,10 +147,11 @@ export class TicketsController {
     description: 'INVALID_STATE_TRANSITION · CHECKLIST_INCOMPLETE · APPROVAL_PENDING',
   })
   changeStatus(
+    @CurrentScope() scope: AccessScope,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ChangeStatusDto,
-  ): TicketDetailDto {
-    return this.tickets.changeStatus(id, dto);
+  ): Promise<TicketDetailDto> {
+    return this.tickets.changeStatus(scope, id, dto);
   }
 
   @Post(':id/priority')
@@ -148,9 +170,10 @@ export class TicketsController {
   @ApiBody({ type: ChangePriorityDto })
   @ApiResponse({ status: 200, type: TicketDetailDto })
   changePriority(
+    @CurrentScope() scope: AccessScope,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ChangePriorityDto,
-  ): TicketDetailDto {
-    return this.tickets.changePriority(id, dto);
+  ): Promise<TicketDetailDto> {
+    return this.tickets.changePriority(scope, id, dto);
   }
 }

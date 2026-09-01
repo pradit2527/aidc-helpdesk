@@ -198,22 +198,28 @@ export class TicketSlaDto {
 
 // ══════════════════════ บล็อก can ══════════════════════
 
+/**
+ * ทุกคีย์ในบล็อกนี้ผูกกับ permission หนึ่งตัวใน docs/04-rbac-sla.md §7
+ * ยกเว้นที่ระบุไว้ — ชื่อจึงตั้งตามรหัส permission ตรง ๆ ไม่ตั้งชื่อใหม่
+ * เพื่อให้ตามรอยได้ว่าปุ่มไหนมาจากสิทธิ์ข้อไหน
+ */
 export class TicketCanDto {
   @ApiProperty({ example: true }) update!: boolean;
   @ApiProperty({ example: false }) assign!: boolean;
-  @ApiProperty({ example: false }) claim!: boolean;
+  @ApiProperty({ example: false }) assign_self!: boolean;
   @ApiProperty({ example: false }) change_status!: boolean;
   @ApiProperty({ example: false }) change_priority!: boolean;
   @ApiProperty({ example: true }) request_priority_review!: boolean;
+  @ApiProperty({ example: false }) set_workaround!: boolean;
+  @ApiProperty({ example: false }) declare_major_incident!: boolean;
   @ApiProperty({ example: true }) comment!: boolean;
   @ApiProperty({ example: false }) comment_internal!: boolean;
   @ApiProperty({ example: true }) attach!: boolean;
-  @ApiProperty({ example: false }) close!: boolean;
+  @ApiProperty({ example: false }) close_own!: boolean;
   @ApiProperty({ example: false }) reopen!: boolean;
   @ApiProperty({ example: true }) cancel!: boolean;
-  @ApiProperty({ example: false }) set_workaround!: boolean;
-  @ApiProperty({ example: false }) change_tier!: boolean;
   @ApiProperty({ example: false }) delete!: boolean;
+  @ApiProperty({ example: true }) view_history!: boolean;
 }
 
 // ══════════════════════ รายการและรายละเอียด ══════════════════════
@@ -263,6 +269,32 @@ export class TicketDetailDto extends TicketListItemDto {
   @ApiProperty({ enum: IMPACT, example: 'department' }) impact!: Impact;
   @ApiProperty({ enum: URGENCY, example: 'high' }) urgency!: Urgency;
   @ApiProperty({ enum: CHANNEL, example: 'portal' }) channel!: Channel;
+
+  @ApiProperty({ nullable: true, example: null }) resolved_at!: string | null;
+  @ApiProperty({ nullable: true }) resolution_note!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description: 'มีค่าแล้ว = นาฬิกา resolution ของ incident หยุดที่จุดนี้ถาวร (SLA 5.4)',
+  })
+  workaround_note!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description: 'บังคับกรอกเมื่อ support_tier = 3 (ยกระดับให้ผู้ให้บริการภายนอก)',
+  })
+  vendor_ref!: string | null;
+
+  @ApiProperty({ example: false }) is_major_incident!: boolean;
+
+  @ApiProperty({
+    example: false,
+    description: 'true = ใช้ขอบเขตการมองเห็นที่แคบกว่าบริษัท (SOP-10 ข้อ 2)',
+  })
+  is_security_incident!: boolean;
+
+  @ApiProperty({ nullable: true, minimum: 1, maximum: 5, example: null })
+  satisfaction_score!: number | null;
 
   @ApiProperty({
     type: TicketCanDto,
