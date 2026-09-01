@@ -1,9 +1,12 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    // node16 จำเป็นเพราะ drizzle-orm ประกาศ type ผ่าน exports map (index.d.cts)
+    // ซึ่ง moduleResolution แบบ node10 อ่านไม่เข้าใจ
+    // package.json ไม่มี "type": "module" TypeScript จึงยัง emit เป็น CommonJS ให้ NestJS ตามเดิม
+    "module": "node16",
     "target": "ES2023",
     "lib": ["ES2023"],
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "declaration": false,
     "removeComments": false,
     "emitDecoratorMetadata": true,
