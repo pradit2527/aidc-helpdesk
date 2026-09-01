@@ -6,7 +6,7 @@ import { Bell, LogOut, Menu, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
 
 import { Brand } from '@/components/layout/brand';
-import { Avatar } from '@/components/ui/misc';
+import { initials } from '@/lib/format';
 import {
   bottomNavItems,
   isActive,
@@ -173,19 +173,19 @@ function Sidebar({
 
   return (
     <aside
-      className={cn(
-        'sticky top-0 h-screen w-[264px] flex-none flex-col border-r border-hair bg-surface',
-        className,
-      )}
+      className={cn('app-sidebar sticky top-0 h-screen w-[264px] flex-none flex-col', className)}
     >
-      <div className="flex h-[72px] flex-none items-center gap-3 border-b border-hair px-5">
-        <Brand className="flex-1" />
+      <div className="side-hair flex h-[72px] flex-none items-center border-b px-5">
+        <Brand className="min-w-0 flex-1" tone="dark" />
         {onClose && (
+          /* วางทับมุมขวาบนแทนที่จะกินคอลัมน์ในแถว
+             เพราะลิ้นชักแคบกว่าแถบเมนูปกติ ถ้าเบียดในแถวเดียวกัน
+             ชื่อระบบจะถูกตัดเหลือ "AIDC Service …" */
           <button
             type="button"
             onClick={onClose}
             aria-label="ປິດເມນູ"
-            className="grid h-9 w-9 flex-none place-items-center rounded text-ink-2 hover:bg-subtle"
+            className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded text-[color:var(--side-ink-2)] hover:bg-white/10 hover:text-[color:var(--side-ink)]"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -194,23 +194,27 @@ function Sidebar({
 
       <Link
         href="/profile"
-        className="flex flex-none items-center gap-3 border-b border-hair px-5 py-4 hover:bg-subtle"
+        className="side-hair flex flex-none items-center gap-3 border-b px-5 py-4 transition-colors hover:bg-white/5"
       >
-        <Avatar name={user.full_name} />
+        <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white/10 text-caption font-semibold text-[color:var(--side-ink)]">
+          {initials(user.full_name)}
+        </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-body-sm font-semibold">{user.full_name}</span>
-          <span className="block truncate text-caption text-ink-3">
+          <span className="block truncate text-body-sm font-semibold text-[color:var(--side-ink)]">
+            {user.full_name}
+          </span>
+          <span className="block truncate text-caption text-[color:var(--side-ink-3)]">
             {ROLE_LABEL[primaryRole(user.roles)]}
             {user.scoped_companies.length > 0 && ` · ${user.scoped_companies.length} ບໍລິສັດ`}
           </span>
         </span>
       </Link>
 
-      <nav className="flex-1 overflow-y-auto py-2" aria-label="ເມນູຫຼັກ">
+      <nav className="app-sidebar-nav flex-1 overflow-y-auto py-2" aria-label="ເມນູຫຼັກ">
         {sections.map((section, index) => (
           <div key={section.title ?? `section-${index}`} className="py-1">
             {section.title && (
-              <p className="px-5 pb-1 pt-3 text-caption font-semibold uppercase tracking-wide text-ink-3">
+              <p className="px-5 pb-1 pt-3 text-caption font-semibold uppercase tracking-wide text-[color:var(--side-ink-3)]">
                 {section.title}
               </p>
             )}
@@ -222,12 +226,7 @@ function Sidebar({
                   key={item.href}
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
-                  className={cn(
-                    'flex min-h-tap items-center gap-3 border-l-[3px] px-5 text-body-sm transition-colors',
-                    active
-                      ? 'border-primary bg-primary-subtle font-semibold text-primary-hover'
-                      : 'border-transparent text-ink-2 hover:bg-subtle hover:text-ink',
-                  )}
+                  className="side-link"
                 >
                   <Icon className="h-[18px] w-[18px] flex-none" aria-hidden="true" />
                   <span className="flex-1 truncate">{item.label}</span>
@@ -238,14 +237,14 @@ function Sidebar({
         ))}
       </nav>
 
-      <div className="flex-none border-t border-hair px-5 py-4">
+      <div className="side-hair flex-none border-t px-5 py-4">
         <RoleSwitcher />
-        <p className="mt-3 text-caption leading-relaxed text-ink-3">
+        <p className="mt-3 text-caption leading-relaxed text-[color:var(--side-ink-3)]">
           ເວລາເຮັດວຽກ ຈັນ–ສຸກ 08:30–17:30 ນ.
         </p>
         <Link
           href="/login"
-          className="mt-2 inline-flex min-h-[36px] items-center gap-2 text-caption text-ink-2 hover:text-primary"
+          className="mt-2 inline-flex min-h-[36px] items-center gap-2 text-caption text-[color:var(--side-ink-2)] transition-colors hover:text-[color:var(--side-ink)]"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
           ອອກຈາກລະບົບ
@@ -275,7 +274,9 @@ function RoleSwitcher(): React.JSX.Element {
 
   return (
     <label className="block">
-      <span className="mb-1 block text-caption text-ink-3">ເບິ່ງເປັນບົດບາດ (ສຳລັບທົດສອບ)</span>
+      <span className="mb-1 block text-caption text-[color:var(--side-ink-3)]">
+        ເບິ່ງເປັນບົດບາດ (ສຳລັບທົດສອບ)
+      </span>
       <select
         value={current}
         onChange={(e) => {
@@ -283,7 +284,10 @@ function RoleSwitcher(): React.JSX.Element {
           // ทุกคนมี end_user เป็นพื้นฐานเสมอ (docs/04-rbac-sla.md §1.1 ข้อ 1)
           setRoles(role === 'end_user' ? ['end_user'] : ['end_user', role]);
         }}
-        className="w-full rounded border border-control bg-surface px-2 py-1.5 text-caption text-ink"
+        // ตัวเลือกใน dropdown เป็นของระบบปฏิบัติการ จัดสไตล์ไม่ได้
+        // จึงต้องบอกเบราว์เซอร์ผ่าน color-scheme ว่าให้ใช้ชุดโทนมืด
+        style={{ colorScheme: 'dark' }}
+        className="w-full rounded border border-white/15 bg-white/5 px-2 py-1.5 text-caption text-[color:var(--side-ink)]"
       >
         {options.map((role) => (
           <option key={role} value={role}>

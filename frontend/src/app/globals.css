@@ -154,6 +154,110 @@
     @apply mb-1.5 block text-label text-ink;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     แถบเมนูซ้าย — พื้นเข้มไล่เฉด
+
+     ใช้โทนอุ่นชุดเดียวกับแผงแบรนด์ในหน้าเข้าสู่ระบบ เพื่อให้ทั้งระบบ
+     ดูเป็นแบรนด์เดียวกันตั้งแต่หน้าแรกจนถึงหน้าใช้งาน
+     พื้นเข้มยังทำให้เนื้อหาฝั่งขวา (พื้นสว่าง) เด่นขึ้นโดยไม่ต้องเพิ่มกรอบ
+
+     token ประกาศไว้เฉพาะในนี้ ไม่ทับ token ของทั้งระบบ
+     component ข้างในจึงต้องอ้างค่าเหล่านี้เอง ไม่ใช่ text-ink / bg-surface
+     ══════════════════════════════════════════════════════════════════ */
+  .app-sidebar {
+    --side-ink: #f3f2f2;
+    --side-ink-2: #b9b4b2;
+    --side-ink-3: #8d8785;
+    --side-hair: #3a3634;
+    --side-hover: rgb(255 255 255 / 0.055);
+    --side-active: rgb(255 255 255 / 0.1);
+
+    position: relative;
+    background: linear-gradient(176deg, #262220 0%, #1d1a19 46%, #151312 100%);
+    color: var(--side-ink-2);
+    border-right: 1px solid var(--side-hair);
+    /* เงาทอดไปทางขวา ทำให้เนื้อหาดูลอยอยู่คนละระนาบกับเมนู */
+    box-shadow: 6px 0 28px -12px rgb(15 23 42 / 0.45);
+  }
+
+  /*
+   * เฉดสีจาง ๆ ไล่ออกจากมุมบนซ้าย ไม่ให้พื้นเข้มดูตายเป็นสีเดียว
+   *
+   * ใช้สีเดียวกับ --primary ซึ่งเป็นสีของแถบบอกตำแหน่งเมนู
+   * ก่อนหน้านี้ลองเป็นส้มแดงตามแผงแบรนด์หน้าเข้าสู่ระบบ แต่เมื่ออยู่จอเดียวกับ
+   * แถบครามและปุ่มครามในเนื้อหา กลายเป็นสีเน้นสองชุดที่ตีกันเอง ไม่ใช่การไล่เฉด
+   */
+  .app-sidebar::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 300px;
+    pointer-events: none;
+    background: radial-gradient(120% 100% at 0% 0%, rgb(59 130 246 / 0.2) 0%, transparent 64%);
+  }
+
+  /* เงาจาง ๆ ที่ก้นแถบ ช่วยให้บล็อกล่างสุดแยกออกจากรายการเมนู */
+  .app-sidebar::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 180px;
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent 0%, rgb(0 0 0 / 0.28) 100%);
+  }
+
+  /* ทุกอย่างข้างในต้องอยู่เหนือเฉดสีด้านบน */
+  .app-sidebar > * {
+    position: relative;
+  }
+
+  .side-hair {
+    border-color: var(--side-hair);
+  }
+
+  /*
+   * สกรอลบาร์ของเมนู
+   *
+   * ค่าเริ่มต้นของเบราว์เซอร์กว้างและสว่างเกินไปบนพื้นเข้ม จนกลายเป็น
+   * เส้นขาวพาดกลางเมนู ซึ่งเด่นกว่าตัวเมนูเอง จึงบางลงและกลืนไปกับพื้น
+   * แล้วค่อยชัดขึ้นตอนชี้เมาส์
+   */
+  .app-sidebar-nav {
+    scrollbar-width: thin;
+    scrollbar-color: var(--side-hair) transparent;
+  }
+  .app-sidebar-nav::-webkit-scrollbar {
+    width: 6px;
+  }
+  .app-sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .app-sidebar-nav::-webkit-scrollbar-thumb {
+    background: var(--side-hair);
+    border-radius: 3px;
+  }
+  .app-sidebar-nav:hover::-webkit-scrollbar-thumb {
+    background: #55504d;
+  }
+
+  /* รายการเมนูหนึ่งบรรทัด */
+  .side-link {
+    @apply flex min-h-tap items-center gap-3 px-5 text-body-sm transition-colors;
+    color: var(--side-ink-2);
+    box-shadow: inset 3px 0 0 0 transparent;
+  }
+  .side-link:hover {
+    background: var(--side-hover);
+    color: var(--side-ink);
+  }
+  .side-link[aria-current='page'] {
+    background: var(--side-active);
+    color: var(--side-ink);
+    font-weight: 600;
+    /* แถบซ้ายใช้สีเน้น เป็นตัวบอกตำแหน่งที่อ่านออกแม้พิมพ์ขาวดำ */
+    box-shadow: inset 3px 0 0 0 var(--primary);
+  }
+
   /* ── เนื้อหาบทความคลังความรู้ที่มาจาก Markdown ──
      ไม่ได้ติดตั้งปลั๊กอิน typography ของ Tailwind เพราะต้องคุมระยะบรรทัด
      ให้พอดีกับสระบน/ล่างของภาษาลาว ซึ่งค่ามาตรฐานของปลั๊กอินแน่นเกินไป */
