@@ -1,10 +1,12 @@
 'use client';
 
-import { Check, Lock, Minus } from 'lucide-react';
+import { Check, Lock, Minus, Save } from 'lucide-react';
 import * as React from 'react';
+import { toast } from 'sonner';
 
+import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
 import { cn } from '@/lib/cn';
 import { useHasRole } from '@/lib/session';
 import { PERMISSION_GROUPS, ROLES } from '@/mocks/data';
@@ -19,11 +21,50 @@ import { PERMISSION_GROUPS, ROLES } from '@/mocks/data';
 export default function RolesPage(): React.JSX.Element {
   const canEdit = useHasRole('super_admin');
 
+  /**
+   * เก็บเฉพาะ "ส่วนที่ถูกแก้" ไม่ใช่สำเนาเมทริกซ์ทั้งชุด
+   * เพราะเมทริกซ์ 53 × 5 = 265 ช่อง การถือสำเนาไว้ทำให้ตอบไม่ได้ว่า
+   * อะไรถูกแก้ไปบ้าง ซึ่งเป็นสิ่งที่ต้องส่งให้ backend และบันทึกลง audit log
+   */
+  const [changes, setChanges] = React.useState<Record<string, boolean>>({});
+  const changeCount = Object.keys(changes).length;
+
+  function isGranted(roleId: number, code: string, base: boolean): boolean {
+    return changes[`${roleId}:${code}`] ?? base;
+  }
+
+  function toggle(roleId: number, code: string, base: boolean): void {
+    const key = `${roleId}:${code}`;
+    const next = !isGranted(roleId, code, base);
+    setChanges((prev) => {
+      const draft = { ...prev };
+      // กลับไปตรงกับค่าเดิมแล้ว = ไม่ใช่การเปลี่ยนแปลง ต้องถอดออกจากรายการ
+      if (next === base) delete draft[key];
+      else draft[key] = next;
+      return draft;
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <BackLink href="/admin" label="ກັບໄປສູນຄວບຄຸມ" />
       <PageHeader
         title="ບົດບາດ ແລະ ສິດ"
         description={`${ROLES.length} ບົດບາດ · ${PERMISSION_GROUPS.reduce((n, g) => n + g.permissions.length, 0)} ສິດ`}
+        actions={
+          canEdit && (
+            <Button
+              disabled={changeCount === 0}
+              onClick={() => {
+                toast.success(`ບັນທຶກການປ່ຽນສິດ ${changeCount} ລາຍການແລ້ວ`);
+                setChanges({});
+              }}
+            >
+              <Save className="h-4 w-4" aria-hidden="true" />
+              ບັນທຶກ {changeCount > 0 && `(${changeCount})`}
+            </Button>
+          )
+        }
       />
 
       <MockNotice endpoint="GET /roles · GET /permissions" />
@@ -93,27 +134,52 @@ export default function RolesPage(): React.JSX.Element {
                           <span className="block text-body-sm text-ink">{permission.description}</span>
                         </th>
                         {ROLES.map((role) => {
-                          const granted = role.permissions.includes(permission.code);
-                          return (
-                            <td key={role.id} className="px-2 py-2.5 text-center">
-                              {rowLevelOnly ? (
+                          const base = role.permissions.includes(permission.code);
+                          const granted = isGranted(role.id, permission.code, base);
+                          const dirty = granted !== base;
+
+                          if (rowLevelOnly) {
+                            return (
+                              <td key={role.id} className="px-2 py-2.5 text-center">
                                 <span
                                   className="inline-flex items-center gap-1 text-caption text-ink-3"
-                                  title="ກວດທີ່ລະດັບແຖວ ບໍ່ຜູກກັບບົດບາດ"
+                                  title="ກວດທີ່ລະດັບແຖວ ບໍ່ຜູກກັບບົດບາດ ຈຶ່ງມອບຜ່ານເມທຣິກນີ້ບໍ່ໄດ້"
                                 >
                                   <Lock className="h-3.5 w-3.5" aria-hidden="true" />
                                   <span className="sr-only">ບໍ່ມອບຜ່ານບົດບາດ</span>
                                 </span>
-                              ) : granted ? (
-                                <Check
-                                  className="mx-auto h-4 w-4 text-sla-ok"
-                                  aria-label={`${role.name_th} ມີສິດນີ້`}
-                                />
+                              </td>
+                            );
+                          }
+
+                          const icon = granted ? (
+                            <Check className="mx-auto h-4 w-4 text-sla-ok" aria-hidden="true" />
+                          ) : (
+                            <Minus className="mx-auto h-4 w-4 text-ink-3" aria-hidden="true" />
+                          );
+
+                          return (
+                            <td
+                              key={role.id}
+                              className={cn('px-2 py-2.5 text-center', dirty && 'bg-primary-subtle')}
+                            >
+                              {canEdit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggle(role.id, permission.code, base)}
+                                  aria-pressed={granted}
+                                  aria-label={`${role.name_th} ${granted ? 'ມີ' : 'ບໍ່ມີ'}ສິດ ${permission.code}`}
+                                  className="grid h-tap w-full place-items-center rounded hover:bg-subtle"
+                                >
+                                  {icon}
+                                </button>
                               ) : (
-                                <Minus
-                                  className={cn('mx-auto h-4 w-4 text-ink-3')}
-                                  aria-label={`${role.name_th} ບໍ່ມີສິດນີ້`}
-                                />
+                                <span
+                                  role="img"
+                                  aria-label={`${role.name_th} ${granted ? 'ມີ' : 'ບໍ່ມີ'}ສິດນີ້`}
+                                >
+                                  {icon}
+                                </span>
                               )}
                             </td>
                           );

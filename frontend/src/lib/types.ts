@@ -328,3 +328,144 @@ export interface SlaComplianceRow {
   excluded: number;
   compliance_percent: number;
 }
+
+// ── โมดูลผู้ดูแลระบบ ─────────────────────────────────────────────────
+// ส่วนที่เอกสาร UI ยังไม่มีหน้าจอกำกับ แต่มีตารางในฐานข้อมูลแล้ว
+
+export interface EscalationContact {
+  id: number;
+  /** null = ระดับกลุ่ม ใช้กับทุกบริษัท */
+  company: CompanyRef | null;
+  contact_key: string;
+  user: UserRef;
+  is_primary: boolean;
+  is_active: boolean;
+}
+
+export interface EscalationRule {
+  id: number;
+  company: CompanyRef | null;
+  code: string;
+  trigger_type: string;
+  priority: Priority | null;
+  threshold_minutes: number | null;
+  threshold_clock_mode: 'business_hours' | 'calendar_24x7';
+  /** รายชื่อ contact_key คั่นด้วยจุลภาค — ว่างได้ แปลว่าแจ้งเฉพาะผู้รับผิดชอบ */
+  notify_contact_keys: string;
+  notify_roles: string | null;
+  repeat_interval_minutes: number | null;
+  notify_outside_business_hours: boolean;
+  is_active: boolean;
+}
+
+export interface ServiceRecord {
+  id: number;
+  company: CompanyRef | null;
+  code: string;
+  name_th: string;
+  service_group: string;
+  service_tier: string;
+  owner: UserRef | null;
+  is_24x7: boolean;
+  is_active: boolean;
+  /** คำนวณตอนอ่าน ไม่ได้เก็บในตาราง */
+  uptime_percent_month: number | null;
+  open_outage_count: number;
+}
+
+export interface ServiceOutage {
+  id: number;
+  service: { id: number; name_th: string };
+  ticket: { id: number; ticket_no: string } | null;
+  started_at: string;
+  ended_at: string | null;
+  is_planned: boolean;
+  cause: string | null;
+  recorded_by: UserRef | null;
+}
+
+export interface MaintenanceWindow {
+  id: number;
+  company: CompanyRef | null;
+  service: { id: number; name_th: string } | null;
+  planned_start: string;
+  planned_end: string;
+  notified_at: string | null;
+  notice_lead_business_days: number;
+  description: string;
+  created_by: UserRef | null;
+}
+
+export interface ProblemRecord {
+  id: number;
+  company: CompanyRef | null;
+  code: string;
+  title: string;
+  service: { id: number; name_th: string } | null;
+  root_cause_code: string | null;
+  root_cause_note: string | null;
+  status: 'open' | 'rca_pending' | 'fixed' | 'closed';
+  opened_at: string;
+  rca_due_at: string | null;
+  rca_submitted_at: string | null;
+  owner: UserRef | null;
+  closed_at: string | null;
+  /** จำนวน incident ที่ผูกกับ problem นี้ — ใช้กับ KPI-7 */
+  linked_incident_count: number;
+}
+
+export interface CatalogItem {
+  id: number;
+  company: CompanyRef | null;
+  code: string;
+  name_th: string;
+  category: { id: number; name_th: string } | null;
+  default_priority: Priority;
+  target_minutes: number | null;
+  clock_start_event: string;
+  requires_approval: boolean;
+  approval_chain: string | null;
+  checklist_template: { id: number; name_th: string } | null;
+  is_active: boolean;
+}
+
+export interface ChecklistTemplateItem {
+  id: number;
+  sort_order: number;
+  title_th: string;
+  is_required: boolean;
+  evidence_required: boolean;
+  default_role_code: string | null;
+}
+
+export interface ChecklistTemplate {
+  id: number;
+  company: CompanyRef | null;
+  code: string;
+  name_th: string;
+  doc_ref: string | null;
+  version: number;
+  is_active: boolean;
+  items: ChecklistTemplateItem[];
+}
+
+export interface ApprovedSoftware {
+  id: number;
+  company: CompanyRef | null;
+  name: string;
+  version: string | null;
+  license_type: string | null;
+  note: string | null;
+  is_active: boolean;
+}
+
+/** รายการตรวจความพร้อมก่อนเปิดใช้งานจริง แสดงบนหน้าแรกของโมดูลผู้ดูแล */
+export interface ReadinessCheck {
+  key: string;
+  label: string;
+  detail: string;
+  status: 'ok' | 'warning' | 'blocking';
+  href: string;
+  /** รหัสคำถามที่ค้างกับฝ่ายจัดการ เช่น Q-03 */
+  ref: string | null;
+}

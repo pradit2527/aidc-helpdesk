@@ -35,11 +35,12 @@ import type {
 /** 31 ສິງຫາ 2569 (2026) 12:30 ນ. ຕາມເວລາວຽງຈັນ */
 const BASE_TIME = new Date('2026-08-31T05:30:00.000Z');
 
-function at(offsetMinutes: number): string {
+export function at(offsetMinutes: number): string {
   return new Date(BASE_TIME.getTime() + offsetMinutes * 60_000).toISOString();
 }
 
-const DAY = 60 * 24;
+/** นาทีต่อวันปฏิทิน — ใช้ประกอบเวลาในข้อมูลจำลอง */
+export const DAY = 60 * 24;
 
 // ── บริษัท ────────────────────────────────────────────────────────────
 export const COMPANIES: Company[] = [
