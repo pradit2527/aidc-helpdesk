@@ -78,13 +78,38 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html
       lang="lo"
-      // ค่า data-theme ถูกเขียนทับโดยสคริปต์ด้านล่างก่อนเบราว์เซอร์วาดเฟรมแรก
-      data-theme="light"
       className={`${notoSansLao.variable} ${notoSansThai.variable} ${archivo.variable}`}
+      /*
+       * จำเป็นต้องมี — ไม่ใช่การกลบปัญหา
+       *
+       * THEME_INIT_SCRIPT แก้ทั้ง data-theme และ lang บน element นี้
+       * ก่อน React จะเริ่ม hydrate ค่าที่ hydration เจอจึงไม่มีทางตรงกับที่
+       * เซิร์ฟเวอร์ส่งมาได้เลย เพราะเซิร์ฟเวอร์อ่าน localStorage ของผู้ใช้ไม่ได้
+       *
+       * ทางเลือกมีแค่สองทาง: ยอมรับความไม่ตรงนี้ หรือเลิกใช้สคริปต์แล้วให้
+       * React ทาธีมหลัง hydrate ซึ่งทำให้ผู้ใช้โหมดมืดเห็นหน้าขาววาบทุกครั้งที่โหลด
+       *
+       * ⚠️ ครอบแค่ attribute ของ element นี้ชั้นเดียว ลูกหลานไม่ได้ถูกครอบไปด้วย
+       *    ความไม่ตรงกันที่เกิดข้างในยังถูกรายงานตามปกติ
+       */
+      suppressHydrationWarning
     >
       <head>
         {/* ต้องรันก่อนเนื้อหาถูกวาด มิฉะนั้นผู้ใช้โหมดมืดจะเห็นหน้าขาววาบหนึ่งครั้ง */}
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script
+          nonce={nonce}
+          /*
+           * nonce ต้องครอบแยกอีกตัว เพราะ suppressHydrationWarning ของ <html>
+           * ไม่ลงมาถึงลูก
+           *
+           * สาเหตุที่ไม่ตรงไม่ได้อยู่ที่โค้ดเรา — ตามสเปกของ HTML เบราว์เซอร์
+           * จะล้างค่า attribute nonce ให้เป็นสตริงว่างหลังใช้ตรวจ CSP เสร็จ
+           * เพื่อกันไม่ให้อ่านค่าย้อนกลับผ่าน CSS attribute selector
+           * React จึงอ่านจาก DOM ได้ "" ขณะที่ฝั่งเซิร์ฟเวอร์ส่งค่าจริงมา
+           */
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
       </head>
       <body>
         {/* ລິ້ງຂ້າມໄປເນື້ອຫາຫຼັກຕ້ອງເປັນ element ທຳອິດຂອງໜ້າ (WCAG 2.4.1) */}
