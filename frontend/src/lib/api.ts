@@ -40,10 +40,43 @@ export class ApiError extends Error {
     /** ข้อความรายฟิลด์สำหรับผูกกลับเข้าฟอร์ม */
     readonly fields?: Record<string, string>,
     readonly retryAfterSeconds?: number,
+    /**
+     * รหัสอ้างอิงคำขอ ตรงกับ log ฝั่งเซิร์ฟเวอร์
+     * แสดงให้ผู้ใช้เห็นตอนเกิด 500 เพื่อให้แจ้ง Service Desk ได้ตรงเรื่อง
+     */
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+/**
+ * ซองมาตรฐานที่ backend ตอบกลับทุก endpoint
+ * ดู backend/src/common/http/envelope.dto.ts
+ */
+interface Envelope<T> {
+  success: boolean;
+  data: T | null;
+  error: { code?: string; message?: string; details?: { field: string; message: string }[] } | null;
+  meta: PageMeta;
+}
+
+export interface PageMeta {
+  request_id: string;
+  page?: number;
+  page_size?: number;
+  total?: number;
+  total_pages?: number;
+}
+
+/** ผลลัพธ์ของ endpoint ที่แบ่งหน้า — รายการกับตัวเลขแยกกันคนละที่ในซอง */
+export interface Page<T> {
+  items: T[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
 }
 
 /** ข้อความที่ผู้ใช้อ่านแล้วรู้ว่าต้องทำอะไรต่อ ไม่ใช่ชื่อรหัสดิบ */
@@ -121,21 +154,93 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (response.status === 204) return undefined as T;
 
-  const payload: unknown = await response.json().catch(() => null);
+  const payload = (await response.json().catch(() => null)) as Envelope<T> | null;
+  const requestId = payload?.meta?.request_id ?? response.headers.get('X-Request-Id') ?? undefined;
 
   if (!response.ok) {
-    const error = (payload as { error?: Record<string, unknown> } | null)?.error ?? {};
+    const error = payload?.error ?? {};
     const code = (error.code as ApiErrorCode) ?? statusToCode(response.status);
     throw new ApiError(
       response.status,
       code,
-      (error.message as string) || FALLBACK_MESSAGE[code] || FALLBACK_MESSAGE.SERVER_ERROR,
-      error.fields as Record<string, string> | undefined,
+      error.message || FALLBACK_MESSAGE[code] || FALLBACK_MESSAGE.SERVER_ERROR,
+      toFieldMap(error.details),
       Number(response.headers.get('Retry-After')) || undefined,
+      requestId,
     );
   }
 
-  return payload as T;
+  // แกะซองออกให้ผู้เรียก เพื่อให้โค้ดหน้าจอไม่ต้องเขียน .data ทุกที่
+  // ถ้าปล่อยให้แกะเอง วันหนึ่งจะมีคนลืมแล้วได้ undefined ตอน runtime
+  return (payload?.data ?? null) as T;
+}
+
+/**
+ * เรียก endpoint ที่แบ่งหน้า แล้วประกอบรายการกับตัวเลขกลับเป็นก้อนเดียว
+ *
+ * backend แยกไว้คนละที่โดยตั้งใจ (data เป็นอาร์เรย์ · meta เป็นตัวเลข)
+ * แต่ฝั่งหน้าจอใช้คู่กันเสมอ จึงรวมให้ตรงนี้ที่เดียว
+ */
+export async function apiRequestPage<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<Page<T>> {
+  const { method = 'GET', body, query, signal } = options;
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+  const init: RequestInit = { method, headers, credentials: 'include' };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  if (signal) init.signal = signal;
+
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, query), init);
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
+    throw new ApiError(0, 'NETWORK_ERROR', FALLBACK_MESSAGE.NETWORK_ERROR);
+  }
+
+  const payload = (await response.json().catch(() => null)) as Envelope<T[]> | null;
+  const requestId = payload?.meta?.request_id ?? response.headers.get('X-Request-Id') ?? undefined;
+
+  if (!response.ok) {
+    const error = payload?.error ?? {};
+    const code = (error.code as ApiErrorCode) ?? statusToCode(response.status);
+    throw new ApiError(
+      response.status,
+      code,
+      error.message || FALLBACK_MESSAGE[code] || FALLBACK_MESSAGE.SERVER_ERROR,
+      toFieldMap(error.details),
+      Number(response.headers.get('Retry-After')) || undefined,
+      requestId,
+    );
+  }
+
+  const meta = payload?.meta ?? { request_id: '' };
+  const items = payload?.data ?? [];
+  return {
+    items,
+    page: meta.page ?? 1,
+    page_size: meta.page_size ?? items.length,
+    total: meta.total ?? items.length,
+    total_pages: meta.total_pages ?? 1,
+  };
+}
+
+/**
+ * แปลง details ของ backend เป็นแมปที่ฟอร์มผูกกลับเข้าช่องได้ทันที
+ * เก็บข้อความแรกของแต่ละฟิลด์ เพราะช่องกรอกหนึ่งช่องแสดงได้ทีละข้อความ
+ */
+function toFieldMap(
+  details: { field: string; message: string }[] | undefined,
+): Record<string, string> | undefined {
+  if (!details?.length) return undefined;
+  const map: Record<string, string> = {};
+  for (const { field, message } of details) {
+    if (field && !(field in map)) map[field] = message;
+  }
+  return Object.keys(map).length > 0 ? map : undefined;
 }
 
 function statusToCode(status: number): ApiErrorCode {
@@ -151,6 +256,8 @@ function statusToCode(status: number): ApiErrorCode {
 
 export const api = {
   get: <T>(path: string, query?: RequestOptions['query']) => apiRequest<T>(path, { query }),
+  /** สำหรับ endpoint ที่แบ่งหน้า — คืน items พร้อมตัวเลขหน้าในก้อนเดียว */
+  page: <T>(path: string, query?: RequestOptions['query']) => apiRequestPage<T>(path, { query }),
   post: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PATCH', body }),
   delete: <T>(path: string) => apiRequest<T>(path, { method: 'DELETE' }),

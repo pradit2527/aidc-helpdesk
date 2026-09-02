@@ -10,9 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBody, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
-import { ErrorResponseDto } from '../../common/dto/common.dto';
+import { ApiEnvelope, ErrorResponseDto } from '../../common/http/envelope.dto';
+import { THROTTLE } from '../../common/throttle/throttle.config';
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
 import {
@@ -30,6 +32,8 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
+  // กัน password spraying — ลองรหัสยอดนิยมกับผู้ใช้จำนวนมากจนไม่มีบัญชีไหนถูกล็อก
+  @Throttle({ [THROTTLE.auth]: { limit: 10, ttl: 300_000 } })
   @ApiOperation({
     summary: 'เข้าสู่ระบบ',
     description: [
@@ -50,7 +54,7 @@ export class AuthController {
     ].join('\n'),
   })
   @ApiBody({ type: LoginDto })
-  @ApiResponse({ status: 200, type: LoginResponseDto })
+  @ApiEnvelope(LoginResponseDto, { status: 200 })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'INVALID_CREDENTIALS' })
   @ApiResponse({
     status: 423,
@@ -68,6 +72,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(200)
+  @Throttle({ [THROTTLE.auth]: { limit: 30, ttl: 300_000 } })
   @ApiOperation({
     summary: 'ต่ออายุ session',
     description:
@@ -110,7 +115,7 @@ export class AuthController {
     description:
       'คืนบทบาท ขอบเขตบริษัท และรายการสิทธิ์ — frontend ใช้ตัดสินว่าจะแสดงเมนูและปุ่มอะไร',
   })
-  @ApiResponse({ status: 200, type: MeResponseDto })
+  @ApiEnvelope(MeResponseDto)
   @ApiResponse({ status: 401, type: ErrorResponseDto })
   async me(@CurrentScope() scope: AccessScope): Promise<MeResponseDto> {
     return this.auth.meFor(scope.userId);
@@ -118,6 +123,7 @@ export class AuthController {
 
   @Post('change-password')
   @HttpCode(204)
+  @Throttle({ [THROTTLE.auth]: { limit: 5, ttl: 300_000 } })
   @UseGuards(ScopeGuard)
   @ApiCookieAuth('cookie')
   @ApiOperation({

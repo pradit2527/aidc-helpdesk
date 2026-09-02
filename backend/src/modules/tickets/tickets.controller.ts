@@ -24,7 +24,7 @@ import {
   TICKET_STATUS,
   TICKET_TYPE,
 } from '../../common/constants';
-import { ErrorResponseDto } from '../../common/dto/common.dto';
+import { ApiEnvelope, ApiEnvelopePage, ErrorResponseDto } from '../../common/http/envelope.dto';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
 import type { AccessScope } from '../../common/scope';
 import {
@@ -32,6 +32,9 @@ import {
   ChangeStatusDto,
   CreateTicketDto,
   TicketDetailDto,
+  TicketListItemDto,
+  // รูปร่างที่ service คืนมา — EnvelopeInterceptor จะแยก items ไปไว้ที่ data
+  // และแยกตัวเลขแบ่งหน้าไปไว้ที่ meta ก่อนส่งออก
   TicketListResponseDto,
 } from './dto/ticket.dto';
 import { TicketsService } from './tickets.service';
@@ -66,7 +69,9 @@ export class TicketsController {
   @ApiQuery({ name: 'sort', required: false, example: '-priority,resolution_due_at' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'page_size', required: false, type: Number, example: 20 })
-  @ApiResponse({ status: 200, type: TicketListResponseDto })
+  @ApiEnvelopePage(TicketListItemDto, {
+    description: 'รายการอยู่ที่ data · ตัวเลขแบ่งหน้าอยู่ที่ meta',
+  })
   list(
     @CurrentScope() scope: AccessScope,
     @Query() query: Record<string, string>,
@@ -93,7 +98,7 @@ export class TicketsController {
     ].join('\n'),
   })
   @ApiBody({ type: CreateTicketDto })
-  @ApiResponse({ status: 201, type: TicketDetailDto })
+  @ApiEnvelope(TicketDetailDto, { status: 201 })
   @ApiResponse({ status: 422, type: ErrorResponseDto, description: 'ข้อมูลไม่ผ่านการตรวจสอบ' })
   create(
     @CurrentScope() scope: AccessScope,
@@ -114,7 +119,7 @@ export class TicketsController {
     ].join('\n'),
   })
   @ApiParam({ name: 'id', example: 1042 })
-  @ApiResponse({ status: 200, type: TicketDetailDto })
+  @ApiEnvelope(TicketDetailDto)
   @ApiResponse({ status: 404, type: ErrorResponseDto })
   detail(
     @CurrentScope() scope: AccessScope,
@@ -140,7 +145,7 @@ export class TicketsController {
   })
   @ApiParam({ name: 'id', example: 1042 })
   @ApiBody({ type: ChangeStatusDto })
-  @ApiResponse({ status: 200, type: TicketDetailDto })
+  @ApiEnvelope(TicketDetailDto)
   @ApiResponse({
     status: 409,
     type: ErrorResponseDto,
@@ -168,7 +173,7 @@ export class TicketsController {
   })
   @ApiParam({ name: 'id', example: 1042 })
   @ApiBody({ type: ChangePriorityDto })
-  @ApiResponse({ status: 200, type: TicketDetailDto })
+  @ApiEnvelope(TicketDetailDto)
   changePriority(
     @CurrentScope() scope: AccessScope,
     @Param('id', ParseIntPipe) id: number,

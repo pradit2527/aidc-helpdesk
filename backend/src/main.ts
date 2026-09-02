@@ -11,6 +11,8 @@ import 'dotenv/config';
 
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { Logger as PinoLogger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -20,7 +22,23 @@ import { AppModule } from './app.module';
 const API_PREFIX = 'api/v1';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // ปิด logger ของ Nest แล้วให้ pino รับช่วง มิฉะนั้น log บูตจะเป็นข้อความเปล่า
+    // ปนอยู่กับ JSON ทำให้ตัวเก็บ log แยกฟิลด์บางบรรทัดไม่ได้
+    bufferLogs: true,
+  });
+  app.useLogger(app.get(PinoLogger));
+
+  /*
+   * บอก Express ว่าอยู่หลัง reverse proxy กี่ชั้น
+   *
+   * ถ้าไม่ตั้ง req.ip จะเป็น IP ของ nginx ทุกคำขอ ผลคือ rate limit
+   * นับรวมผู้ใช้ทั้งบริษัทเป็นก้อนเดียว แล้วบล็อกทุกคนพร้อมกัน
+   *
+   * ตั้งเป็นจำนวนชั้นที่แน่นอน ไม่ใช่ true — เพราะ true เชื่อ X-Forwarded-For
+   * ทั้งสายที่ผู้เรียกปลอมเองได้ ซึ่งทำให้เลี่ยง rate limit ได้ด้วยการใส่ header
+   */
+  app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
 
   app.setGlobalPrefix(API_PREFIX);
   app.use(cookieParser());
@@ -65,9 +83,25 @@ async function bootstrap(): Promise<void> {
         '- **เวลาที่เหลือเป็นนาทีทำการ** (ยกเว้น P1 ที่นับต่อเนื่อง 24×7)',
         '  frontend จึงต้องไม่ทำนาฬิกานับถอยหลัง — ดูฟิลด์ `remaining_unit`',
         '',
-        '### สถานะการพัฒนา',
-        '⚠️ ตอนนี้ endpoint คืน **ข้อมูลตัวอย่าง** ยังไม่ต่อฐานข้อมูล',
-        'รูปร่างข้อมูลตรงตามสัญญาแล้ว frontend เริ่มต่อได้เลย',
+        '### รูปแบบผลลัพธ์',
+        'ทุก endpoint ตอบด้วยซองเดียวกัน ยกเว้น `/livez` และ `/readyz`',
+        'ที่ผู้บริโภคเป็น load balancer ซึ่งมีสัญญาของตัวเองอยู่แล้ว',
+        '',
+        '```json',
+        '{ "success": true,  "data": { }, "error": null, "meta": { "request_id": "..." } }',
+        '{ "success": false, "data": null, "error": { "code": "...", "message": "..." }, "meta": { } }',
+        '```',
+        '',
+        'endpoint ที่แบ่งหน้าจะวางรายการไว้ที่ `data` เป็นอาร์เรย์',
+        'และวาง `page` `page_size` `total` `total_pages` ไว้ใน `meta`',
+        '',
+        '`meta.request_id` ตรงกับ header `X-Request-Id` และกับทุกบรรทัด log ของคำขอนั้น',
+        'เวลาผู้ใช้แจ้งปัญหา ให้ขอเลขนี้มาแล้วค้นใน log ได้ทันที',
+        '',
+        '### รหัสสถานะที่ใช้',
+        '`400` รูปร่างคำขอผิด (ฟิลด์เกิน ชนิดผิด) · `422` รูปร่างถูกแต่ผิดกฎธุรกิจ',
+        '`401` ยังไม่ยืนยันตัวตน · `403` ยืนยันแล้วแต่ไม่มีสิทธิ์ · `404` ไม่พบหรืออยู่นอกขอบเขต',
+        '`409` ชนกับสถานะปัจจุบัน · `423` บัญชีถูกล็อก · `429` เรียกถี่เกินกำหนด',
       ].join('\n'),
     )
     .setVersion('0.1.0')

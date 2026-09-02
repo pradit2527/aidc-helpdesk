@@ -9,6 +9,7 @@ import {
 import type { Request } from 'express';
 
 import { AuthService, COOKIE } from '../modules/auth/auth.service';
+import { RequestContextStore } from './http/request-context';
 import type { AccessScope } from './scope';
 import { ScopeService } from './scope.service';
 
@@ -43,6 +44,10 @@ export class ScopeGuard implements CanActivate {
     const userId = await this.resolveUserId(req);
     this.assertCsrf(req);
     req.scope = await this.scopes.forUser(userId);
+
+    // ผูกเข้าบริบทเพื่อให้ log ทุกบรรทัดของคำขอนี้มี user_id
+    // ⚠️ ใช้เพื่อสังเกตการณ์เท่านั้น การตัดสินสิทธิ์ต้องอ่านจาก req.scope
+    RequestContextStore.setUserId(userId);
     return true;
   }
 
