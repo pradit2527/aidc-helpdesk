@@ -9,6 +9,7 @@ import { TICKET_REPOSITORY } from './application/ports/ticket-repository.port';
 import { ChangeTicketStatusUseCase } from './application/use-cases/change-ticket-status.use-case';
 import { CreateTicketUseCase } from './application/use-cases/create-ticket.use-case';
 import { ReassessTicketPriorityUseCase } from './application/use-cases/reassess-ticket-priority.use-case';
+import { CacheService } from './common/cache/cache.service';
 import { AllExceptionsFilter } from './common/http/all-exceptions.filter';
 import { EnvelopeInterceptor } from './common/http/envelope.interceptor';
 import { RequestContextMiddleware } from './common/http/request-context.middleware';
@@ -17,6 +18,7 @@ import { RedisModule } from './common/redis/redis.module';
 import { ScopeService } from './common/scope.service';
 import { throttleConfig, UserAwareThrottlerGuard } from './common/throttle/throttle.config';
 import { DbModule } from './db/db.module';
+import { JobsModule } from './jobs/jobs.module';
 import { SlaConfigRepository } from './db/repositories/sla-config.repository';
 import { TicketRepository } from './db/repositories/ticket.repository';
 import { AuthController } from './modules/auth/auth.controller';
@@ -33,10 +35,12 @@ import { TicketsService } from './modules/tickets/tickets.service';
     ThrottlerModule.forRoot(throttleConfig),
     DbModule,
     RedisModule,
+    JobsModule,
   ],
   controllers: [AuthController, HealthController, TicketsController],
   providers: [
     ScopeService,
+    CacheService,
     AuthService,
     HealthService,
     TicketRepository,
