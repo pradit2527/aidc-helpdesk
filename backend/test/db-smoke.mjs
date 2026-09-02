@@ -33,8 +33,21 @@ async function call(path, options = {}) {
       ...(options.headers ?? {}),
     },
   });
-  const body = await res.json().catch(() => null);
-  return { status: res.status, body };
+  const payload = await res.json().catch(() => null);
+
+  /*
+   * ทุก endpoint ห่อผลลัพธ์ด้วยซอง { success, data, error, meta } แล้ว
+   * แกะให้ตรงนี้ที่เดียว เพื่อให้ข้อตรวจด้านล่างอ่านฟิลด์ได้ตรง ๆ เหมือนเดิม
+   *
+   * endpoint ที่แบ่งหน้าวางรายการไว้ที่ data และตัวเลขไว้ที่ meta
+   * จึงประกอบกลับเป็น { items, total } ให้เหมือนรูปเดิมที่เทสต์คาดหวัง
+   */
+  const meta = payload?.meta ?? {};
+  const body = Array.isArray(payload?.data)
+    ? { items: payload.data, page: meta.page, page_size: meta.page_size, total: meta.total }
+    : (payload?.data ?? payload);
+
+  return { status: res.status, body, error: payload?.error ?? null, meta };
 }
 
 console.log('\nตรวจการเชื่อมต่อฐานข้อมูลผ่าน API\n');

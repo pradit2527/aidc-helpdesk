@@ -10,8 +10,6 @@ import { RequestContextStore } from '../http/request-context';
 export const THROTTLE = {
   /** ค่าเริ่มต้นของทุก endpoint */
   default: 'default',
-  /** เข้มกว่ามาก สำหรับ endpoint ที่เดารหัสผ่านได้ */
-  auth: 'auth',
 } as const;
 
 /**
@@ -22,19 +20,37 @@ export const THROTTLE = {
  * 300 ครั้ง/นาที จึงกว้างพอสำหรับคนทำงานเร็ว แต่ยังตัดสคริปต์ที่ยิงรัวได้
  */
 export const throttleConfig: ThrottlerModuleOptions = {
-  throttlers: [
-    { name: THROTTLE.default, ttl: seconds(60), limit: 300 },
-    /*
-     * 10 ครั้งต่อ 5 นาที สำหรับ endpoint ยืนยันตัวตน
-     *
-     * ตัวล็อกบัญชี (ผิด 5 ครั้ง) กันการเดารหัสของ "บัญชีเดียว" อยู่แล้ว
-     * แต่กัน password spraying ไม่ได้ — คือลองรหัสยอดนิยมหนึ่งตัวกับผู้ใช้พันคน
-     * ซึ่งไม่ทำให้บัญชีไหนถูกล็อกเลยสักบัญชี
-     * ตัวจำกัดตาม IP นี้จึงเป็นชั้นที่กันกรณีนั้นโดยเฉพาะ
-     */
-    { name: THROTTLE.auth, ttl: seconds(300), limit: 10 },
-  ],
+  /*
+   * ⚠️ ประกาศ throttler ตัวเดียวโดยตั้งใจ
+   *
+   * ใน @nestjs/throttler v6 ทุก throttler ที่ประกาศไว้จะมีผลกับ "ทุก" route
+   * ไม่ใช่เฉพาะ route ที่อ้างชื่อมันด้วย @Throttle
+   * เคยประกาศตัวชื่อ auth ที่ 10 ครั้ง/5 นาทีไว้ด้วย ผลคือทั้งระบบถูกจำกัด
+   * ไว้ที่ 10 คำขอต่อ 5 นาที ซึ่งจับได้เพราะเทสต์ที่เคยผ่านกลายเป็น 429 ยกชุด
+   *
+   * วิธีที่ถูกคือทับค่าของ throttler เดิมเป็นราย route ด้วย
+   * @Throttle({ default: { limit, ttl } })
+   */
+  throttlers: [{ name: THROTTLE.default, ttl: seconds(60), limit: 300 }],
 };
+
+/**
+ * ค่าจำกัดสำหรับ endpoint ยืนยันตัวตน ใช้กับ @Throttle() ราย route
+ *
+ * ตัวล็อกบัญชี (ผิด 5 ครั้ง) กันการเดารหัสของ "บัญชีเดียว" อยู่แล้ว
+ * แต่กัน password spraying ไม่ได้ — คือลองรหัสยอดนิยมหนึ่งตัวกับผู้ใช้พันคน
+ * ซึ่งไม่ทำให้บัญชีไหนถูกล็อกเลยสักบัญชี ชั้นนี้จึงกันกรณีนั้นโดยเฉพาะ
+ *
+ * ตั้งอายุหน้าต่างผ่าน env ได้ เพื่อให้ชุดทดสอบไม่ต้องรอ 5 นาที
+ * ต่อการรันหนึ่งครั้ง — ค่าเริ่มต้นยังเป็น 5 นาทีเสมอ
+ */
+const AUTH_WINDOW_SECONDS = Number(process.env.AUTH_THROTTLE_TTL_SECONDS ?? 300);
+
+export const AUTH_THROTTLE = {
+  login: { limit: 10, ttl: seconds(AUTH_WINDOW_SECONDS) },
+  refresh: { limit: 30, ttl: seconds(AUTH_WINDOW_SECONDS) },
+  changePassword: { limit: 5, ttl: seconds(AUTH_WINDOW_SECONDS) },
+} as const;
 
 /**
  * นับอัตราการเรียกรายผู้ใช้เมื่อรู้ว่าเป็นใคร ไม่งั้นนับราย IP

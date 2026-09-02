@@ -1,3 +1,4 @@
+import { DomainError } from './errors/domain-error';
 /**
  * ทดสอบขอบเขตการมองเห็นข้อมูล — ส่วนที่สำคัญที่สุดของระบบ (TR-01)
  * พอร์ตจากฉบับ Python ที่ผ่าน 18/18
@@ -42,8 +43,11 @@ describe('ตรรกะของ AccessScope', () => {
     try {
       scope().require('ticket.assign');
     } catch (e) {
-      const body = (e as { getResponse: () => { error: { code: string } } }).getResponse();
-      expect(body.error.code).toBe('FORBIDDEN');
+      // โยน DomainError ไม่ใช่ HttpException ของ NestJS แล้ว
+      // เพื่อให้ AccessScope ใช้ได้จากงาน background ที่ไม่เกี่ยวกับ HTTP ด้วย
+      expect(e).toBeInstanceOf(DomainError);
+      expect((e as DomainError).code).toBe('FORBIDDEN');
+      expect((e as DomainError).httpStatus).toBe(403);
     }
   });
 

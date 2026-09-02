@@ -5,6 +5,9 @@ import { alias } from 'drizzle-orm/pg-core';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../client';
 import { DB } from '../db.module';
+import type { ITicketRepository } from '../../application/ports/ticket-repository.port';
+import type { TicketEntity } from '../../domain/ticket/ticket.entity';
+import { NotFoundError } from '../../common/errors/domain-error';
 import {
   appUser,
   company,
@@ -12,6 +15,7 @@ import {
   ticket,
   ticketCategory,
   ticketSequence,
+  ticketStatusHistory,
 } from '../schema';
 
 /**
@@ -110,7 +114,7 @@ export type DbTransaction = Parameters<Parameters<Db['transaction']>[0]>[0];
  *    ซึ่งเป็นความผิดพลาดที่มองด้วยตาไม่เห็นและเทสต์ระดับ endpoint ไม่จับ
  */
 @Injectable()
-export class TicketRepository {
+export class TicketRepository implements Partial<ITicketRepository> {
   constructor(@Inject(DB) private readonly db: Db) {}
 
   /**
@@ -259,5 +263,176 @@ export class TicketRepository {
       .returning({ lastNo: ticketSequence.lastNo });
 
     return `${companyCode}-${period}-${String(row?.lastNo ?? 1).padStart(4, '0')}`;
+  }
+
+  // ── การเขียนข้อมูล ────────────────────────────────────────────────────
+  //
+  // ย้ายมาจาก TicketsService ที่เดิมเรียก this.db เขียนตาราง ticket ตรง ๆ
+  // ซึ่งข้ามชั้น repository ที่บังคับขอบเขตสิทธิ์อยู่ — เท่ากับมีทางเขียน
+  // ที่ไม่ผ่านด่านความปลอดภัยเลย ทั้งที่ทางอ่านผ่านครบทุกทาง
+
+  /**
+   * บันทึกเรื่องใหม่ ออกเลขที่ และเขียนประวัติแถวแรก ในทรานแซกชันเดียว
+   *
+   * ทั้งสามอย่างต้องสำเร็จหรือล้มเหลวพร้อมกัน — ถ้าออกเลขที่แล้วบันทึกไม่สำเร็จ
+   * เลขนั้นจะหายไปจากลำดับถาวร และการตรวจสอบภายในจะเจอช่องว่างที่อธิบายไม่ได้
+   */
+  async create(
+    entity: TicketEntity,
+    sla: {
+      policyId: number | null;
+      clockStartedAt: Date;
+      responseDueAt: Date | null;
+      resolutionDueAt: Date | null;
+    },
+    actorId: number,
+  ): Promise<number> {
+    const props = entity.toPersistence();
+
+    const [companyRow] = await this.db
+      .select({ code: company.code })
+      .from(company)
+      .where(eq(company.id, props.companyId))
+      .limit(1);
+
+    if (!companyRow) {
+      throw new NotFoundError('COMPANY_NOT_FOUND', 'ບໍ່ພົບບໍລິສັດທີ່ລະບຸ', {
+        companyId: props.companyId,
+      });
+    }
+
+    return this.db.transaction(async (tx) => {
+      const ticketNo = await this.nextTicketNo(
+        tx,
+        props.companyId,
+        companyRow.code,
+        sla.clockStartedAt,
+      );
+
+      const [row] = await tx
+        .insert(ticket)
+        .values({
+          ticketNo,
+          ticketType: props.ticketType ?? 'incident',
+          companyId: props.companyId,
+          departmentId: props.departmentId ?? null,
+          categoryId: props.categoryId,
+          catalogItemId: props.catalogItemId ?? null,
+          serviceId: props.serviceId ?? null,
+          requesterId: props.requesterId,
+          createdBy: props.createdBy,
+          subject: props.subject,
+          description: props.description,
+          channel: props.channel ?? 'portal',
+          sourceDevice: props.sourceDevice ?? null,
+          assetTag: props.assetTag ?? null,
+          impact: props.impact,
+          urgency: props.urgency,
+          priority: props.priority,
+          isMajorIncident: props.isMajorIncident ?? false,
+          status: props.status,
+          slaPolicyId: sla.policyId,
+          slaClockStartedAt: sla.clockStartedAt,
+          responseDueAt: sla.responseDueAt,
+          resolutionDueAt: sla.resolutionDueAt,
+        })
+        .returning({ id: ticket.id });
+
+      const ticketId = row!.id;
+
+      // แถวแรกของประวัติ ทำให้ไทม์ไลน์เริ่มที่ "ใครแจ้ง" เสมอ ไม่ใช่เริ่มกลางเรื่อง
+      await tx.insert(ticketStatusHistory).values({
+        ticketId,
+        fromStatus: null,
+        toStatus: props.status,
+        changedBy: actorId,
+      });
+
+      return ticketId;
+    });
+  }
+
+  /** บันทึกการเปลี่ยนสถานะพร้อมประวัติ ในทรานแซกชันเดียว */
+  async saveStatusChange(
+    entity: TicketEntity,
+    change: { from: string; to: string; actorId: number; reason?: string },
+  ): Promise<void> {
+    const props = entity.toPersistence();
+    const id = props.id;
+    if (id === undefined) {
+      throw new Error('บันทึกการเปลี่ยนสถานะของเรื่องที่ยังไม่มี id ไม่ได้');
+    }
+
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(ticket)
+        .set({
+          status: props.status,
+          resolvedAt: props.resolvedAt ?? null,
+          closedAt: props.closedAt ?? null,
+          closedBy: props.closedBy ?? null,
+          pendingReason: props.pendingReason ?? null,
+          pendingStartedAt: props.pendingStartedAt ?? null,
+          pendingDurationMinutes: props.pendingDurationMinutes,
+        })
+        .where(eq(ticket.id, id));
+
+      await tx.insert(ticketStatusHistory).values({
+        ticketId: id,
+        fromStatus: change.from,
+        toStatus: change.to,
+        changedBy: change.actorId,
+        // คอลัมน์ชื่อ reason ไม่ใช่ note — บังคับกรอกกรณียกเลิกและเปิดใหม่
+        ...(change.reason ? { reason: change.reason } : {}),
+      });
+    });
+  }
+
+  /** บันทึกการทบทวนระดับความสำคัญพร้อมประวัติและกำหนดเวลาใหม่ ในทรานแซกชันเดียว */
+  async savePriorityChange(
+    entity: TicketEntity,
+    change: {
+      fromPriority: string;
+      toPriority: string;
+      actorId: number;
+      reason: string;
+      sla: {
+        policyId: number | null;
+        responseDueAt: Date | null;
+        resolutionDueAt: Date | null;
+      };
+    },
+  ): Promise<void> {
+    const props = entity.toPersistence();
+    const id = props.id;
+    if (id === undefined) {
+      throw new Error('บันทึกการทบทวนระดับความสำคัญของเรื่องที่ยังไม่มี id ไม่ได้');
+    }
+
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(ticket)
+        .set({
+          impact: props.impact,
+          urgency: props.urgency,
+          priority: props.priority,
+          priorityChangedAt: props.priorityChangedAt ?? null,
+          isMajorIncident: props.isMajorIncident ?? false,
+          slaPolicyId: change.sla.policyId,
+          responseDueAt: change.sla.responseDueAt,
+          resolutionDueAt: change.sla.resolutionDueAt,
+        })
+        .where(eq(ticket.id, id));
+
+      await tx.insert(ticketStatusHistory).values({
+        ticketId: id,
+        fromStatus: props.status,
+        toStatus: props.status,
+        fromPriority: change.fromPriority,
+        toPriority: change.toPriority,
+        changedBy: change.actorId,
+        reason: change.reason,
+      });
+    });
   }
 }

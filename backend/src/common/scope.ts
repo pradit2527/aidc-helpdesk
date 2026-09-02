@@ -1,3 +1,4 @@
+import { ForbiddenError } from './errors/domain-error';
 /**
  * ขอบเขตการมองเห็นข้อมูลของผู้เรียก 1 request
  *
@@ -9,7 +10,6 @@
  * (docs/10-backend-architecture.md §6)
  */
 
-import { ForbiddenException } from '@nestjs/common';
 
 import type { ContactKey } from './constants';
 
@@ -68,12 +68,16 @@ export class AccessScope {
 
   require(...codes: string[]): void {
     if (!this.has(...codes)) {
-      throw new ForbiddenException({
-        error: {
-          code: 'FORBIDDEN',
-          message: 'ຄຸນບໍ່ມີສິດດຳເນີນການນີ້',
-          details: [],
-        },
+      /*
+       * โยน ForbiddenError ไม่ใช่ ForbiddenException ของ NestJS
+       *
+       * AccessScope ถูกใช้ทั้งจาก controller และจากงาน background
+       * ถ้าโยน exception ของ HTTP ออกมา ชั้นที่ไม่เกี่ยวกับ HTTP จะต้องรู้จัก
+       * @nestjs/common ไปด้วย และการเทสต์กฎสิทธิ์ข้อเดียวจะต้องบูต Nest ขึ้นมาทั้งตัว
+       * AllExceptionsFilter แปลงเป็น 403 ให้เองอยู่แล้ว
+       */
+      throw new ForbiddenError('FORBIDDEN', 'ທ່ານບໍ່ມີສິດດຳເນີນການນີ້', {
+        required: codes,
       });
     }
   }

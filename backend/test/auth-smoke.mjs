@@ -63,8 +63,11 @@ async function call(path, options = {}) {
 
   const res = await fetch(BASE + path, { ...options, headers });
   jar.store(res);
-  const body = res.status === 204 ? null : await res.json().catch(() => null);
-  return { status: res.status, body, res };
+  const payload = res.status === 204 ? null : await res.json().catch(() => null);
+
+  // ทุก endpoint ห่อผลลัพธ์ด้วยซอง { success, data, error, meta } — แกะที่เดียวตรงนี้
+  const body = payload?.data ?? payload;
+  return { status: res.status, body, envelope: payload, res };
 }
 
 // ── รหัสผ่านผิด ──────────────────────────────────────────────────────
@@ -75,8 +78,8 @@ const wrong = await call('/auth/login', {
 check('รหัสผ่านผิดได้ 401', wrong.status === 401, `ได้ ${wrong.status}`);
 check(
   'ไม่บอกว่าชื่อผู้ใช้มีอยู่จริงหรือไม่',
-  wrong.body?.error?.code === 'INVALID_CREDENTIALS',
-  wrong.body?.error?.code,
+  wrong.envelope?.error?.code === 'INVALID_CREDENTIALS',
+  wrong.envelope?.error?.code,
 );
 
 // ── ชื่อผู้ใช้ที่ไม่มีจริง ต้องได้ข้อความเดียวกัน ─────────────────────
@@ -86,8 +89,8 @@ const noUser = await call('/auth/login', {
 });
 check(
   'บัญชีที่ไม่มีจริงตอบเหมือนรหัสผ่านผิดทุกประการ',
-  noUser.status === wrong.status && noUser.body?.error?.code === wrong.body?.error?.code,
-  `${noUser.status} / ${noUser.body?.error?.code}`,
+  noUser.status === wrong.status && noUser.envelope?.error?.code === wrong.envelope?.error?.code,
+  `${noUser.status} / ${noUser.envelope?.error?.code}`,
 );
 
 // ── เข้าสู่ระบบสำเร็จ ────────────────────────────────────────────────
@@ -115,7 +118,7 @@ check(
   /Path=\/api\/v1\/auth/i.test(rtCookie ?? ''),
   rtCookie?.slice(0, 80),
 );
-check('token ไม่เคยอยู่ใน response body', !JSON.stringify(login.body ?? {}).includes('eyJ'));
+check('token ไม่เคยอยู่ใน response body', !JSON.stringify(login.envelope ?? {}).includes('eyJ'));
 
 check('คืนบทบาทของผู้ใช้', Array.isArray(login.body?.user?.roles), String(login.body?.user?.roles));
 check(

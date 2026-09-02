@@ -37,8 +37,12 @@ async function bootstrap(): Promise<void> {
    *
    * ตั้งเป็นจำนวนชั้นที่แน่นอน ไม่ใช่ true — เพราะ true เชื่อ X-Forwarded-For
    * ทั้งสายที่ผู้เรียกปลอมเองได้ ซึ่งทำให้เลี่ยง rate limit ได้ด้วยการใส่ header
+   *
+   * ค่าเริ่มต้นเป็น 0 (ไม่เชื่อใครเลย) เพราะตอนรันตรงโดยไม่มี proxy
+   * การเชื่อ X-Forwarded-For เท่ากับเปิดให้ปลอม IP ได้ด้วย header เดียว
+   * การตั้งค่านี้ต้องเป็นการตัดสินใจตอน deploy ไม่ใช่ค่าที่ติดมาเงียบ ๆ
    */
-  app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
+  app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 0));
 
   app.setGlobalPrefix(API_PREFIX);
   app.use(cookieParser());

@@ -1,25 +1,13 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { Injectable } from '@nestjs/common';
 
-import {
-  computePriority,
-  type ClockMode,
-  type Impact,
-  type Priority,
-  type Urgency,
-} from '../../common/constants';
+import type { Impact, Priority, TicketStatus, Urgency } from '../../common/constants';
 import type { AccessScope } from '../../common/scope';
-import {
-  computeDueAt,
-  elapsedMinutes,
-  nextWorkingInstant,
-  slaStatus,
-} from '../../common/sla/business-time';
-import type { Db } from '../../db/client';
-import { DB } from '../../db/db.module';
+import { elapsedMinutes, slaStatus } from '../../common/sla/business-time';
+import { CreateTicketUseCase } from '../../application/use-cases/create-ticket.use-case';
+import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
+import { ReassessTicketPriorityUseCase } from '../../application/use-cases/reassess-ticket-priority.use-case';
 import { SlaConfigRepository } from '../../db/repositories/sla-config.repository';
 import { TicketRepository, type TicketRow } from '../../db/repositories/ticket.repository';
-import { company, ticket, ticketStatusHistory } from '../../db/schema';
 import {
   ChangePriorityDto,
   ChangeStatusDto,
@@ -31,20 +19,27 @@ import {
 } from './dto/ticket.dto';
 
 /**
- * ตรรกะของเรื่องแจ้ง — อ่านและเขียนฐานข้อมูลจริง
+ * ตัวประสานของโดเมนเรื่องแจ้ง
  *
- * กติกาสามข้อที่ service นี้บังคับ และห้ามย้ายไปอยู่ที่ controller
- *   1. ระดับความสำคัญมาจากเมทริกซ์ impact × urgency เสมอ ไม่เคยรับจาก client
- *   2. กำหนดเวลาคำนวณจากปฏิทินเวลาทำการของบริษัทนั้น ไม่ใช่บวกชั่วโมงตรง ๆ
- *   3. สถานะ SLA คำนวณตอนอ่านทุกครั้ง ไม่เก็บลงฐานข้อมูล
- *      เพราะมันเปลี่ยนตามเวลาที่ผ่านไปโดยที่ไม่มีใครแตะ ticket เลย
+ * หน้าที่หลังแยกชั้นแล้วเหลือสองอย่าง
+ *   1. เรียก use case ที่เหมาะกับคำสั่งที่เข้ามา
+ *   2. แปลงแถวจากฐานข้อมูลเป็น DTO ที่ frontend ใช้ได้
+ *
+ * กฎธุรกิจย้ายไปอยู่ที่ TicketEntity แล้ว และการเขียนฐานข้อมูลย้ายไปอยู่ที่
+ * TicketRepository — เดิม service นี้เรียก this.db เขียนตาราง ticket ตรง ๆ
+ * ซึ่งข้ามด่านขอบเขตสิทธิ์ที่ repository บังคับอยู่
+ *
+ * สถานะ SLA ยังคำนวณตอนอ่านทุกครั้ง ไม่เก็บลงฐานข้อมูล
+ * เพราะมันเปลี่ยนตามเวลาที่ผ่านไปโดยที่ไม่มีใครแตะ ticket เลย
  */
 @Injectable()
 export class TicketsService {
   constructor(
-    @Inject(DB) private readonly db: Db,
     private readonly tickets: TicketRepository,
     private readonly slaConfig: SlaConfigRepository,
+    private readonly createTicket: CreateTicketUseCase,
+    private readonly changeTicketStatus: ChangeTicketStatusUseCase,
+    private readonly reassessPriority: ReassessTicketPriorityUseCase,
   ) {}
 
   async list(scope: AccessScope, query: Record<string, string>): Promise<TicketListResponseDto> {
@@ -85,98 +80,23 @@ export class TicketsService {
   }
 
   async create(scope: AccessScope, dto: CreateTicketDto): Promise<TicketDetailDto> {
-    const companyId = dto.company_id ?? scope.homeCompanyId;
-    if (!scope.inScope(companyId)) {
-      throw new BadRequestException({
-        error: { code: 'VALIDATION_ERROR', message: 'ບໍລິສັດທີ່ລະບຸຢູ່ນອກຂອບເຂດສິດຂອງທ່ານ' },
-      });
-    }
-
-    const requesterId = dto.requester_id ?? scope.userId;
-    if (requesterId !== scope.userId) {
-      scope.require('ticket.create_for_other');
-    }
-
-    // ระดับความสำคัญเป็นผลลัพธ์ ไม่ใช่ค่ารับเข้า (SLA ข้อ 4)
-    const priority = computePriority(dto.impact as Impact, dto.urgency as Urgency);
-    const target = await this.slaConfig.targetFor(companyId, priority);
-    const cal = await this.slaConfig.calendarFor(companyId);
-
-    /**
-     * นาฬิกาเริ่มเดินเมื่อไร (SLA 5.3)
-     *
-     * P1 นับปฏิทิน จึงเริ่มทันทีที่แจ้ง ไม่ว่าตี 3 หรือวันอาทิตย์
-     * P2–P4 นับเฉพาะนาทีทำการ ถ้าแจ้งนอกเวลางานต้องเริ่มที่เวลาเปิดทำการถัดไป
-     * มิฉะนั้นเรื่องที่แจ้ง 20:00 จะดูเหมือนใช้เวลาไปแล้วหลายชั่วโมงทั้งที่ยังไม่เปิดออฟฟิศ
-     */
-    const now = new Date();
-    const clockStart =
-      target.clockMode === 'calendar_24x7' ? now : nextWorkingInstant(now, cal);
-
-    const { responseDueAt, resolutionDueAt } = computeDueAt({
-      clockStart,
-      responseMinutes: target.responseMinutes,
-      resolutionMinutes: target.resolutionMinutes,
-      cal,
-      mode: target.clockMode,
+    const id = await this.createTicket.execute(scope, {
+      companyId: dto.company_id,
+      requesterId: dto.requester_id,
+      categoryId: dto.category_id,
+      subject: dto.subject,
+      description: dto.description,
+      impact: dto.impact as Impact,
+      urgency: dto.urgency as Urgency,
+      ...(dto.ticket_type ? { ticketType: dto.ticket_type } : {}),
+      ...(dto.channel ? { channel: dto.channel } : {}),
+      ...(dto.department_id !== undefined ? { departmentId: dto.department_id } : {}),
+      ...(dto.catalog_item_id !== undefined ? { catalogItemId: dto.catalog_item_id } : {}),
+      ...(dto.service_id !== undefined ? { serviceId: dto.service_id } : {}),
+      ...(dto.source_device !== undefined ? { sourceDevice: dto.source_device } : {}),
+      ...(dto.asset_tag !== undefined ? { assetTag: dto.asset_tag } : {}),
     });
-
-    const [companyRow] = await this.db
-      .select({ code: company.code })
-      .from(company)
-      .where(eq(company.id, companyId))
-      .limit(1);
-    if (!companyRow) {
-      throw new BadRequestException({
-        error: { code: 'VALIDATION_ERROR', message: 'ບໍ່ພົບບໍລິສັດທີ່ລະບຸ' },
-      });
-    }
-
-    const created = await this.db.transaction(async (tx) => {
-      const ticketNo = await this.tickets.nextTicketNo(tx, companyId, companyRow.code, now);
-
-      const [row] = await tx
-        .insert(ticket)
-        .values({
-          ticketNo,
-          ticketType: dto.ticket_type ?? 'incident',
-          companyId,
-          departmentId: dto.department_id ?? null,
-          categoryId: dto.category_id,
-          catalogItemId: dto.catalog_item_id ?? null,
-          serviceId: dto.service_id ?? null,
-          requesterId,
-          createdBy: scope.userId,
-          subject: dto.subject,
-          description: dto.description,
-          channel: dto.channel ?? 'portal',
-          sourceDevice: dto.source_device ?? null,
-          assetTag: dto.asset_tag ?? null,
-          impact: dto.impact,
-          urgency: dto.urgency,
-          priority,
-          status: 'new',
-          slaPolicyId: target.policyId,
-          slaClockStartedAt: clockStart,
-          responseDueAt,
-          resolutionDueAt,
-        })
-        .returning({ id: ticket.id });
-
-      const ticketId = row!.id;
-
-      // แถวแรกของประวัติ ทำให้ไทม์ไลน์เริ่มที่ "ใครแจ้ง" เสมอ ไม่ใช่เริ่มกลางเรื่อง
-      await tx.insert(ticketStatusHistory).values({
-        ticketId,
-        fromStatus: null,
-        toStatus: 'new',
-        changedBy: scope.userId,
-      });
-
-      return ticketId;
-    });
-
-    return this.detail(scope, created);
+    return this.detail(scope, id);
   }
 
   async changeStatus(
@@ -184,44 +104,11 @@ export class TicketsService {
     id: number,
     dto: ChangeStatusDto,
   ): Promise<TicketDetailDto> {
-    const row = await this.tickets.findById(scope, id);
-    scope.require('ticket.change_status');
-
-    const now = new Date();
-    const entering = dto.to_status === 'pending_user';
-    const leaving = row.status === 'pending_user' && !entering;
-
-    let pausedMinutes = row.pendingDurationMinutes;
-    if (leaving && row.pendingStartedAt) {
-      // สะสมเวลาที่หยุดนับไว้ แล้วเลื่อนกำหนดปิดงานออกไปเท่ากัน (SLA 5.4)
-      const cal = await this.slaConfig.calendarFor(row.companyId);
-      const target = await this.slaConfig.targetFor(row.companyId, row.priority as Priority);
-      pausedMinutes += minutesPaused(row.pendingStartedAt, now, cal, target.clockMode);
-    }
-
-    await this.db.transaction(async (tx) => {
-      await tx
-        .update(ticket)
-        .set({
-          status: dto.to_status,
-          pendingReason: entering ? (dto.pending_reason ?? null) : null,
-          pendingStartedAt: entering ? now : null,
-          pendingDurationMinutes: pausedMinutes,
-          resolvedAt: dto.to_status === 'resolved' ? now : row.resolvedAt,
-          closedAt: dto.to_status === 'closed' ? now : null,
-          closedBy: dto.to_status === 'closed' ? scope.userId : null,
-        })
-        .where(eq(ticket.id, id));
-
-      await tx.insert(ticketStatusHistory).values({
-        ticketId: id,
-        fromStatus: row.status,
-        toStatus: dto.to_status,
-        reason: dto.reason ?? null,
-        changedBy: scope.userId,
-      });
+    await this.changeTicketStatus.execute(scope, id, {
+      toStatus: dto.to_status as TicketStatus,
+      reason: dto.reason,
+      pendingReason: dto.pending_reason,
     });
-
     return this.detail(scope, id);
   }
 
@@ -230,61 +117,11 @@ export class TicketsService {
     id: number,
     dto: ChangePriorityDto,
   ): Promise<TicketDetailDto> {
-    const row = await this.tickets.findById(scope, id);
-    scope.require('ticket.change_priority');
-
-    const impact = (dto.impact ?? row.impact) as Impact;
-    const urgency = (dto.urgency ?? row.urgency) as Urgency;
-    const priority = computePriority(impact, urgency);
-
-    /**
-     * เปลี่ยนระดับกลางทาง = นาฬิกานับใหม่ตามระดับใหม่ ตั้งแต่เวลาที่ปรับ (SLA 5.4)
-     * ไม่ใช่คำนวณจาก created_at ใหม่ — เรื่องที่เปิดมา 3 วันแล้วปรับเป็น P1
-     * จะกลายเป็นเกินกำหนดตั้งแต่วินาทีที่กดปรับ ทั้งที่เพิ่งรู้ว่ามันร้ายแรง
-     */
-    const changedAt = new Date();
-    const target = await this.slaConfig.targetFor(row.companyId, priority);
-    const cal = await this.slaConfig.calendarFor(row.companyId);
-    const clockStart =
-      target.clockMode === 'calendar_24x7' ? changedAt : nextWorkingInstant(changedAt, cal);
-
-    const { responseDueAt, resolutionDueAt } = computeDueAt({
-      clockStart,
-      responseMinutes: target.responseMinutes,
-      resolutionMinutes: target.resolutionMinutes,
-      cal,
-      mode: target.clockMode,
-      pausedMinutes: row.pendingDurationMinutes,
+    await this.reassessPriority.execute(scope, id, {
+      impact: dto.impact as Impact | undefined,
+      urgency: dto.urgency as Urgency | undefined,
+      reason: dto.reason,
     });
-
-    await this.db.transaction(async (tx) => {
-      await tx
-        .update(ticket)
-        .set({
-          impact,
-          urgency,
-          priority,
-          priorityChangedAt: changedAt,
-          slaPolicyId: target.policyId,
-          responseDueAt,
-          resolutionDueAt,
-          isMajorIncident: priority === 'P1' ? true : row.isMajorIncident,
-        })
-        .where(eq(ticket.id, id));
-
-      // เหตุผลบังคับทุกครั้ง เพื่อให้รายงานรายเดือนตรวจได้ว่าเกณฑ์ใช้ได้จริงไหม
-      // to_status เก็บสถานะเดิมไว้เพราะการปรับระดับไม่ได้เปลี่ยนสถานะ
-      await tx.insert(ticketStatusHistory).values({
-        ticketId: id,
-        fromStatus: row.status,
-        toStatus: row.status,
-        fromPriority: row.priority,
-        toPriority: priority,
-        reason: dto.reason,
-        changedBy: scope.userId,
-      });
-    });
-
     return this.detail(scope, id);
   }
 
@@ -420,14 +257,4 @@ export class TicketsService {
       },
     };
   }
-}
-
-/** นาทีที่หยุดนับระหว่างรอผู้แจ้ง — หน่วยตามโหมดนาฬิกาของระดับนั้น */
-function minutesPaused(
-  from: Date,
-  to: Date,
-  cal: Parameters<typeof elapsedMinutes>[0]['cal'],
-  mode: ClockMode,
-): number {
-  return elapsedMinutes({ clockStart: from, now: to, cal, mode });
 }

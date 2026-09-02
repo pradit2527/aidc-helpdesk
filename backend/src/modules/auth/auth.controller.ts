@@ -14,7 +14,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
 import { ApiEnvelope, ErrorResponseDto } from '../../common/http/envelope.dto';
-import { THROTTLE } from '../../common/throttle/throttle.config';
+import { AUTH_THROTTLE, THROTTLE } from '../../common/throttle/throttle.config';
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
 import {
@@ -33,7 +33,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(200)
   // กัน password spraying — ลองรหัสยอดนิยมกับผู้ใช้จำนวนมากจนไม่มีบัญชีไหนถูกล็อก
-  @Throttle({ [THROTTLE.auth]: { limit: 10, ttl: 300_000 } })
+  @Throttle({ [THROTTLE.default]: AUTH_THROTTLE.login })
   @ApiOperation({
     summary: 'เข้าสู่ระบบ',
     description: [
@@ -72,7 +72,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(200)
-  @Throttle({ [THROTTLE.auth]: { limit: 30, ttl: 300_000 } })
+  @Throttle({ [THROTTLE.default]: AUTH_THROTTLE.refresh })
   @ApiOperation({
     summary: 'ต่ออายุ session',
     description:
@@ -123,7 +123,7 @@ export class AuthController {
 
   @Post('change-password')
   @HttpCode(204)
-  @Throttle({ [THROTTLE.auth]: { limit: 5, ttl: 300_000 } })
+  @Throttle({ [THROTTLE.default]: AUTH_THROTTLE.changePassword })
   @UseGuards(ScopeGuard)
   @ApiCookieAuth('cookie')
   @ApiOperation({

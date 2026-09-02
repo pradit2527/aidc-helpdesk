@@ -353,3 +353,19 @@ export function nextStatusReportDue(
   if (!intervalMinutes) return null;
   return addMinutes(lastPublicCommentAt, intervalMinutes, cal, mode);
 }
+
+/**
+ * นาทีที่หยุดนับนาฬิการะหว่างพักรอผู้แจ้ง
+ *
+ * หน่วยตามโหมดของระดับความสำคัญ — P1 นับทุกนาทีจริง ที่เหลือนับเฉพาะนาทีทำการ
+ * ถ้าใช้หน่วยผิด เรื่อง P3 ที่รอผู้ใช้ตอบข้ามสุดสัปดาห์จะได้เวลาคืนสองวันเต็ม
+ * ทั้งที่ไม่มีนาทีทำการสักนาทีเดียวในช่วงนั้น
+ */
+export function minutesPaused(
+  from: Date,
+  to: Date,
+  cal: BusinessCalendar,
+  mode: ClockMode,
+): number {
+  return elapsedMinutes({ clockStart: from, now: to, cal, mode });
+}

@@ -18,7 +18,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed/index.ts",
-    "openapi:dump": "tsx src/tools/dump-openapi.ts"
+    "openapi:dump": "tsx src/tools/dump-openapi.ts",
+    "test:e2e": "node test/run-all.mjs"
   },
   "dependencies": {
     "@date-fns/tz": "1.2.0",
