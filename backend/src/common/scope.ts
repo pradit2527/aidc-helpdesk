@@ -29,6 +29,13 @@ export interface AccessScopeInit {
   isSuperAdmin: boolean;
   /** ตำแหน่งในองค์กรที่ผู้ใช้คนนี้ถืออยู่ */
   contactKeys?: Iterable<string>;
+  /**
+   * รหัสบทบาทที่ถืออยู่
+   *
+   * แยกจาก permissions เพราะใช้คนละงาน — permissions ตอบว่า "ทำอะไรได้"
+   * ส่วน roles ตอบว่า "เป็นใคร" ซึ่ง frontend ใช้เลือกเมนูและหน้าแรก
+   */
+  roleCodes?: Iterable<string>;
 }
 
 /** immutable โดยเจตนา — ไม่มีใครแก้ขอบเขตกลางทางได้ */
@@ -39,6 +46,7 @@ export class AccessScope {
   readonly permissions: ReadonlySet<string>;
   readonly isSuperAdmin: boolean;
   readonly contactKeys: ReadonlySet<string>;
+  readonly roleCodes: ReadonlySet<string>;
 
   constructor(init: AccessScopeInit) {
     this.userId = init.userId;
@@ -48,6 +56,7 @@ export class AccessScope {
     this.permissions = new Set(init.permissions);
     this.isSuperAdmin = init.isSuperAdmin;
     this.contactKeys = new Set(init.contactKeys ?? []);
+    this.roleCodes = new Set(init.roleCodes ?? []);
     Object.freeze(this);
   }
 

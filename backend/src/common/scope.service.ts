@@ -65,8 +65,10 @@ export class ScopeService {
       .where(and(eq(userRole.userId, userId), activeRole));
 
     const permissions = new Set<string>();
+    const roleCodes = new Set<string>();
     let isSuperAdmin = false;
     for (const row of rows) {
+      roleCodes.add(row.roleCode);
       if (row.roleCode === 'super_admin') isSuperAdmin = true;
       if (row.permissionCode) permissions.add(row.permissionCode);
     }
@@ -89,6 +91,7 @@ export class ScopeService {
       permissions,
       isSuperAdmin,
       contactKeys: contactRows.map((r) => r.key),
+      roleCodes,
     });
   }
 }

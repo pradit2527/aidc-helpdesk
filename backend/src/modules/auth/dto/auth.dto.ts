@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, MinLength } from 'class-validator';
+import { IsString, Matches, MinLength } from 'class-validator';
 
 import { RefCompanyDto, RefNamedDto } from '../../../common/dto/common.dto';
 
@@ -24,7 +24,8 @@ export class CurrentUserDto {
   @ApiProperty({ example: 'ສົມຊາຍ ກິດຕິວັດ' }) full_name!: string;
   @ApiPropertyOptional({ example: 'somchai.k@aidctech.com.la' }) email?: string;
   @ApiProperty({ type: RefCompanyDto }) company!: RefCompanyDto;
-  @ApiPropertyOptional({ type: RefNamedDto }) department?: RefNamedDto;
+  @ApiPropertyOptional({ example: 'ເຈົ້າໜ້າທີ່ສະໜັບສະໜູນໄອທີ' }) job_title?: string | null;
+  @ApiPropertyOptional({ type: RefNamedDto }) department?: RefNamedDto | null;
 
   @ApiProperty({ example: ['agent'], type: [String] })
   roles!: string[];
@@ -42,6 +43,26 @@ export class CurrentUserDto {
       'ใช้ซ่อน/แสดงเมนูเท่านั้น — สิทธิ์ระดับ ticket ให้ดูที่บล็อก can ของแต่ละใบ (FE-02)',
   })
   permissions!: string[];
+}
+
+export class ChangePasswordDto {
+  @ApiProperty({ example: 'รหัสผ่านปัจจุบัน' })
+  @IsString()
+  current_password!: string;
+
+  @ApiProperty({
+    minLength: 12,
+    description:
+      'นโยบาย 3.2 บังคับ ≥ 12 ตัวอักษร มีพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข และอักขระพิเศษ ' +
+      'และห้ามซ้ำกับ 3 รหัสผ่านล่าสุด',
+  })
+  @IsString()
+  @MinLength(12)
+  @Matches(/[A-Z]/, { message: 'ต้องมีตัวพิมพ์ใหญ่อย่างน้อยหนึ่งตัว' })
+  @Matches(/[a-z]/, { message: 'ต้องมีตัวพิมพ์เล็กอย่างน้อยหนึ่งตัว' })
+  @Matches(/\d/, { message: 'ต้องมีตัวเลขอย่างน้อยหนึ่งตัว' })
+  @Matches(/[^A-Za-z0-9]/, { message: 'ต้องมีอักขระพิเศษอย่างน้อยหนึ่งตัว' })
+  new_password!: string;
 }
 
 export class LoginResponseDto {

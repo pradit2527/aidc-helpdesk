@@ -1,72 +1,100 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
   createParamDecorator,
 } from '@nestjs/common';
 import type { Request } from 'express';
 
+import { AuthService, COOKIE } from '../modules/auth/auth.service';
 import type { AccessScope } from './scope';
 import { ScopeService } from './scope.service';
 
-/** ผูก AccessScope ไว้กับ request หนึ่งครั้ง แล้วให้ controller หยิบไปใช้ */
 interface RequestWithScope extends Request {
   scope?: AccessScope;
 }
 
+/** เมท็อดที่ไม่เปลี่ยนสถานะ ไม่ต้องตรวจ CSRF */
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 /**
- * ตัวระบุว่า request นี้เป็นของใคร
+ * ตัวระบุว่า request นี้เป็นของใคร และมีสิทธิ์อะไร
  *
- * ⚠️ ยังไม่ได้ตรวจคุกกี้ aidc_at จริง เพราะยังไม่ได้เขียนชั้น auth
- *    ระหว่างนี้จึงอ่านผู้ใช้จาก DEV_USER_ID ซึ่ง **ใช้ได้เฉพาะนอก production**
- *    และโยน 401 ทันทีถ้ามีคนพยายามรันแบบนี้บน production
+ * ทำสองอย่างที่ต้องอยู่ด้วยกัน
+ *   1. อ่านและตรวจ access token จากคุกกี้ httpOnly แล้วประกอบ AccessScope
+ *   2. ตรวจ CSRF token สำหรับเมท็อดที่เปลี่ยนสถานะ
  *
- *    การเปิดทางลัดไว้เงียบ ๆ โดยไม่กั้น NODE_ENV คือวิธีที่ระบบหลุดขึ้น
- *    production พร้อมรูรับ user id จาก header ได้จริง จึงกั้นไว้ตั้งแต่ตอนนี้
+ * ข้อ 2 แยกออกไปเป็น guard ต่างหากไม่ได้ เพราะถ้าลืมใส่ตัวใดตัวหนึ่งบน controller
+ * จะได้ endpoint ที่ยืนยันตัวตนแล้วแต่เปิดให้เว็บอื่นสั่งงานแทนผู้ใช้ได้
+ * ผูกไว้ด้วยกันทำให้ลืมทีละครึ่งไม่ได้
  */
 @Injectable()
 export class ScopeGuard implements CanActivate {
-  constructor(private readonly scopes: ScopeService) {}
+  constructor(
+    private readonly scopes: ScopeService,
+    private readonly auth: AuthService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<RequestWithScope>();
 
-    const userId = this.resolveUserId(req);
+    const userId = await this.resolveUserId(req);
+    this.assertCsrf(req);
     req.scope = await this.scopes.forUser(userId);
     return true;
   }
 
-  private resolveUserId(req: RequestWithScope): number {
-    // TODO(auth): อ่านและตรวจลายเซ็นของคุกกี้ aidc_at แล้วดึง sub ออกมาแทนบล็อกนี้
-    if (process.env.NODE_ENV === 'production') {
-      throw new UnauthorizedException({
-        error: {
-          code: 'UNAUTHENTICATED',
-          message: 'ຍັງບໍ່ໄດ້ຕິດຕັ້ງລະບົບຢືນຢັນຕົວຕົນ',
-        },
-      });
+  private async resolveUserId(req: RequestWithScope): Promise<number> {
+    const token = req.cookies?.[COOKIE.access] as string | undefined;
+    if (token) {
+      return this.auth.userIdFromAccessToken(token);
     }
 
     /*
-     * ต้องส่ง header มาทุกครั้ง ไม่มีค่าตั้งต้นจากตัวแปรสภาพแวดล้อม
+     * ทางลัดสำหรับ dev เท่านั้น ใช้เมื่อยังไม่ได้ล็อกอินผ่านเบราว์เซอร์
+     * เช่นตอนรันเทสต์หรือกดลองใน Swagger
      *
-     * เคยรับ DEV_USER_ID เป็นค่าสำรอง แต่ผลคือทุก request ที่ไม่ระบุตัวตน
-     * กลายเป็นผู้ใช้คนนั้นเงียบ ๆ เท่ากับ API ไม่มีการยืนยันตัวตนเลยตอน dev
-     * ซึ่งทำให้เขียนโค้ดที่ลืมส่งตัวตนไปได้โดยไม่มีอะไรฟ้อง
-     * แล้วไปพังตอนต่อ auth จริง — ให้ล้มตั้งแต่ตอนนี้ดีกว่า
+     * ปิดตายบน production — ถ้าเปิดทิ้งไว้ ใครก็สวมเป็นใครก็ได้ด้วย header เดียว
      */
-    const header = req.header('X-Dev-User-Id');
-    const devUserId = Number(header);
-    if (!header || !Number.isInteger(devUserId) || devUserId <= 0) {
-      throw new UnauthorizedException({
+    if (process.env.NODE_ENV !== 'production') {
+      const header = req.header('X-Dev-User-Id');
+      const devUserId = Number(header);
+      if (header && Number.isInteger(devUserId) && devUserId > 0) {
+        return devUserId;
+      }
+    }
+
+    throw new UnauthorizedException({
+      error: { code: 'UNAUTHENTICATED', message: 'ກະລຸນາເຂົ້າສູ່ລະບົບກ່ອນ' },
+    });
+  }
+
+  /**
+   * double-submit cookie
+   *
+   * คุกกี้ถูกแนบไปกับทุกคำขออัตโนมัติ เว็บอื่นจึงสั่งงานแทนผู้ใช้ได้ถ้าไม่กันอะไรเลย
+   * แต่เว็บอื่นอ่านคุกกี้ของโดเมนเราไม่ได้ จึงประกอบ header ให้ตรงกับคุกกี้ไม่ได้
+   *
+   * ข้ามเฉพาะคำขอที่ยืนยันตัวตนด้วย X-Dev-User-Id เพราะนั่นไม่ได้ใช้คุกกี้
+   * จึงไม่มีช่องโหว่ CSRF ตั้งแต่ต้น
+   */
+  private assertCsrf(req: RequestWithScope): void {
+    if (SAFE_METHODS.has(req.method)) return;
+    if (!req.cookies?.[COOKIE.access]) return;
+
+    const cookieToken = req.cookies?.[COOKIE.csrf] as string | undefined;
+    const headerToken = req.header('X-CSRF-Token');
+
+    if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+      throw new ForbiddenException({
         error: {
-          code: 'UNAUTHENTICATED',
-          message: 'ຕ້ອງສົ່ງ header X-Dev-User-Id ໃນໂໝດພັດທະນາ',
+          code: 'FORBIDDEN',
+          message: 'ຄຳຂໍບໍ່ຜ່ານການກວດ CSRF — ກະລຸນາໂຫຼດໜ້າໃໝ່ແລ້ວລອງອີກຄັ້ງ',
         },
       });
     }
-    return devUserId;
   }
 }
 
