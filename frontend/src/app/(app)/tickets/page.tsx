@@ -8,10 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Pagination } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/field';
-import { MockNotice, PageHeader } from '@/components/ui/misc';
+import { PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
+import { useDebounced } from '@/lib/use-debounced';
 import { PRIORITY, TICKET_STATUS, TICKET_TYPE } from '@/config/enums';
+import { useTickets } from '@/lib/queries/tickets';
 import { useSession } from '@/lib/session';
-import { TICKET_CATEGORIES, TICKETS } from '@/mocks/data';
+import { TICKET_CATEGORIES } from '@/mocks/data';
 
 const PAGE_SIZE = 20;
 
@@ -33,23 +36,25 @@ export default function AllTicketsPage(): React.JSX.Element {
     category: '',
   });
 
-  const filtered = React.useMemo(() => {
-    return TICKETS.filter((t) => {
-      if (filters.q) {
-        const q = filters.q.toLowerCase();
-        const haystack = `${t.ticket_no} ${t.subject} ${t.requester.full_name}`.toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-      if (filters.status && t.status !== filters.status) return false;
-      if (filters.priority && t.priority !== filters.priority) return false;
-      if (filters.type && t.ticket_type !== filters.type) return false;
-      if (filters.company && String(t.company.id) !== filters.company) return false;
-      if (filters.category && t.category.name_th !== filters.category) return false;
-      return true;
-    });
-  }, [filters]);
+  /*
+   * หน่วงคำค้นก่อนยิง เพราะเดิมกรองในหน่วยความจำจึงพิมพ์แล้วเห็นผลทันที
+   * ตอนนี้ทุกตัวอักษรเท่ากับหนึ่งคำขอไปฐานข้อมูล — ผู้ใช้พิมพ์คำเดียว
+   * จะกลายเป็นสิบกว่าคิวรีที่ทิ้งไปเกือบหมด
+   */
+  const debouncedQ = useDebounced(filters.q, 350);
 
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const query = useTickets({
+    page,
+    page_size: PAGE_SIZE,
+    q: debouncedQ,
+    status: filters.status,
+    priority: filters.priority,
+    ticket_type: filters.type,
+    company_id: filters.company,
+  });
+
+  const pageRows = query.data?.items ?? [];
+  const total = query.data?.total ?? 0;
   const activeFilters = Object.entries(filters).filter(([, v]) => v !== '');
 
   function update(key: keyof typeof filters, value: string): void {
@@ -69,8 +74,6 @@ export default function AllTicketsPage(): React.JSX.Element {
           </Button>
         }
       />
-
-      <MockNotice endpoint="GET /tickets" />
 
       <Card>
         <div className="border-b border-hair p-4 lg:p-5">
@@ -176,19 +179,19 @@ export default function AllTicketsPage(): React.JSX.Element {
         </div>
 
         <div className="p-4 lg:p-5">
-          <TicketList
-            tickets={pageRows}
-            emptyTitle="ບໍ່ພົບເລື່ອງທີ່ຕົງກັບເງື່ອນໄຂ"
-            emptyHint="ລອງລົບຕົວກັ່ນຕອງບາງອັນ ຫຼື ປ່ຽນຄຳຄົ້ນຫາ"
-          />
+          <QueryBoundary
+            query={query}
+            loadingLabel="ກຳລັງໂຫຼດລາຍການເລື່ອງແຈ້ງ"
+          >
+            <TicketList
+              tickets={pageRows}
+              emptyTitle="ບໍ່ພົບເລື່ອງທີ່ຕົງກັບເງື່ອນໄຂ"
+              emptyHint="ລອງລົບຕົວກັ່ນຕອງບາງອັນ ຫຼື ປ່ຽນຄຳຄົ້ນຫາ"
+            />
+          </QueryBoundary>
         </div>
 
-        <Pagination
-          page={page}
-          pageSize={PAGE_SIZE}
-          total={filtered.length}
-          onPageChange={setPage}
-        />
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
       </Card>
     </div>
   );

@@ -1,9 +1,12 @@
 'use client';
 
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronRight, Eye, EyeOff, Lock, Moon, ShieldCheck, Sun, User } from 'lucide-react';
 import * as React from 'react';
+
+import { ApiError } from '@/lib/api';
+import { login } from '@/lib/auth';
 
 /**
  * เข้าสู่ระบบ — โครงหน้า สี และองค์ประกอบตาม prototype/AIDC_Helpdesk_Portal_v2.html
@@ -19,6 +22,19 @@ import * as React from 'react';
 
 const MAX_TRIES = 5;
 const LOCK_MINUTES = 30;
+
+/**
+ * รับเฉพาะเส้นทางภายในเว็บเรา
+ *
+ * ถ้าเชื่อค่า next ตรง ๆ ผู้โจมตีจะส่งลิงก์ /login?next=https://ปลอม.com
+ * ให้เหยื่อ พอล็อกอินสำเร็จระบบก็พาไปเว็บปลอมที่หน้าตาเหมือนกันทุกอย่าง
+ * แล้วขอรหัสผ่านซ้ำ — เรียกว่า open redirect
+ *
+ * ตัด // ออกด้วย เพราะ //evil.com เป็น protocol-relative URL ที่พาออกนอกเว็บได้
+ */
+function isSafeNext(next: string | null): next is string {
+  return typeof next === 'string' && next.startsWith('/') && !next.startsWith('//');
+}
 
 /** สถิติบนแผงแบรนด์ — ชุดเดียวกับต้นแบบ */
 const STATS = [
@@ -51,6 +67,7 @@ const ACCOUNTS = [
 
 export default function LoginPage(): React.JSX.Element {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
@@ -73,21 +90,58 @@ export default function LoginPage(): React.JSX.Element {
 
     setSubmitting(true);
     setError(null);
-    // ของจริง: POST /auth/login แล้วอ่านผลจาก response
-    //   200 + must_change_password -> /change-password · 200 -> หน้าแรกตามบทบาท
-    //   401 -> นับครั้งที่ผิด · 423 -> บัญชีถูกล็อก
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    setSubmitting(false);
 
-    if (password === 'demo1234') {
-      router.push('/');
+    try {
+      const { mustChangePassword } = await login(username.trim(), password);
+
+      /*
+       * ต้องใช้ replace ไม่ใช่ push
+       *
+       * ถ้า push ผู้ใช้กดปุ่มย้อนกลับจะกลับมาเจอหน้าล็อกอินทั้งที่ล็อกอินอยู่แล้ว
+       * ซึ่งสับสน และบนเครื่องที่ใช้ร่วมกันยังทำให้เห็นชื่อผู้ใช้ที่ค้างในฟอร์มด้วย
+       */
+      if (mustChangePassword) {
+        router.replace('/change-password');
+        return;
+      }
+
+      // พากลับไปหน้าที่ผู้ใช้ตั้งใจเปิดก่อนโดนเด้งมาล็อกอิน
+      const next = searchParams.get('next');
+      router.replace(isSafeNext(next) ? next : '/');
       return;
-    }
+    } catch (cause) {
+      setSubmitting(false);
 
-    const attempt = tries + 1;
-    setTries(attempt);
-    if (attempt >= MAX_TRIES) setLocked(true);
-    setError('ຊື່ຜູ້ໃຊ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ');
+      if (cause instanceof ApiError && cause.status === 423) {
+        // บัญชีถูกล็อกจริงที่ฝั่งเซิร์ฟเวอร์ — ปลดเองตามเวลาไม่ได้ ต้องติดต่อ Service Desk
+        setLocked(true);
+        setError(cause.message);
+        return;
+      }
+
+      if (cause instanceof ApiError && cause.status === 429) {
+        setError('ພະຍາຍາມເຂົ້າສູ່ລະບົບຖີ່ເກີນໄປ ກະລຸນາລໍຖ້າສັກຄາວແລ້ວລອງໃໝ່');
+        return;
+      }
+
+      if (cause instanceof ApiError && cause.status === 0) {
+        setError(cause.message);
+        return;
+      }
+
+      /*
+       * ตัวนับนี้เป็นแค่ตัวช่วยเตือนผู้ใช้ ไม่ใช่กลไกความปลอดภัย —
+       * มันอยู่ในหน่วยความจำของแท็บเดียว รีเฟรชแล้วรีเซ็ต
+       * ตัวล็อกจริงนับอยู่ที่ฐานข้อมูลฝั่งเซิร์ฟเวอร์ และตอบ 423 มาเอง
+       */
+      const attempt = tries + 1;
+      setTries(attempt);
+      setError(
+        cause instanceof ApiError && cause.message
+          ? cause.message
+          : 'ຊື່ຜູ້ໃຊ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ',
+      );
+    }
   }
 
   return (

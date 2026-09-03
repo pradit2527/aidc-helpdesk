@@ -146,11 +146,21 @@ function TicketTable({ tickets }: { tickets: TicketListItem[] }): React.JSX.Elem
     {
       key: 'status',
       header: 'ສະຖານະ',
+      width: '124px',
       render: (t) => <StatusBadge status={t.status} pendingReason={t.pending_reason} />,
     },
     {
+      /*
+       * ต้องกำหนดความกว้างไว้ ไม่งั้นตารางแบบ auto จะบีบคอลัมน์นี้จนแคบที่สุด
+       * เท่าที่ทำได้ แล้วป้าย "ເກີນກຳນົດ · ເກີນມາ 1 ຊມ. 12 ນທ." จะตัดบรรทัด
+       * ทีละตัวอักษรกลายเป็นแถบสูงในแนวตั้งที่อ่านไม่ออก
+       *
+       * เกิดกับคอลัมน์นี้เป็นพิเศษเพราะข้อความยาวและแปรผันตามเวลาที่เหลือ
+       * จึงยาวกว่าคอลัมน์อื่นเสมอ และเป็นข้อมูลที่ผู้ใช้ต้องอ่านเร็วที่สุด
+       */
       key: 'sla',
       header: 'SLA',
+      width: '168px',
       render: (t) => (
         <SlaBadge
           status={t.sla.status}
@@ -162,7 +172,7 @@ function TicketTable({ tickets }: { tickets: TicketListItem[] }): React.JSX.Elem
     {
       key: 'assignee',
       header: 'ຜູ້ຮັບຜິດຊອບ',
-      hideBelow: 'lg',
+      hideBelow: 'xl',
       render: (t) =>
         t.assignee ? (
           <span className="text-body-sm">{t.assignee.full_name}</span>
@@ -173,7 +183,7 @@ function TicketTable({ tickets }: { tickets: TicketListItem[] }): React.JSX.Elem
     {
       key: 'company',
       header: 'ບໍລິສັດ',
-      hideBelow: 'lg',
+      hideBelow: 'xl',
       render: (t) => <span className="text-caption text-ink-2">{t.company.code}</span>,
     },
     {

@@ -19,7 +19,7 @@ export interface Column<T> {
   key: string;
   header: string;
   /** ซ่อนคอลัมน์รองบนจอแคบแทนที่จะบีบให้อ่านไม่ออก */
-  hideBelow?: 'sm' | 'md' | 'lg' | undefined;
+  hideBelow?: 'sm' | 'md' | 'lg' | 'xl' | undefined;
   align?: 'left' | 'right' | 'center' | undefined;
   width?: string | undefined;
   render: (row: T) => React.ReactNode;
@@ -39,6 +39,10 @@ const HIDE_CLASS = {
   sm: 'hidden sm:table-cell',
   md: 'hidden md:table-cell',
   lg: 'hidden lg:table-cell',
+  // ตารางเริ่มแสดงที่ lg (1024px) แต่เมื่อหักแถบเมนูซ้ายกับระยะขอบแล้ว
+  // เหลือความกว้างจริงราว 690px ซึ่งไม่พอสำหรับเจ็ดคอลัมน์
+  // คอลัมน์รองจึงรอถึง xl ค่อยโผล่ แทนที่จะบีบทุกคอลัมน์จนอ่านไม่ออก
+  xl: 'hidden xl:table-cell',
 } as const;
 
 export function DataTable<T>({

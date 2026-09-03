@@ -183,7 +183,7 @@ function Sidebar({
   className?: string | undefined;
   onClose?: (() => void) | undefined;
 }): React.JSX.Element {
-  const { user } = useSession();
+  const { user, signOut } = useSession();
   const t = useT();
 
   return (
@@ -268,13 +268,20 @@ function Sidebar({
       </nav>
 
       <div className="side-hair flex-none border-t px-5 py-1">
-        <Link
-          href="/login"
+        {/*
+          ต้องเป็นปุ่มที่เรียก POST /auth/logout ไม่ใช่ลิงก์ไป /login
+
+          ลิงก์เปลี่ยนแค่หน้าที่เห็น คุกกี้ยังอยู่ครบ ผู้ใช้ที่กด "ออกจากระบบ"
+          บนเครื่องที่ใช้ร่วมกันจะยังล็อกอินอยู่จริง แค่พิมพ์ URL ก็กลับเข้าได้
+        */}
+        <button
+          type="button"
+          onClick={() => void signOut()}
           className="inline-flex min-h-tap items-center gap-2 text-body-sm text-[color:var(--side-ink-2)] transition-colors hover:text-[color:var(--side-ink)]"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
           {t('action.logout')}
-        </Link>
+        </button>
       </div>
     </aside>
   );
