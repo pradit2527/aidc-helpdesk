@@ -19,7 +19,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed/index.ts",
     "openapi:dump": "tsx src/tools/dump-openapi.ts",
-    "test:e2e": "node test/run-all.mjs"
+    "test:e2e": "node test/run-all.mjs",
+    "db:unlock": "node scripts/unlock-user.mjs"
   },
   "dependencies": {
     "@date-fns/tz": "1.2.0",
