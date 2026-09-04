@@ -328,6 +328,18 @@ html.dark select.input {
 .check input:checked + i::after { opacity:1; transform:rotate(-45deg) scale(1); }
 .check input:focus-visible + i { outline:2px solid var(--c-accent-text); outline-offset:2px; box-shadow:0 0 0 4px var(--c-ring); }
 
+/* ── ช่องกรอกที่ถูกปิดตามสิทธิ์ (RBAC) — ต้องยังอ่านออก ไม่ใช่จางจนหาย ──
+   ใช้ faint บน surface ซึ่งผ่าน AA อยู่แล้ว แทนการลด opacity ที่ทำให้ contrast ตก */
+.input:disabled, .input[disabled] {
+  background:var(--c-surface); color:var(--c-faint); border-color:var(--c-hair);
+  cursor:not-allowed; opacity:1; -webkit-text-fill-color:var(--c-faint);
+}
+.input:disabled:hover, .input[disabled]:hover { border-color:var(--c-hair); }
+.check input:disabled + i { background:var(--c-surface); border-color:var(--c-hair); }
+.check input:disabled + i::after { border-color:var(--c-faint); }
+.sw[disabled] { opacity:.55; cursor:not-allowed; }
+.sw[disabled] i { box-shadow:none; }
+
 /* ตัวคั่น "หรือ" */
 .divider-or {
   display:flex; align-items:center; gap:.85rem;
@@ -614,6 +626,78 @@ html.dark .login-hero { border-right:1px solid #444141; }
 @media (max-width:1023px) { .pad-bottom-nav { padding-bottom:calc(58px + 1.5rem + env(safe-area-inset-bottom)); } }
 
 /* ═══════════════════════════════════════════════════════════════
+   11b. หน้าตั้งค่าระบบ (Admin Console)
+        ฟอร์มเยอะมาก จึงต้องมีจังหวะที่อ่านออกเป็นกลุ่ม ๆ ไม่ใช่กองฟิลด์ยาว
+        ใช้ token เดิมทั้งหมด — ไม่มีสีใหม่ ไม่มี gradient ไม่มีมุมโค้ง
+   ═══════════════════════════════════════════════════════════════ */
+
+/* แถบสรุปสถานะระบบด้านบน — ตารางบาง ๆ ที่คั่นด้วย hairline ไม่ใช่การ์ดลอย */
+.setstat { display:grid; gap:1px; background:var(--c-hair); border:1px solid var(--c-hair); grid-template-columns:repeat(2,minmax(0,1fr)); }
+@media (min-width:768px) { .setstat { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+.setstat > div { background:var(--c-card); padding:.85rem 1rem; min-width:0; }
+
+/* กลุ่มฟิลด์ภายในแผงหมวด — คั่นด้วยเส้น "ภายใน" ไม่ใช่กรอบซ้อนกรอบ */
+.setsec { padding:1.15rem 1.25rem; border-top:1px solid var(--c-hair-soft); }
+.setsec:first-child { border-top:0; }
+@media (min-width:640px) { .setsec { padding:1.35rem 1.5rem; } }
+.setsec > .tbl-wrap { margin:0 -1.25rem; width:calc(100% + 2.5rem); }
+@media (min-width:640px) { .setsec > .tbl-wrap { margin:0 -1.5rem; width:calc(100% + 3rem); } }
+
+/* ฟอร์มสองคอลัมน์บนจอกว้าง — คอลัมน์เดียวเสมอบนมือถือ */
+.setgrid { display:grid; gap:1rem 1.35rem; }
+@media (min-width:900px) {
+  .setgrid-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .setgrid-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+.setgrid .span2 { grid-column:1 / -1; }
+
+/* คำบอกว่าตารางเลื่อนแนวนอนได้ — ตารางตั้งค่าบางตัวกว้างกว่าแผงเสมอ ไม่ว่าจอกว้างแค่ไหน */
+.tbl-hint { display:flex; align-items:center; gap:.4rem; margin-top:.6rem; font-size:var(--fs-fine); color:var(--c-faint); }
+.tbl-hint > svg { width:14px; height:14px; flex:none; }
+
+/* การ์ดในหน้าตั้งค่า — กรอบของตัวเอง ไม่ใช้ grid gap-px เพราะจะเหลือช่องว่างเปล่าท้ายแถว */
+.setcards { display:grid; gap:.85rem; grid-template-columns:1fr; }
+@media (min-width:640px) { .setcards { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (min-width:1280px) { .setcards { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+.setcard { background:var(--c-bg); border:1px solid var(--c-hair); padding:1rem 1.1rem; }
+
+/* แถวสวิตช์: ป้าย+คำอธิบายซ้าย สวิตช์ชิดขวา จังหวะเดียวกันทั้งหน้า */
+.swrow { display:flex; align-items:flex-start; gap:1rem; padding:.75rem 0; border-top:1px solid var(--c-hair-soft); }
+.swrow:first-child { border-top:0; padding-top:0; }
+.swrow:last-child { padding-bottom:0; }
+.swrow > .sw { margin-top:1px; }
+
+/* ตารางในหน้าตั้งค่า — แถวกระชับกว่าตาราง Ticket เพราะเป็นข้อมูลตั้งค่า ไม่ใช่งานที่ต้องกด */
+.tbl-tight tbody td { height:auto; padding:.6rem .7rem; }
+.tbl-tight thead th { padding:.75rem .7rem .55rem; }
+.tbl-tight .input { min-height:38px; padding:.35rem .55rem; }
+@media (min-width:640px) { .tbl-tight .input { min-height:34px; font-size:var(--fs-body); } }
+.tbl-tight select.input { padding-right:1.9rem; background-position:right .5rem center; }
+.tbl-tight .btn-sm { min-height:32px; padding:0 .55rem; }
+@media (pointer:coarse) { .tbl-tight .btn-sm { min-height:38px; } }
+
+/* ป้าย "มีการแก้ไขที่ยังไม่บันทึก" — จุดทึบ + ตัวอักษรสีแบรนด์ที่ผ่าน AA */
+.dirty {
+  display:inline-flex; align-items:center; gap:.4rem;
+  font-family:'Archivo',sans-serif; font-size:var(--fs-micro); font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--c-accent-text); white-space:nowrap;
+}
+.dirty::before { content:''; width:7px; height:7px; background:var(--c-accent); flex:none; }
+
+/* จุดสถานะการเชื่อมต่อ — รูปทรงต่างกัน ไม่พึ่งสีอย่างเดียว */
+.cdot { width:10px; height:10px; flex:none; display:block; border:1.5px solid var(--c-line); }
+.cdot--ok   { background:var(--c-ink); border-color:var(--c-ink); }
+.cdot--warn { background:transparent; border-color:var(--c-accent); border-style:dashed; }
+.cdot--off  { background:transparent; border-style:dotted; }   /* ใช้ขอบ --c-line ของ .cdot เพื่อให้ผ่าน AA (rail จางเกิน) */
+
+/* แถบเตือนภายในหมวด (เช่น LINE Notify ปิดบริการ) */
+.setwarn { display:flex; gap:.75rem; align-items:flex-start; padding:.85rem 1rem; background:var(--c-accent-soft); color:var(--c-accent-soft-ink); border-left:3px solid var(--c-accent); }
+.setwarn a, .setwarn strong { color:inherit; }
+
+/* กล่องอ่านค่าอย่างเดียว (ค่าที่ระบบคำนวณเอง แก้ไม่ได้) */
+.robox { min-height:44px; padding:.6rem .8rem; background:var(--c-surface); border:1px solid var(--c-hair); color:var(--c-muted); font-size:var(--fs-body); display:flex; align-items:center; }
+
+/* ═══════════════════════════════════════════════════════════════
    12. SAFE MODE — เผื่อกรณี Tailwind CDN โหลดไม่สำเร็จ (เน็ตไซต์งานหลุด)
        ยุบเป็นเลย์เอาต์คอลัมน์เดียว ทุกอย่างยังอ่านออกและกดได้
    ═══════════════════════════════════════════════════════════════ */
@@ -672,49 +756,58 @@ html.no-tw .tbl-wrap { overflow-x:auto; }
 
 /* ─────────────────────────── 1. ข้อมูล (mock) ─────────────────────────── */
 
-// บริษัทในเครือ 7 แห่ง
+/* บริษัทในเครือ 7 แห่ง — ทุกฟิลด์แก้ได้จากหน้า "ตั้งค่าระบบ" › บริษัทในเครือ
+   active:false = ปิดใช้งาน → หายจากชิปหน้าคิวงานและตัวเลือกในฟอร์มแจ้งเรื่องทันที */
 const CO = [
-  { code:'HQ',   name:'AIDC HQ' },
-  { code:'CON',  name:'AIDC Construction' },
-  { code:'COSI', name:'Cosi' },
-  { code:'HVY',  name:'Heavy Machine' },
-  { code:'TECH', name:'AIDC Tech' },
-  { code:'TRD',  name:'AIDC Trading' },
-  { code:'LOG',  name:'AIDC Logistic' }
+  { code:'HQ',   name:'AIDC HQ',            users:1240, domain:'aidc-group.com',      from:'08:30', to:'17:30', active:true },
+  { code:'CON',  name:'AIDC Construction',  users:980,  domain:'aidc-con.com',        from:'07:30', to:'16:30', active:true },
+  { code:'COSI', name:'Cosi',               users:760,  domain:'cosi-hotels.com',     from:'08:00', to:'17:00', active:true },
+  { code:'HVY',  name:'Heavy Machine',      users:540,  domain:'aidc-heavy.com',      from:'07:30', to:'16:30', active:true },
+  { code:'TECH', name:'AIDC Tech',          users:690,  domain:'aidctech.com.la',     from:'08:30', to:'17:30', active:true },
+  { code:'TRD',  name:'AIDC Trading',       users:430,  domain:'aidc-trading.com',    from:'08:30', to:'17:30', active:true },
+  { code:'LOG',  name:'AIDC Logistic',      users:600,  domain:'aidc-logistic.com',   from:'08:00', to:'17:00', active:true }
 ];
 const CONAME = c => (CO.find(x => x.code === c) || {}).name || c;
+// บริษัทที่เปิดใช้งานอยู่ — ใช้ทุกที่ที่ผู้ใช้ต้อง "เลือกบริษัท" จริง
+const activeCO = () => CO.filter(c => c.active);
 
-// หมวดหมู่ปัญหาแยกตามประเภทธุรกิจของแต่ละบริษัท (ใช้ทำ dynamic form)
+/* หมวดหมู่ปัญหาแยกตามประเภทธุรกิจของแต่ละบริษัท (ใช้ทำ dynamic form)
+   n = ชื่อหมวด · itam = บังคับกรอกรหัสทรัพย์สิน · gps = บังคับพิกัด · prio = ความเร่งด่วนเริ่มต้น */
+function mkcat(n, o) { return Object.assign({ n:n, itam:false, gps:false, prio:'P3' }, o || {}); }
+const SITECAT = { itam:true, gps:true, prio:'P2' };
 const CATS = {
-  HQ:   ['IT / คอมพิวเตอร์', 'เครือข่าย / Wi-Fi', 'สิทธิ์การเข้าถึง', 'อาคารสถานที่', 'ERP / ระบบงาน'],
-  CON:  ['เครื่องจักร / ไซต์งาน', 'IT / คอมพิวเตอร์', 'สิทธิ์การเข้าถึง', 'เครือข่ายไซต์งาน'],
-  COSI: ['ระบบ POS / ห้องอาหาร', 'Key card / ห้องพัก', 'IT / คอมพิวเตอร์', 'อาคารสถานที่'],
-  HVY:  ['เครื่องจักร / ไซต์งาน', 'อะไหล่ / PM', 'IT / คอมพิวเตอร์'],
-  TECH: ['IT / คอมพิวเตอร์', 'สิทธิ์การเข้าถึง', 'ขออุปกรณ์ใหม่', 'เครือข่าย / Wi-Fi'],
-  TRD:  ['ERP / ระบบงาน', 'อีเมลองค์กร', 'IT / คอมพิวเตอร์'],
-  LOG:  ['GPS / IoT ยานพาหนะ', 'เครื่องจักร / ไซต์งาน', 'IT / คอมพิวเตอร์']
+  HQ:   [mkcat('IT / คอมพิวเตอร์'), mkcat('เครือข่าย / Wi-Fi'), mkcat('สิทธิ์การเข้าถึง', { prio:'P4' }), mkcat('อาคารสถานที่', { prio:'P4' }), mkcat('ERP / ระบบงาน', { prio:'P2' })],
+  CON:  [mkcat('เครื่องจักร / ไซต์งาน', SITECAT), mkcat('IT / คอมพิวเตอร์'), mkcat('สิทธิ์การเข้าถึง', { prio:'P4' }), mkcat('เครือข่ายไซต์งาน')],
+  COSI: [mkcat('ระบบ POS / ห้องอาหาร', { itam:true, prio:'P2' }), mkcat('Key card / ห้องพัก'), mkcat('IT / คอมพิวเตอร์'), mkcat('อาคารสถานที่', { prio:'P4' })],
+  HVY:  [mkcat('เครื่องจักร / ไซต์งาน', SITECAT), mkcat('อะไหล่ / PM', { itam:true, prio:'P4' }), mkcat('IT / คอมพิวเตอร์')],
+  TECH: [mkcat('IT / คอมพิวเตอร์'), mkcat('สิทธิ์การเข้าถึง', { prio:'P4' }), mkcat('ขออุปกรณ์ใหม่', { prio:'P4' }), mkcat('เครือข่าย / Wi-Fi')],
+  TRD:  [mkcat('ERP / ระบบงาน', { prio:'P2' }), mkcat('อีเมลองค์กร'), mkcat('IT / คอมพิวเตอร์')],
+  LOG:  [mkcat('GPS / IoT ยานพาหนะ', SITECAT), mkcat('เครื่องจักร / ไซต์งาน', SITECAT), mkcat('IT / คอมพิวเตอร์')]
 };
+// รายการหมวดของบริษัทหนึ่ง (ปลอดภัยเมื่อบริษัทเพิ่งถูกสร้างและยังไม่มีหมวด)
+const catsOf = code => CATS[code] || (CATS[code] = []);
+const catCfg = (code, name) => catsOf(code).find(x => x.n === name) || { itam:false, gps:false, prio:'P3' };
 
 /* ระดับความสำคัญ P1–P4 ตามเอกสาร AIDC-IT-SLA-001 ข้อ 5.1
    วันทำการ = จ–ศ 08:30–17:30 (9 ชม. = 540 นาที) — P1 นับต่อเนื่อง 24×7 */
 const BIZ_DAY_MIN = 540;
 const PRIOS = [
-  { key:'P1', th:'วิกฤต',   en:'Critical', rank:4,
+  { key:'P1', th:'วิกฤต',   en:'Critical', mode:'calendar', rank:4,
     respMin:15,  resMin:240,
     resp:'15 นาที (24×7)', res:'4 ชั่วโมง (นับต่อเนื่อง)', respShort:'15 นาที', resShort:'4 ชั่วโมง', report:'รายงานทุก 1 ชั่วโมง',
     clock:'นับต่อเนื่อง 24×7 · มีทีม On-call นอกเวลาทำการ',
     desc:'ระบบ Critical หยุดให้บริการทั้งองค์กร ไม่มีทางเลี่ยง เช่น ERP ล่ม เครือข่ายทั้งสำนักงานใช้ไม่ได้ เหตุโจมตีทางไซเบอร์' },
-  { key:'P2', th:'สูง',     en:'High', rank:3,
+  { key:'P2', th:'สูง',     en:'High', mode:'business', rank:3,
     respMin:30,  resMin:480,
     resp:'30 นาที', res:'8 ชั่วโมงทำการ', respShort:'30 นาที', resShort:'8 ชม.ทำการ', report:'รายงานทุก 4 ชั่วโมงทำการ',
     clock:'นับเฉพาะเวลาทำการ จ–ศ 08:30–17:30',
     desc:'ระบบสำคัญใช้ไม่ได้ทั้งแผนก หรือระบบ Critical มีทางเลี่ยงชั่วคราว เช่น อีเมลทั้งแผนกใช้ไม่ได้' },
-  { key:'P3', th:'ปานกลาง', en:'Medium', rank:2,
+  { key:'P3', th:'ปานกลาง', en:'Medium', mode:'business', rank:2,
     respMin:120, resMin:BIZ_DAY_MIN * 2,
     resp:'2 ชั่วโมงทำการ', res:'2 วันทำการ', respShort:'2 ชม.ทำการ', resShort:'2 วันทำการ', report:'รายงานเมื่อสถานะเปลี่ยน',
     clock:'นับเฉพาะเวลาทำการ จ–ศ 08:30–17:30',
     desc:'ผู้ใช้รายบุคคลทำงานไม่ได้หรือไม่สะดวก เช่น เครื่องคอมพิวเตอร์มีปัญหา เครื่องพิมพ์ใช้ไม่ได้' },
-  { key:'P4', th:'ต่ำ',     en:'Low', rank:1,
+  { key:'P4', th:'ต่ำ',     en:'Low', mode:'business', rank:1,
     respMin:240, resMin:BIZ_DAY_MIN * 5,
     resp:'4 ชั่วโมงทำการ', res:'5 วันทำการ', respShort:'4 ชม.ทำการ', resShort:'5 วันทำการ', report:'รายงานเมื่อสถานะเปลี่ยน',
     clock:'นับเฉพาะเวลาทำการ จ–ศ 08:30–17:30',
@@ -804,13 +897,17 @@ const TICKETS = [
   { id:'TCK-2304', company:'HVY',  title:'เครนเบรกลื่น หยุดใช้งานที่ไซต์ระยอง',       cat:'เครื่องจักร / ไซต์งาน', prio:'P1', status:'รอรับเรื่อง',    slaMins:21,   totalMins:240,  assignee:'—',        requester:'หัวหน้าไซต์ ระยอง', channel:'Web',     dept:'ไซต์งาน',        asset:'CRN-HVY-004', mine:false, desc:'เบรกมือไม่จับตัว ทดสอบซ้ำ 3 ครั้ง กันพื้นที่แล้ว ต้องการช่างเข้าหน้างานวันนี้' },
   { id:'TCK-2299', company:'COSI', title:'POS ห้องอาหารชั้น 2 จอไม่ตอบสนองช่วง peak',  cat:'ระบบ POS / ห้องอาหาร',  prio:'P2', status:'กำลังดำเนินการ', slaMins:132,  totalMins:480,  assignee:'สุภาพร ก.', requester:'ผู้จัดการห้องอาหาร', channel:'อีเมล',  dept:'F&B',            asset:'POS-COSI-21', mine:false, desc:'ช่วง 18:30–20:00 จอค้างประมาณ 20 วินาที เกิดซ้ำทุกวันตลอดสัปดาห์ ต้องคิดเงินด้วยเครื่องสำรอง' },
   { id:'TCK-2296', company:'HQ',   title:'ขอสิทธิ์เข้าถึงโฟลเดอร์งบประมาณ 2570',       cat:'สิทธิ์การเข้าถึง',      prio:'P3', status:'รอข้อมูลเพิ่ม',  slaMins:648,  totalMins:1080, assignee:'ณัฐพล ส.',  requester:'คุณกมลชนก (คุณ)',   channel:'Web',     dept:'การเงิน',        asset:'',            mine:true,  desc:'ขอสิทธิ์อ่าน-เขียนโฟลเดอร์ Budget2570 เพื่อจัดทำงบประมาณรวมกลุ่มบริษัท แนบอนุมัติจากผู้บังคับบัญชาแล้ว' },
-  { id:'TCK-2291', company:'CON',  title:'แบคโฮ PC200 น้ำมันไฮดรอลิกรั่วที่แขนบูม',    cat:'เครื่องจักร / ไซต์งาน', prio:'P2', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:480,  assignee:'สมชาย ท.',  requester:'โฟร์แมนไซต์ 4',     channel:'LINE OA', dept:'ไซต์งาน',        asset:'EXC-CON-118', mine:false, desc:'พบน้ำมันหยดบริเวณข้อต่อแขนบูม หยุดใช้งานและกันพื้นที่ตามคู่มือ KB-03 แล้ว' },
+  { id:'TCK-2291', company:'CON',  title:'แบคโฮ PC200 น้ำมันไฮดรอลิกรั่วที่แขนบูม',    cat:'เครื่องจักร / ไซต์งาน', prio:'P2', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:480,  assignee:'สมชาย ท.',  requester:'โฟร์แมนไซต์ 4',     channel:'LINE OA', dept:'ไซต์งาน',        asset:'EXC-CON-118', mine:false, closedAt:'28 ส.ค. 2569 15:42', csat:5, desc:'พบน้ำมันหยดบริเวณข้อต่อแขนบูม หยุดใช้งานและกันพื้นที่ตามคู่มือ KB-03 แล้ว' },
   { id:'TCK-2288', company:'TRD',  title:'SAP ออกใบกำกับภาษีไม่ได้ error F5-104',      cat:'ERP / ระบบงาน',        prio:'P2', status:'กำลังดำเนินการ', slaMins:88,   totalMins:480,  assignee:'อนุชา พ.',  requester:'ฝ่ายขายภูมิภาค',    channel:'Web',     dept:'ขาย',            asset:'',            mine:false, desc:'ออกใบกำกับให้ลูกค้ารายใหญ่ไม่ได้ตั้งแต่เช้า มีเอกสารค้าง 34 ใบ กระทบการปิดงวด' },
   { id:'TCK-2284', company:'TECH', title:'Wi-Fi ชั้น 3 อาคาร B หลุดเป็นช่วง',          cat:'เครือข่าย / Wi-Fi',    prio:'P3', status:'กำลังดำเนินการ', slaMins:402,  totalMins:1080, assignee:'ธนา ว.',   requester:'ทีมพัฒนาระบบ',      channel:'อีเมล',  dept:'พัฒนาระบบ',      asset:'NW-TECH-SW3', mine:false, desc:'สัญญาณหลุดทุก 10-15 นาที กระทบการประชุมออนไลน์ พบเฉพาะโซนตะวันตกของชั้น' },
-  { id:'TCK-2280', company:'HQ',   title:'เครื่องพิมพ์ฝ่ายบัญชีพิมพ์ไม่ออก',           cat:'IT / คอมพิวเตอร์',     prio:'P4', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:2700, assignee:'ณัฐพล ส.',  requester:'คุณกมลชนก (คุณ)',   channel:'Web',     dept:'การเงิน',        asset:'PC-HQ-0912',  mine:true,  desc:'สั่งพิมพ์แล้วไม่มีอะไรออก ลองรีสตาร์ตเครื่องแล้วไม่หาย' },
-  { id:'TCK-2276', company:'COSI', title:'Key card ห้อง 812 อ่านไม่ติด',               cat:'Key card / ห้องพัก',   prio:'P3', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:1080, assignee:'สุภาพร ก.', requester:'Front Office',      channel:'LINE OA', dept:'Front Office',   asset:'',            mine:false, desc:'แขกเข้าห้องไม่ได้ 2 ครั้ง เปลี่ยนการ์ดใหม่แล้วยังอ่านไม่ติด' },
+  { id:'TCK-2280', company:'HQ',   title:'เครื่องพิมพ์ฝ่ายบัญชีพิมพ์ไม่ออก',           cat:'IT / คอมพิวเตอร์',     prio:'P4', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:2700, assignee:'ณัฐพล ส.',  requester:'คุณกมลชนก (คุณ)',   channel:'Web',     dept:'การเงิน',        asset:'PC-HQ-0912',  mine:true,  closedAt:'26 ส.ค. 2569 11:20', csat:4, desc:'สั่งพิมพ์แล้วไม่มีอะไรออก ลองรีสตาร์ตเครื่องแล้วไม่หาย' },
+  { id:'TCK-2276', company:'COSI', title:'Key card ห้อง 812 อ่านไม่ติด',               cat:'Key card / ห้องพัก',   prio:'P3', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:1080, assignee:'สุภาพร ก.', requester:'Front Office',      channel:'LINE OA', dept:'Front Office',   asset:'',            mine:false, closedAt:'24 ส.ค. 2569 09:05', csat:5, desc:'แขกเข้าห้องไม่ได้ 2 ครั้ง เปลี่ยนการ์ดใหม่แล้วยังอ่านไม่ติด' },
   { id:'TCK-2271', company:'CON',  title:'ขอเปิดสิทธิ์ VPN ให้ผู้รับเหมาไซต์ขอนแก่น',  cat:'สิทธิ์การเข้าถึง',     prio:'P4', status:'รอรับเรื่อง',    slaMins:1980, totalMins:2700, assignee:'—',        requester:'ธุรการไซต์',        channel:'Web',     dept:'ธุรการ',         asset:'',            mine:false, desc:'ผู้รับเหมา 3 รายต้องส่งรายงานหน้างานผ่านระบบภายใน ขอสิทธิ์ชั่วคราว 90 วัน' },
   { id:'TCK-2268', company:'LOG',  title:'สแกนเนอร์คลังสินค้าเชื่อม Wi-Fi ไม่ติด',     cat:'IT / คอมพิวเตอร์',     prio:'P2', status:'กำลังดำเนินการ', slaMins:150,  totalMins:480,  assignee:'อนุชา พ.',  requester:'หัวหน้าคลัง',       channel:'Web',     dept:'คลังสินค้า',     asset:'',            mine:false, desc:'เครื่องสแกน 4 จาก 9 เครื่องหลุดจากเครือข่ายคลัง ทำให้รับเข้าสินค้าล่าช้า' },
+  { id:'TCK-2308', company:'HQ',   title:'ขอเพิ่มพื้นที่ไดรฟ์ส่วนกลางฝ่ายการเงิน',    cat:'สิทธิ์การเข้าถึง',     prio:'P3', status:'กำลังดำเนินการ', slaMins:735,  totalMins:1080, assignee:'ณัฐพล ส.',  requester:'คุณกมลชนก (คุณ)',   channel:'Web',     dept:'การเงิน',        asset:'',            mine:true,  desc:'ไดรฟ์ Finance-Share เต็ม เหลือ 2 GB ปิดงบเดือนนี้ไม่พอใช้ ขอเพิ่มอีก 200 GB' },
+  { id:'TCK-2244', company:'HQ',   title:'ขอสิทธิ์เข้าใช้ระบบจัดซื้อออนไลน์',        cat:'สิทธิ์การเข้าถึง',     prio:'P4', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:2700, assignee:'ณัฐพล ส.',  requester:'คุณกมลชนก (คุณ)',   channel:'Web',     dept:'การเงิน',        asset:'',            mine:true,  closedAt:'21 ส.ค. 2569 14:05', csat:5, desc:'ต้องอนุมัติใบขอซื้อแทนหัวหน้าช่วงลาพักร้อน ขอสิทธิ์ชั่วคราว 30 วัน' },
+  { id:'TCK-2231', company:'HQ',   title:'โน้ตบุ๊กแบตหมดเร็วผิดปกติ',                cat:'IT / คอมพิวเตอร์',     prio:'P3', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:1080, assignee:'ธนา ว.',   requester:'คุณกมลชนก (คุณ)',   channel:'อีเมล',  dept:'การเงิน',        asset:'PC-HQ-0912',  mine:true,  closedAt:'14 ส.ค. 2569 10:32', csat:4, desc:'ถอดสายชาร์จแล้วใช้ได้ไม่ถึง 40 นาที ทั้งที่เพิ่งใช้งานมา 1 ปี' },
+  { id:'TCK-2218', company:'HQ',   title:'ตั้งค่าอีเมลองค์กรบนมือถือเครื่องใหม่',     cat:'IT / คอมพิวเตอร์',     prio:'P4', status:'ปิดงานแล้ว',    slaMins:0,    totalMins:2700, assignee:'สุภาพร ก.', requester:'คุณกมลชนก (คุณ)',   channel:'Walk-in', dept:'การเงิน',        asset:'',            mine:true,  closedAt:'6 ส.ค. 2569 16:48',  csat:0, desc:'เปลี่ยนมือถือเครื่องใหม่ ตั้งค่าอีเมลและ MFA ไม่ได้เอง' },
   { id:'TCK-2262', company:'HQ',   title:'แอร์ห้องประชุมใหญ่ไม่เย็น',                  cat:'อาคารสถานที่',         prio:'P4', status:'รอข้อมูลเพิ่ม',  slaMins:2280, totalMins:2700, assignee:'ทีมอาคาร',  requester:'เลขานุการผู้บริหาร', channel:'Web',    dept:'ธุรการ',         asset:'',            mine:true,  desc:'มีประชุมคณะกรรมการสัปดาห์หน้า ขอให้ตรวจก่อนวันประชุม' }
 ];
 
@@ -824,24 +921,231 @@ const CHART = [
   { code:'TRD',  total:121, open:11, mttr:'3.9 ชม.', sla:95, csat:4.5 }
 ];
 
+/* กฎการมอบหมายอัตโนมัติ — on:false = ปิดกฎ แล้วแผง Auto Routing ในฟอร์มแจ้งเรื่องจะตกไปที่ทีมตั้งต้น
+   co/dept/cat/urg คือตัวสร้างเงื่อนไขในหน้าตั้งค่า · cond คือข้อความสรุปที่แสดงในตาราง */
+const ROUTE_MODES = ['Round-Robin', 'Load-based', 'ผู้รับคนแรกที่ว่าง', 'On-call rotation', 'Auto Escalation'];
 const RULES = [
-  { cond:'AIDC Construction + ไซต์งาน + เครื่องจักร',            team:'ทีมซ่อมบำรุง Heavy Machine',   mode:'Round-Robin',      prio:'P2' },
-  { cond:'ทุกบริษัท + ทุกแผนก + สิทธิ์การเข้าถึง',                team:'Central IT — Identity',        mode:'Load-based',       prio:'P4' },
-  { cond:'Cosi + F&B + ระบบ POS',                                 team:'Cosi IT + Vendor POS',         mode:'ผู้รับคนแรกที่ว่าง', prio:'P2' },
-  { cond:'AIDC Trading + ขาย + ERP / ระบบงาน',                    team:'ทีม ERP กลาง',                 mode:'Round-Robin',      prio:'P2' },
-  { cond:'AIDC Logistic + ขนส่ง + GPS / IoT',                     team:'LOG Tech (on-call 24×7)',      mode:'On-call rotation', prio:'P1' },
-  { cond:'ทุกบริษัท + ทุกแผนก + P1 ที่ไม่มีผู้รับภายใน 15 นาที', team:'ดันขึ้นหัวหน้าทีม + Central IT', mode:'Auto Escalation',  prio:'P1' }
+  { on:true, co:'CON',  dept:'ไซต์งาน',  cat:'เครื่องจักร / ไซต์งาน', urg:'เร่งด่วนมาก',
+    cond:'AIDC Construction + ไซต์งาน + เครื่องจักร',            team:'ทีมซ่อมบำรุง Heavy Machine',   mode:'Round-Robin',      prio:'P2' },
+  { on:true, co:'ALL',  dept:'ทุกแผนก',  cat:'สิทธิ์การเข้าถึง',     urg:'ไม่เร่งด่วน',
+    cond:'ทุกบริษัท + ทุกแผนก + สิทธิ์การเข้าถึง',                team:'Central IT — Identity',        mode:'Load-based',       prio:'P4' },
+  { on:true, co:'COSI', dept:'F&B',      cat:'ระบบ POS / ห้องอาหาร', urg:'เร่งด่วนมาก',
+    cond:'Cosi + F&B + ระบบ POS',                                 team:'Cosi IT + Vendor POS',         mode:'ผู้รับคนแรกที่ว่าง', prio:'P2' },
+  { on:true, co:'TRD',  dept:'ขาย',      cat:'ERP / ระบบงาน',        urg:'เร่งด่วนปานกลาง',
+    cond:'AIDC Trading + ขาย + ERP / ระบบงาน',                    team:'ทีม ERP กลาง',                 mode:'Round-Robin',      prio:'P2' },
+  { on:true, co:'LOG',  dept:'ปฏิบัติการขนส่ง', cat:'GPS / IoT ยานพาหนะ', urg:'เร่งด่วนมาก',
+    cond:'AIDC Logistic + ขนส่ง + GPS / IoT',                     team:'LOG Tech (on-call 24×7)',      mode:'On-call rotation', prio:'P1' },
+  { on:true, co:'ALL',  dept:'ทุกแผนก',  cat:'ทุกหมวดหมู่',          urg:'เร่งด่วนมาก',
+    cond:'ทุกบริษัท + ทุกแผนก + P1 ที่ไม่มีผู้รับภายใน 15 นาที', team:'ดันขึ้นหัวหน้าทีม + Central IT', mode:'Auto Escalation',  prio:'P1' }
 ];
 
 const AGENTS = ['ณัฐพล ส.', 'ธนา ว.', 'สุภาพร ก.', 'อนุชา พ.', 'สมชาย ท.'];
 
+/* สามระดับสิทธิ์ของระบบ — สิทธิ์มาจาก AD security group ตอนเข้าสู่ระบบผ่าน SSO
+   employee   = ผู้ใช้งานทั่วไป · แจ้งเรื่อง ติดตาม และดูประวัติของตนเองเท่านั้น
+   helpdesk   = Team Helpdesk · จัดการ Ticket ได้เต็มที่ แต่ข้อมูลตั้งค่าเป็นแบบดูอย่างเดียว
+   superadmin = Super Admin · ทำได้ทุกอย่างในระบบ ไม่มีข้อจำกัด */
 const ACCOUNTS = [
-  { role:'employee', i:'กช', name:'กมลชนก เจริญวัฒน์', mail:'kamolchanok.j@aidc-group.com', group:'AIDC-All-Employees',     roleLabel:'พนักงาน · ESS',            scope:'ฝ่ายการเงิน · AIDC HQ' },
-  { role:'agent',    i:'ณส', name:'ณัฐพล สุขเกษม',     mail:'nattapon.s@aidc-group.com',    group:'AIDC-Support-Agent-HQ',  roleLabel:'เจ้าหน้าที่ประจำบริษัท',   scope:'IT Support · AIDC HQ + Tech' },
-  { role:'central',  i:'พธ', name:'พีรพล ธนกิจ',       mail:'peerapol.t@aidc-group.com',    group:'AIDC-Central-IT-Admin',  roleLabel:'Central IT / ผู้บริหาร',   scope:'Central IT Manager · ทั้งกลุ่ม' }
+  { role:'employee',   i:'กช', name:'กมลชนก เจริญวัฒน์', mail:'kamolchanok.j@aidc-group.com', group:'AIDC-ALL-EMPLOYEES', roleLabel:'ผู้ใช้งานทั่วไป', scope:'ฝ่ายการเงิน · AIDC HQ', co:'HQ',
+    perm:'แจ้งเรื่อง ติดตามสถานะ และดูประวัติของตนเองเท่านั้น' },
+  { role:'helpdesk',   i:'ณส', name:'ณัฐพล สุขเกษม',     mail:'nattapon.s@aidc-group.com',    group:'AIDC-IT-HELPDESK',   roleLabel:'Team Helpdesk',   scope:'ฝ่ายไอที · ดูแลทั้ง 7 บริษัท', co:'ALL',
+    perm:'จัดการ Ticket ได้เต็มที่ · เปิดดูข้อมูลระบบได้ทุกหมวดแต่แก้ไขไม่ได้' },
+  { role:'superadmin', i:'พธ', name:'พีรพล ธนกิจ',       mail:'peerapol.t@aidc-group.com',    group:'AIDC-SUPERADMIN',    roleLabel:'Super Admin',     scope:'Central IT Manager · ทั้งกลุ่ม', co:'ALL',
+    perm:'ทำได้ทุกอย่างในระบบ รวมถึงแก้ไขและลบข้อมูลตั้งค่าทุกหมวด' }
 ];
 
 const STATUSES = ['รอรับเรื่อง', 'กำลังดำเนินการ', 'รอข้อมูลเพิ่ม', 'ปิดงานแล้ว'];
+
+/* ══════════════════ ข้อมูลของหน้า "ตั้งค่าระบบ" (Admin Console) ══════════════════ */
+
+// ── ผู้ใช้และการแมป AD security group → role ──
+const USERS = [
+  { name:'พีรพล ธนกิจ',       mail:'peerapol.t@aidc-group.com',    co:'HQ',   dept:'Central IT',       role:'superadmin', ad:'AIDC-SUPERADMIN',   on:true,  locked:false, last:'4 ก.ย. 69 08:12' },
+  { name:'ณัฐพล สุขเกษม',     mail:'nattapon.s@aidc-group.com',    co:'HQ',   dept:'IT Support',       role:'helpdesk',   ad:'AIDC-IT-HELPDESK',   on:true,  locked:false, last:'4 ก.ย. 69 07:58' },
+  { name:'ธนา วงศ์อนันต์',    mail:'thana.w@aidc-group.com',       co:'LOG',  dept:'LOG Tech',         role:'helpdesk',   ad:'AIDC-IT-HELPDESK',  on:true,  locked:false, last:'4 ก.ย. 69 06:35' },
+  { name:'สุภาพร กิตติวัฒน์', mail:'supaporn.k@cosi-hotels.com',   co:'COSI', dept:'Cosi IT',          role:'helpdesk',   ad:'AIDC-IT-HELPDESK', on:true,  locked:false, last:'3 ก.ย. 69 19:40' },
+  { name:'ศศิกานต์ วงศ์ดี',   mail:'sasikan.w@aidc-group.com',     co:'COSI', dept:'Cosi IT',          role:'helpdesk',   ad:'AIDC-IT-HELPDESK', on:true,  locked:false, last:'4 ก.ย. 69 08:20' },
+  { name:'อนุชา พงษ์ไพศาล',   mail:'anucha.p@aidc-group.com',      co:'TRD',  dept:'ERP กลาง',         role:'helpdesk',   ad:'AIDC-IT-HELPDESK',  on:true,  locked:false, last:'4 ก.ย. 69 08:02' },
+  { name:'สมชาย ทองสุข',      mail:'somchai.t@aidc-heavy.com',     co:'HVY',  dept:'ซ่อมบำรุง',        role:'helpdesk',   ad:'AIDC-IT-HELPDESK',  on:true,  locked:true,  last:'2 ก.ย. 69 16:11' },
+  { name:'กมลชนก เจริญวัฒน์', mail:'kamolchanok.j@aidc-group.com', co:'HQ',   dept:'การเงิน',          role:'employee',   ad:'AIDC-ALL-EMPLOYEES',      on:true,  locked:false, last:'4 ก.ย. 69 09:04' },
+  { name:'วิรัตน์ ศรีสุข',    mail:'wirat.s@aidc-con.com',         co:'CON',  dept:'ไซต์งาน',          role:'employee',   ad:'AIDC-ALL-EMPLOYEES',      on:true,  locked:false, last:'3 ก.ย. 69 17:22' },
+  { name:'ปิยะดา แก้วมณี',    mail:'piyada.k@aidc-trading.com',    co:'TRD',  dept:'ขาย',              role:'employee',   ad:'AIDC-ALL-EMPLOYEES',     on:true,  locked:false, last:'2 ก.ย. 69 11:47' },
+  { name:'ธีรศักดิ์ อินทร์',  mail:'teerasak.i@aidctech.com.la',   co:'TECH', dept:'พัฒนาระบบ',        role:'superadmin', ad:'AIDC-SUPERADMIN', on:true,  locked:false, last:'4 ก.ย. 69 08:31' },
+  { name:'จารุวรรณ พูลผล',    mail:'jaruwan.p@aidc-logistic.com',  co:'LOG',  dept:'คลังสินค้า',       role:'employee',   ad:'AIDC-ALL-EMPLOYEES',      on:false, locked:false, last:'12 ส.ค. 69 15:03' }
+];
+const ADMAP = [
+  { g:'AIDC-SUPERADMIN',    role:'superadmin', scope:'ทุกบริษัทในเครือ · ไม่มีข้อจำกัด',            n:2 },
+  { g:'AIDC-IT-HELPDESK',   role:'helpdesk',   scope:'จัดการ Ticket ทุกบริษัท · ข้อมูลตั้งค่าดูอย่างเดียว', n:34 },
+  { g:'AIDC-ALL-EMPLOYEES', role:'employee',   scope:'Ticket ที่ตนเองแจ้งเท่านั้น',                 n:5240 }
+];
+
+// ── บทบาทและสิทธิ์ (RBAC) — ชุด permission จริงจาก 04-rbac-sla.md ──
+const ROLES = [
+  { k:'employee',   label:'ผู้ใช้งานทั่วไป', en:'employee',   n:5240, sys:true, note:'แจ้งเรื่องและติดตามของตนเอง' },
+  { k:'helpdesk',   label:'Team Helpdesk',   en:'helpdesk',   n:34,   sys:true, note:'จัดการ Ticket ได้ · ข้อมูลตั้งค่าดูอย่างเดียว' },
+  { k:'superadmin', label:'Super Admin',     en:'superadmin', n:2,    sys:true, note:'ทำได้ทุกอย่าง ไม่มีข้อจำกัด' }
+];
+const PG_WORK = 'งานประจำวันกับ Ticket';
+const PG_VIEW = 'เปิดดูข้อมูลระบบ';
+const PG_EDIT = 'แก้ไข / ลบข้อมูลระบบ — Super Admin เท่านั้น';
+const PERMS = [
+  { g:PG_WORK, k:'ticket.view.own',      d:'ดู Ticket ที่ตนเองแจ้ง' },
+  { g:PG_WORK, k:'ticket.view.all',      d:'ดู Ticket ทุกบริษัทในเครือ' },
+  { g:PG_WORK, k:'ticket.create',        d:'แจ้งเรื่องใหม่' },
+  { g:PG_WORK, k:'ticket.reply',         d:'ตอบกลับผู้แจ้งและบันทึกภายใน' },
+  { g:PG_WORK, k:'ticket.assign',        d:'รับเรื่องและมอบหมายให้ผู้อื่น' },
+  { g:PG_WORK, k:'ticket.change_status', d:'เปลี่ยนสถานะและปิดงาน' },
+  { g:PG_WORK, k:'ticket.transfer',      d:'ส่งต่อ Ticket ข้ามบริษัทในเครือ' },
+  { g:PG_VIEW, k:'settings.view',        d:'เปิดดูหน้าตั้งค่าระบบได้ทุกหมวด' },
+  { g:PG_VIEW, k:'user.view',            d:'ดูทะเบียนผู้ใช้และสิทธิ์' },
+  { g:PG_VIEW, k:'asset.view',           d:'ดูทะเบียนทรัพย์สิน (ITAM)' },
+  { g:PG_VIEW, k:'audit.read',           d:'อ่าน Audit Log' },
+  { g:PG_VIEW, k:'report.export',        d:'ส่งออกรายงาน Excel / PDF' },
+  { g:PG_EDIT, k:'user.edit',            d:'เพิ่ม/แก้ไขผู้ใช้และมอบบทบาท' },
+  { g:PG_EDIT, k:'user.delete',          d:'ปิดใช้งานและลบผู้ใช้' },
+  { g:PG_EDIT, k:'company.edit',         d:'แก้ไขและปิดใช้งานบริษัทในเครือ' },
+  { g:PG_EDIT, k:'category.edit',        d:'เพิ่ม / แก้ / ลบหมวดหมู่ปัญหา' },
+  { g:PG_EDIT, k:'routing.edit',         d:'แก้ไขและลบกฎการมอบหมาย' },
+  { g:PG_EDIT, k:'sla.manage',           d:'แก้ค่าเป้าหมาย SLA และเวลาทำการ' },
+  { g:PG_EDIT, k:'kb.publish',           d:'เผยแพร่และลบบทความคลังความรู้' },
+  { g:PG_EDIT, k:'settings.manage',      d:'บันทึกการเปลี่ยนแปลงในหน้าตั้งค่าระบบ' }
+];
+// เมทริกซ์เริ่มต้น: helpdesk ได้ *.view และงาน Ticket ครบ แต่ *.edit / *.delete / settings.manage เป็นของ superadmin
+const RBAC = {
+  employee:   { 'ticket.view.own':true, 'ticket.create':true, 'ticket.reply':true },
+  helpdesk:   { 'ticket.view.own':true, 'ticket.view.all':true, 'ticket.create':true, 'ticket.reply':true,
+                'ticket.assign':true, 'ticket.change_status':true, 'ticket.transfer':true,
+                'settings.view':true, 'user.view':true, 'asset.view':true, 'audit.read':true, 'report.export':true },
+  superadmin: PERMS.reduce(function (a, p) { a[p.k] = true; return a; }, {})
+};
+
+// ── SLA: ปฏิทินเวลาทำการ วันหยุด กฎหยุดนับ ช่วงปิดปรับปรุง ──
+const BIZCAL = { mon:true, tue:true, wed:true, thu:true, fri:true, sat:false, sun:false, from:'08:30', to:'17:30', tz:'ICT (UTC+07:00)' };
+const DAYKEYS = [['mon','จันทร์'], ['tue','อังคาร'], ['wed','พุธ'], ['thu','พฤหัสบดี'], ['fri','ศุกร์'], ['sat','เสาร์'], ['sun','อาทิตย์']];
+const HOLIDAYS = [
+  { d:'2569-01-01', n:'วันขึ้นปีใหม่' },
+  { d:'2569-04-14', n:'วันสงกรานต์ (วันที่ 1)' },
+  { d:'2569-04-15', n:'วันสงกรานต์ (วันที่ 2)' },
+  { d:'2569-05-01', n:'วันแรงงาน' },
+  { d:'2569-07-20', n:'วันเข้าพรรษา' },
+  { d:'2569-10-12', n:'วันคล้ายวันสวรรคต ร.9' },
+  { d:'2569-12-02', n:'วันชาติ สปป.ลาว' },
+  { d:'2569-12-31', n:'วันสิ้นปี' }
+];
+const PAUSE = [
+  { on:true,  k:'pending_user',     t:'รอข้อมูลจากผู้แจ้ง (Pending User)', d:'หยุดนับเวลาแก้ไข · ต้องมีคอมเมนต์สาธารณะระบุสิ่งที่รอ (SLA ข้อ 5.4)' },
+  { on:true,  k:'pending_vendor',   t:'รอผู้ให้บริการภายนอก (Vendor)',    d:'หยุดนับเมื่อแจ้งผู้รับบริการแล้วเท่านั้น' },
+  { on:true,  k:'pending_approval', t:'รอการอนุมัติจากฝั่งผู้รับบริการ',   d:'ระบบตั้งให้อัตโนมัติเมื่อมีคำขออนุมัติค้าง' },
+  { on:true,  k:'workaround',       t:'มี Workaround แล้ว',               d:'หยุดนับเวลาแก้ไขของ Incident ทันที และต้องเปิด Problem ติดตามการแก้ถาวร' },
+  { on:false, k:'response_pause',   t:'หยุดนับเวลาตอบรับด้วย',            d:'ตามเอกสารเวลาตอบรับ "ไม่หยุด" — เปิดข้อนี้จะขัดกับ AIDC-IT-SLA-001' }
+];
+const MAINTW = { day:'เสาร์', from:'20:00', to:'24:00', notice:3 };
+
+// ── ทีมสนับสนุน / เวร on-call / ผู้รับ escalation ──
+const TEAMS = [
+  { name:'Central IT — Service Desk', tier:'Tier 1', co:'ทั้งกลุ่ม', on:true,
+    members:[{ n:'ณัฐพล ส.', cap:8, load:5 }, { n:'สุภาพร ก.', cap:8, load:6 }, { n:'อนุชา พ.', cap:8, load:4 }] },
+  { name:'Heavy Machine Maintenance', tier:'Tier 2', co:'CON + HVY', on:true,
+    members:[{ n:'สมชาย ท.', cap:6, load:6 }, { n:'วิรัตน์ ศ.', cap:6, load:3 }] },
+  { name:'Cosi IT', tier:'Tier 2', co:'COSI', on:true,
+    members:[{ n:'สุภาพร ก.', cap:5, load:4 }, { n:'ธีรศักดิ์ อ.', cap:5, load:2 }] },
+  { name:'ทีม ERP กลาง', tier:'Tier 3', co:'HQ + TRD', on:true,
+    members:[{ n:'อนุชา พ.', cap:4, load:3 }] },
+  { name:'LOG Tech (on-call 24×7)', tier:'Tier 2', co:'LOG', on:true,
+    members:[{ n:'ธนา ว.', cap:6, load:5 }, { n:'จารุวรรณ พ.', cap:6, load:1 }] }
+];
+const ONCALL = [
+  { week:'31 ส.ค. – 6 ก.ย. 69', main:'ธนา ว.',    backup:'อนุชา พ.',  tel:'+856 20 5551 0021', now:true },
+  { week:'7 – 13 ก.ย. 69',      main:'ณัฐพล ส.',  backup:'สมชาย ท.',  tel:'+856 20 5551 0022', now:false },
+  { week:'14 – 20 ก.ย. 69',     main:'สุภาพร ก.', backup:'ธนา ว.',    tel:'+856 20 5551 0023', now:false },
+  { week:'21 – 27 ก.ย. 69',     main:'อนุชา พ.',  backup:'ณัฐพล ส.',  tel:'+856 20 5551 0024', now:false }
+];
+const ESCCONTACT = [
+  { r:'Head of IT', who:'พีรพล ธนกิจ',      mail:'peerapol.t@aidc-group.com', when:'เหตุ P1 ทุกกรณีทันที · Ticket ที่เกินเป้าหมาย SLA · ผู้รับบริการขอทบทวน' },
+  { r:'CEO',        who:'กรรมการผู้จัดการ', mail:'ceo@aidc-group.com',        when:'P1 เกิน 4 ชั่วโมงยังไม่คืนบริการ · เหตุความปลอดภัย/ข้อมูลรั่วไหล' },
+  { r:'DPO',        who:'เจ้าหน้าที่คุ้มครองข้อมูล', mail:'dpo@aidc-group.com', when:'เหตุข้อมูลส่วนบุคคลรั่วไหล — เริ่มนาฬิกาแจ้งหน่วยงานกำกับ 72 ชั่วโมง' }
+];
+
+// ── การแจ้งเตือน ──
+const NOTICH = [
+  { k:'email', name:'อีเมล (SMTP ภายใน)',      on:true,  cfg:'smtp.aidc-group.local:587 · STARTTLS · ผู้ส่ง itsupport@aidctech.com.la' },
+  { k:'teams', name:'Microsoft Teams webhook',  on:true,  cfg:'https://aidc.webhook.office.com/webhookb2/…/IncomingWebhook/itsupport' },
+  { k:'line',  name:'LINE Official Account',    on:false, cfg:'LINE Messaging API · Channel ID 2007412885 (ยังไม่ผูกบัญชี OA)' },
+  { k:'inapp', name:'การแจ้งเตือนในระบบ',      on:true,  cfg:'เก็บประวัติการแจ้งเตือนในระบบ 90 วัน' }
+];
+const NOTIRULES = [
+  { ev:'Ticket ใหม่เข้าคิว',            to:'ทีมผู้รับตามกฎ Routing',            email:true,  teams:false, line:false, inapp:true },
+  { ev:'ถูกมอบหมายให้ฉัน',              to:'เจ้าหน้าที่ผู้รับผิดชอบ',           email:true,  teams:false, line:true,  inapp:true },
+  { ev:'ใกล้ครบ SLA (ใช้ไปแล้ว 80%)',   to:'ผู้รับผิดชอบ + หัวหน้าทีม',         email:true,  teams:true,  line:true,  inapp:true },
+  { ev:'เกินเป้าหมาย SLA',              to:'Head of IT + ผู้รับผิดชอบ + Company Admin', email:true, teams:true, line:true, inapp:true },
+  { ev:'เหตุ P1 เกิดขึ้น',              to:'Head of IT + ทีม On-call + CEO (เกิน 4 ชม.)', email:true, teams:true, line:true, inapp:true },
+  { ev:'ปิดงานแล้ว',                    to:'ผู้แจ้ง',                           email:true,  teams:false, line:true,  inapp:true },
+  { ev:'ขอประเมินความพึงพอใจ (CSAT)',   to:'ผู้แจ้ง',                           email:true,  teams:false, line:true,  inapp:false }
+];
+const NOTITMPL = {
+  subj:'[{{ticket_id}}] {{title}} — {{priority}} · {{company}}',
+  body:'เรียน {{recipient}}\n\nTicket {{ticket_id}} ({{priority}} · {{category}}) มีการเปลี่ยนแปลงสถานะเป็น {{status}}\nเป้าหมายเวลาแก้ไข: {{resolution_due}} · เหลือ {{sla_remaining}}\n\nเปิดดูรายละเอียด: {{portal_url}}\n\n— AIDC Service Desk · ตามเอกสาร AIDC-IT-SLA-001 v1.1'
+};
+
+// ── ช่องทางรับแจ้ง (SLA ข้อ 3.2 / SOP-01 ข้อ 1) ──
+const CHAN = [
+  { k:'portal', name:'Portal (เว็บ / มือถือ)',            on:true, addr:'helpdesk.aidc-group.com',  map:'channel = web · ผู้แจ้งกรอกเอง',                    note:'ช่องทางหลักที่นโยบายกำหนดให้ใช้เป็นอันดับแรก' },
+  { k:'email',  name:'อีเมลศูนย์บริการ',                   on:true, addr:'itsupport@aidctech.com.la', map:'channel = email · สร้าง Ticket อัตโนมัติ',          note:'ตรวจกล่องขาเข้าทุก 2 นาที · หัวเรื่องกลายเป็นชื่อ Ticket · ไฟล์แนบถูกดึงมาด้วย' },
+  { k:'phone',  name:'IT Hotline',                        on:true, addr:'+856 21 454 100 ต่อ 1',    map:'channel = phone · เจ้าหน้าที่สร้างแทนผู้แจ้ง',      note:'เป้าหมายรับสายภายใน 3 นาที · ใช้กับเหตุเร่งด่วน P1/P2 เป็นหลัก' },
+  { k:'walkin', name:'Walk-in ที่ฝ่ายไอที',                on:true, addr:'อาคาร A ชั้น 2 ห้อง IT',    map:'channel = walk_in · เจ้าหน้าที่สร้างแทนผู้แจ้ง',    note:'SOP-01 ข้อ 1 บังคับลงทะเบียนเป็น Ticket ทุกครั้ง แม้แก้จบหน้าเคาน์เตอร์' }
+];
+
+// ── ความปลอดภัยและ PDPA ──
+const SECU = {
+  minLen:12, hist:5, ageDays:90, complex:true,
+  mfa:true, mfaScope:'ผู้ใช้ทุกคนที่มีสิทธิ์ผู้ดูแล',
+  lockTries:5, lockMin:15,
+  sessionMin:480, idleMin:30,
+  ipOn:false, ips:'10.20.0.0/16, 203.0.113.0/24',
+  auditKeep:24, pdpaKeep:36, offboardDays:30, dpoMail:'dpo@aidc-group.com', breachHrs:72
+};
+
+// ── การเชื่อมต่อระบบภายนอก + Audit Log ──
+const INTG = [
+  { k:'ad',   name:'Active Directory / LDAP', host:'ldaps://dc01.aidc-group.local:636', st:'ok',   last:'4 ก.ย. 69 08:05', note:'ซิงค์ผู้ใช้และ security group ทุก 15 นาที' },
+  { k:'smtp', name:'SMTP ภายใน',              host:'smtp.aidc-group.local:587',         st:'ok',   last:'4 ก.ย. 69 08:58', note:'ส่งอีเมลแจ้งเตือนและรับอีเมลเข้าเป็น Ticket' },
+  { k:'erp',  name:'ERP / SAP',               host:'sap-pi.aidc-group.local',           st:'warn', last:'3 ก.ย. 69 22:14', note:'ตอบช้ากว่าเกณฑ์ 2 วินาที ในช่วงปิดงวดบัญชี' },
+  { k:'mon',  name:'ระบบ Monitoring',         host:'zabbix.aidc-group.local',           st:'ok',   last:'4 ก.ย. 69 09:00', note:'ส่ง alert ระบบ Critical เข้ามาสร้าง Ticket อัตโนมัติ' }
+];
+const AUDIT = [
+  { ts:'4 ก.ย. 69 09:02', u:'peerapol.t',  a:'settings.update',   tgt:'sla_policy · P2 resolution 8 ชม. → 6 ชม.', ip:'10.20.4.11' },
+  { ts:'4 ก.ย. 69 08:47', u:'sasikan.w',   a:'user.update',       tgt:'app_user · supaporn.k (เปลี่ยนแผนก)',      ip:'10.20.9.42' },
+  { ts:'4 ก.ย. 69 08:31', u:'peerapol.t',  a:'role.assign',       tgt:'app_user · teerasak.i → superadmin',    ip:'10.20.4.11' },
+  { ts:'4 ก.ย. 69 08:12', u:'peerapol.t',  a:'auth.login',        tgt:'session · SSO Active Directory',           ip:'10.20.4.11' },
+  { ts:'3 ก.ย. 69 19:55', u:'system',      a:'sla.breach',        tgt:'ticket · TCK-2304 (P1)',                   ip:'—' },
+  { ts:'3 ก.ย. 69 18:20', u:'nattapon.s',  a:'ticket.assign',     tgt:'ticket · TCK-2296 → ณัฐพล ส.',             ip:'10.20.4.88' },
+  { ts:'3 ก.ย. 69 17:02', u:'sasikan.w',   a:'category.create',   tgt:'category · Cosi › Mini bar / ตู้แช่',      ip:'10.20.9.42' },
+  { ts:'3 ก.ย. 69 16:11', u:'system',      a:'auth.lockout',      tgt:'app_user · somchai.t (ผิด 5 ครั้ง)',       ip:'10.20.7.14' },
+  { ts:'3 ก.ย. 69 14:40', u:'peerapol.t',  a:'routing.toggle',    tgt:'routing_rule #05 · เปิดใช้',               ip:'10.20.4.11' },
+  { ts:'3 ก.ย. 69 11:26', u:'piyada.k',    a:'report.export',     tgt:'report · SLA รายเดือน ส.ค. 2569 (XLSX)',   ip:'10.20.6.31' },
+  { ts:'3 ก.ย. 69 09:15', u:'system',      a:'backup.success',    tgt:'backup · daily 412 MB → nas.aidc.local',   ip:'—' },
+  { ts:'2 ก.ย. 69 20:04', u:'peerapol.t',  a:'company.update',    tgt:'company · Heavy Machine (เวลาทำการ)',      ip:'10.20.4.11' }
+];
+const AUDIT_ACTS = ['ทุกการกระทำ', 'settings.update', 'user.update', 'role.assign', 'auth.login', 'auth.lockout', 'sla.breach', 'ticket.assign', 'category.create', 'routing.toggle', 'report.export', 'backup.success', 'company.update'];
+
+// ── ระบบและการสำรองข้อมูล ──
+const SYS = {
+  ver:'2.4.1', build:'2569.09.02-1840', db:'PostgreSQL 16.4', node:'aidc-helpdesk-01',
+  backupTime:'01:00', backupDest:'nas.aidc.local:/volume1/backup/helpdesk',
+  keepDaily:30, keepMonthly:12,
+  lastBackup:'4 ก.ย. 69 01:04 น. · 412 MB · สำเร็จ',
+  lastRestore:'31 ส.ค. 69 · ผ่าน — กู้คืนและนับแถวได้ 2,318,904 แถว',
+  diskPct:34, diskText:'684 GB จาก 2 TB',
+  maxFiles:5, maxMb:20,
+  maint:false, maintMsg:'ระบบปิดปรับปรุงตามแผน เสาร์ 20:00–24:00 น. — เหตุระดับ P1 ติดต่อ IT Hotline +856 21 454 100 ต่อ 1 ได้ตลอด 24 ชั่วโมง'
+};
+const CTRLDOCS = [
+  { id:'AIDC-IT-SLA-001 v1.1', t:'ข้อตกลงระดับการให้บริการฝ่ายเทคโนโลยีสารสนเทศ', d:'บังคับใช้ 1 ส.ค. 2569' },
+  { id:'SOP-01',               t:'การรับแจ้งและบริหาร Ticket',                      d:'ทบทวนล่าสุด 12 ก.ค. 2569' },
+  { id:'SOP-05',               t:'การเพิกถอนระบบเมื่อพ้นสภาพ (Offboarding)',        d:'ทบทวนล่าสุด 3 มิ.ย. 2569' },
+  { id:'SOP-10',               t:'การจัดการเหตุการณ์ความปลอดภัยและข้อมูลรั่วไหล',   d:'ทบทวนล่าสุด 28 ก.พ. 2569' },
+  { id:'นโยบายความปลอดภัย ข้อ 3.8', t:'การคุ้มครองข้อมูลส่วนบุคคล (PDPA)',           d:'ทบทวนล่าสุด 15 ม.ค. 2569' }
+];
 
 /* ─────────────────────────── 2. ไอคอน (inline SVG เขียนเอง) ─────────────────────────── */
 
@@ -878,7 +1182,23 @@ const P = {
   ext:'M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   lock:'M5.5 10.5h13V20h-13zM8.5 10.5V7.2a3.5 3.5 0 0 1 7 0v3.3M12 14.2v2.6',
   eye:'M2.2 12S6 5.6 12 5.6 21.8 12 21.8 12 18 18.4 12 18.4 2.2 12 2.2 12zM12 14.7a2.7 2.7 0 1 1 0-5.4 2.7 2.7 0 0 1 0 5.4z',
-  eyeOff:'M3.5 3.5l17 17M10.2 5.9A9.7 9.7 0 0 1 12 5.6c6 0 9.8 6.4 9.8 6.4a18 18 0 0 1-3.6 4.3M6.6 7.7A17.4 17.4 0 0 0 2.2 12S6 18.4 12 18.4c1.2 0 2.3-.2 3.3-.6M10.1 10.1a2.7 2.7 0 0 0 3.8 3.8'
+  eyeOff:'M3.5 3.5l17 17M10.2 5.9A9.7 9.7 0 0 1 12 5.6c6 0 9.8 6.4 9.8 6.4a18 18 0 0 1-3.6 4.3M6.6 7.7A17.4 17.4 0 0 0 2.2 12S6 18.4 12 18.4c1.2 0 2.3-.2 3.3-.6M10.1 10.1a2.7 2.7 0 0 0 3.8 3.8',
+  // ── ไอคอนชุดหน้าตั้งค่าระบบ (เส้น stroke 1.7 เหมือนชุดเดิมทั้งหมด) ──
+  gear:'M12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-2.6-1.5L14.2 2.5H9.8L9.5 5.1a7.6 7.6 0 0 0-2.6 1.5l-2.3-1-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-1a7.6 7.6 0 0 0 2.6 1.5l.3 2.6h4.4l.3-2.6a7.6 7.6 0 0 0 2.6-1.5l2.3 1 2-3.4z',
+  building:'M3 21h18M5 21V5.4L12 3v18M12 21V9.6l7 2.3V21M8 8.2v.1M8 12v.1M8 15.8v.1M15.4 13.6v.1M15.4 17.2v.1',
+  users:'M9 12.2a3.7 3.7 0 1 1 0-7.4 3.7 3.7 0 0 1 0 7.4zM2.4 20a6.6 6.6 0 0 1 13.2 0M16.4 5.4a3.6 3.6 0 0 1 0 6.8M18 14.6a6.2 6.2 0 0 1 3.6 5.4',
+  folder:'M3 6.5A1.5 1.5 0 0 1 4.5 5h4L11 7.6h8.5A1.5 1.5 0 0 1 21 9.1v8.4a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z',
+  bell:'M18.2 9.4a6.2 6.2 0 1 0-12.4 0c0 4.8-2 6.3-2 6.3h16.4s-2-1.5-2-6.3zM13.8 19.2a2 2 0 0 1-3.6 0',
+  headset:'M4 14.5v-2.4a8 8 0 0 1 16 0v2.4M4 13.6h2.6V19H5.2A1.2 1.2 0 0 1 4 17.8zM20 13.6h-2.6V19h1.4a1.2 1.2 0 0 0 1.2-1.2zM17.4 19a3.4 3.4 0 0 1-3.4 3h-2',
+  link:'M10.3 13.7a4.1 4.1 0 0 0 5.8 0l3-3a4.1 4.1 0 1 0-5.8-5.8l-1.7 1.7M13.7 10.3a4.1 4.1 0 0 0-5.8 0l-3 3a4.1 4.1 0 1 0 5.8 5.8l1.7-1.7',
+  db:'M12 7.6c-4.4 0-8-1.2-8-2.8S7.6 2 12 2s8 1.2 8 2.8-3.6 2.8-8 2.8zM4 4.8v14.4C4 20.8 7.6 22 12 22s8-1.2 8-2.8V4.8M4 12c0 1.6 3.6 2.8 8 2.8s8-1.2 8-2.8',
+  cal:'M4 6.4h16V21H4zM4 10.6h16M8.2 3v3.4M15.8 3v3.4M8 14.2v.1M12 14.2v.1M16 14.2v.1M8 17.8v.1M12 17.8v.1',
+  trash:'M4 6.8h16M9.6 6.8V4.6h4.8v2.2M6.6 6.8l.9 13.2h9l.9-13.2M10.4 10.4v6M13.6 10.4v6',
+  pencil:'M4.5 19.5h3.6L19.6 8a2.2 2.2 0 0 0-3.1-3.1L5 16.4v3.1zM14.6 6.8l3.1 3.1',
+  save:'M5 4h11l3 3v13H5zM8.5 4v5h7V4M8.5 20v-6h7v6',
+  up:'M12 19V6M6 12l6-6 6 6',
+  down:'M12 5v13M6 12l6 6 6-6',
+  key:'M15.5 3.6a5.2 5.2 0 1 0-4.2 8.3l-7 7V21h3.1v-2.1h2.1v-2.1h2.1l1.4-1.4a5.2 5.2 0 0 0 2.5-11.8zM16.7 7.9v.1'
 };
 // สร้าง SVG ไอคอนจาก path (stroke 1.7 ทุกตัว)
 function ic(name, cls, sw) {
@@ -911,6 +1231,11 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
 
 // เวลาที่หน้าเว็บเริ่มทำงาน — ใช้เดินนาฬิกา SLA จริงตามเวลาที่ผ่านไป
 const T0 = Date.now();
+// เวลาปัจจุบันแบบ HH:MM — ใช้ประทับเวลาปิดงานที่เกิดขึ้นระหว่างใช้งานจริง
+function nowHHMM() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ' น.';
+}
 const elapsedMin = () => (Date.now() - T0) / 60000;
 
 // แปลงนาทีคงเหลือเป็นข้อความ (P3/P4 คิดเป็นวันทำการ 9 ชม./วัน)
@@ -921,6 +1246,19 @@ function fmtRemain(m, asDays) {
   if (h > 0) return h + ' ชม. ' + String(mm).padStart(2, '0') + ' น.';
   return Math.max(0, Math.floor(m)) + ' นาที';
 }
+/* แปลงจำนวนนาทีเป็นข้อความเป้าหมาย SLA ที่คนอ่านรู้เรื่อง
+   biz = นับเฉพาะเวลาทำการ (9 ชม./วัน) — ใช้ตอนหน้าตั้งค่าแก้ค่า P1–P4 แล้วต้องสร้างข้อความใหม่ */
+function slaLabel(min, biz, short) {
+  const m = Math.max(1, Math.round(min));
+  const unitH = biz ? (short ? ' ชม.ทำการ' : ' ชั่วโมงทำการ') : (short ? ' ชม.' : ' ชั่วโมง');
+  if (biz && m >= BIZ_DAY_MIN) {
+    const d = m / BIZ_DAY_MIN;
+    return (d % 1 === 0 ? d : d.toFixed(1)) + ' วันทำการ';
+  }
+  if (m >= 60) { const h = m / 60; return (h % 1 === 0 ? h : h.toFixed(1)) + unitH; }
+  return m + ' นาที';
+}
+
 // นับถอยหลังละเอียดระดับวินาที (ใช้ในแผงรายละเอียด)
 function fmtClock(m) {
   if (m <= 0) return '00:00:00';
@@ -1007,53 +1345,104 @@ const S = {
   q:'', cf:'ALL', statusF:'all',
   openId:null, reply:'',
   escOpen:false, escTo:'TECH', escWhy:'',
-  csatOpen:false, csatPick:0,
+  csatOpen:false, csatPick:0, csatFor:null,
   menuOpen:false, loading:false, fresh:true,
   assetIdx:0, kbId:null, rr:0, attached:0,
-  disabledRules:{}, extra:[], deflected:false, dark:false,
+  extra:[], deflected:false, dark:false,
   login:{ user:'', pass:'', show:false, remember:true, eu:'', ep:'', tries:0, lockUntil:0, disc:false },
-  form:{ company:'HQ', dept:'การเงิน', cat:CATS.HQ[0], title:'', desc:'', prio:'P3', asset:'', gps:'' }
+  form:{ company:'HQ', dept:'การเงิน', cat:CATS.HQ[0].n, title:'', desc:'', prio:'P3', asset:'', gps:'' },
+  // หน้าตั้งค่าระบบ: หมวดที่เปิดอยู่ · เข้าไปในหมวดแล้วหรือยัง (มือถือ) · ตัวกรองย่อยในหมวด
+  set:{ tab:'co', inSec:false, uq:'', uco:'ALL', urole:'ALL', catco:'HQ', aq:'', aact:'ทุกการกระทำ' },
+  confirm:null
 };
 
 const me = () => ACCOUNTS.find(a => a.role === S.role) || ACCOUNTS[0];
+// บริษัทในขอบเขตของผู้ใช้ปัจจุบัน ('ALL' = ทั้งกลุ่ม)
+const myCo = () => me().co || 'ALL';
 const allTickets = () => S.extra.concat(TICKETS);
+
+/* ─── สามระดับสิทธิ์ ───
+   employee   : เห็นเฉพาะ Ticket ที่ตนเองแจ้ง · เมนู 3 รายการ
+   helpdesk   : เห็นทุกอย่างและจัดการ Ticket ได้เต็มที่ แต่ "แก้ไข/ลบข้อมูลระบบ" ไม่ได้
+   superadmin : ไม่มีข้อจำกัด
+   หมายเหตุสำคัญ: การทำงานกับ Ticket (รับเรื่อง/มอบหมาย/เปลี่ยนสถานะ/ตอบกลับ/ส่งต่อ/ปิดงาน)
+   ไม่ถือเป็น "การแก้ไขข้อมูลระบบ" — helpdesk จึงทำได้ทั้งหมด */
+const isEmp = () => S.role === 'employee';
+const canWorkTickets = () => S.role !== 'employee';          // จัดการ Ticket
+const canEditData = () => S.role === 'superadmin';           // แก้/ลบข้อมูลตั้งค่า
+const NO_EDIT_WHY = 'โหมดดูอย่างเดียว — การแก้ไขต้องใช้สิทธิ์ Super Admin';
+const roAttr = () => canEditData() ? '' : ' disabled title="' + NO_EDIT_WHY + '"';
 
 // ขอบเขตการมองเห็นตามสิทธิ์ (RBAC / Data Isolation)
 function visibleTickets() {
-  return allTickets().filter(t => {
-    if (S.role === 'employee') return t.mine;
-    if (S.role === 'agent') return t.company === 'HQ' || t.company === 'TECH';
-    return true;
-  });
+  return allTickets().filter(t => isEmp() ? t.mine : true);
 }
-// เมนูตามบทบาท
+// Ticket ของผู้ใช้ทั่วไป แยกเป็นสองหน้า: ที่ยังไม่ปิด กับ ที่ปิดแล้ว
+const myOpenTickets = () => visibleTickets().filter(t => t.status !== 'ปิดงานแล้ว');
+const myClosedTickets = () => visibleTickets().filter(t => t.status === 'ปิดงานแล้ว');
+
+/* ─── หมวดของหน้าตั้งค่าระบบ ───
+   superadmin แก้ได้ทุกหมวด · helpdesk เปิดดูได้ทุกหมวดแต่ทุกช่องถูกปิด · employee ไม่เห็นเมนูนี้ */
+const SECS = [
+  { k:'co',   icon:'building', label:'บริษัทในเครือ',            short:'บริษัท',      lvl:'co',    kicker:'Organization' },
+  { k:'user', icon:'users',    label:'ผู้ใช้และสิทธิ์',           short:'ผู้ใช้',      lvl:'co',    kicker:'Identity' },
+  { k:'role', icon:'shield',   label:'บทบาทและสิทธิ์ (RBAC)',     short:'RBAC',        lvl:'group', kicker:'Access Control' },
+  { k:'cat',  icon:'folder',   label:'หมวดหมู่และแบบฟอร์ม',       short:'หมวดหมู่',    lvl:'co',    kicker:'Service Catalog' },
+  { k:'sla',  icon:'clock',    label:'SLA และเวลาทำการ',          short:'SLA',         lvl:'group', kicker:'AIDC-IT-SLA-001 v1.1' },
+  { k:'rt',   icon:'route',    label:'กฎการมอบหมาย',              short:'Routing',     lvl:'co',    kicker:'Conditional Routing' },
+  { k:'team', icon:'user',     label:'ทีมและเจ้าหน้าที่',          short:'ทีม',         lvl:'group', kicker:'Support Teams' },
+  { k:'noti', icon:'bell',     label:'การแจ้งเตือน',              short:'แจ้งเตือน',   lvl:'group', kicker:'Notifications' },
+  { k:'chan', icon:'headset',  label:'ช่องทางรับแจ้ง',            short:'ช่องทาง',     lvl:'group', kicker:'Intake Channels' },
+  { k:'sec',  icon:'lock',     label:'ความปลอดภัย',               short:'ความปลอดภัย', lvl:'group', kicker:'Security & PDPA' },
+  { k:'intg', icon:'link',     label:'การเชื่อมต่อ / Audit Log', short:'เชื่อมต่อ',   lvl:'group', kicker:'Integrations' },
+  { k:'sys',  icon:'db',       label:'ระบบและสำรองข้อมูล',      short:'ระบบ',        lvl:'group', kicker:'System & Backup' }
+];
+const canSettings = () => !isEmp();
+// 'edit' = แก้ได้ทั้งหมด (superadmin) · 'ro' = เปิดดูได้แต่ทุกช่องถูกปิด (helpdesk)
+function secPerm() { return canEditData() ? 'edit' : 'ro'; }
+const curSec = () => (SECS.some(s => s.k === S.set.tab) ? S.set.tab : 'co');
+const rowEditable = perm => perm === 'edit';
+
+/* เมนูตามบทบาท — ผู้ใช้ทั่วไปเห็นสามรายการเท่านั้น
+   คลังความรู้เข้าถึงได้จากปุ่มบนแถบหัว จึงไม่ต้องเป็นเมนูหลักของผู้ใช้ทั่วไป */
 function navModel() {
+  if (isEmp()) {
+    return [
+      { key:'new',     icon:'plus',  label:'แจ้งเรื่องใหม่',        short:'แจ้งเรื่อง', badge:'' },
+      { key:'track',   icon:'inbox', label:'ติดตามเรื่องที่แจ้ง',   short:'ติดตาม',     badge:myOpenTickets().length },
+      { key:'history', icon:'clock', label:'ประวัติการแจ้ง',        short:'ประวัติ',    badge:myClosedTickets().length }
+    ];
+  }
   const vis = visibleTickets();
-  const nav = [
-    { key:'my',  icon:'inbox', label:S.role === 'employee' ? 'Ticket ของฉัน' : 'คิวงานของฉัน', short:'ของฉัน', badge:vis.length },
-    { key:'new', icon:'plus',  label:'แจ้งเรื่องใหม่', short:'แจ้งเรื่อง', badge:'' },
-    { key:'kb',  icon:'book',  label:'คลังความรู้', short:'คลังความรู้', badge:KB.length }
+  return [
+    { key:'my',       icon:'inbox',   label:'คิวงานของฉัน',              short:'ของฉัน',      badge:vis.length },
+    { key:'queue',    icon:'layers',  label:'Ticket ทั้งหมดในขอบเขต',    short:'ทั้งหมด',     badge:vis.filter(t => t.status !== 'ปิดงานแล้ว').length },
+    { key:'dash',     icon:'gauge',   label:'Executive Dashboard',       short:'แดชบอร์ด',    badge:'' },
+    { key:'new',      icon:'plus',    label:'แจ้งเรื่องใหม่',            short:'แจ้งเรื่อง',  badge:'' },
+    { key:'kb',       icon:'book',    label:'คลังความรู้',               short:'คลังความรู้', badge:KB.length },
+    { key:'assets',   icon:'box',     label:'ทรัพย์สิน / ITAM',          short:'ทรัพย์สิน',   badge:ASSETS.length },
+    { key:'rules',    icon:'sliders', label:'กฎการมอบหมาย & SLA',        short:'กฎ / SLA',    badge:RULES.length },
+    { key:'settings', icon:'gear',    label:'ตั้งค่าระบบ',               short:'ตั้งค่า',     badge:'' }
   ];
-  if (S.role !== 'employee') {
-    nav.splice(1, 0, { key:'queue', icon:'layers', label:'Ticket ทั้งหมดในขอบเขต', short:'ทั้งหมด', badge:vis.filter(t => t.status !== 'ปิดงานแล้ว').length });
-    nav.push({ key:'assets', icon:'box', label:'ทรัพย์สิน / ITAM', short:'ทรัพย์สิน', badge:ASSETS.length });
-  }
-  if (S.role === 'central') {
-    nav.splice(2, 0, { key:'dash', icon:'gauge', label:'Executive Dashboard', short:'แดชบอร์ด', badge:'' });
-    nav.push({ key:'rules', icon:'sliders', label:'กฎการมอบหมาย & SLA', short:'กฎ / SLA', badge:RULES.length });
-  }
-  return nav;
 }
-const curView = () => (navModel().some(n => n.key === S.view) ? S.view : 'my');
+// หน้าเริ่มต้นของแต่ละบทบาท — และกันไม่ให้เข้าหน้าที่ไม่มีสิทธิ์ผ่านการตั้ง S.view ตรง ๆ
+const homeView = () => (isEmp() ? 'track' : 'my');
+const curView = () => (navModel().some(n => n.key === S.view) ? S.view : homeView());
 
 const TITLES = {
-  my:     () => [S.role === 'employee' ? 'Ticket ของฉัน' : 'คิวงานของฉัน', 'Self-Service', S.role === 'employee' ? 'ติดตามทุกเรื่องที่คุณแจ้งไว้ พร้อมเวลาคงเหลือตามเป้าหมาย SLA' : 'Ticket ที่มอบหมายให้คุณและทีมของคุณ'],
-  queue:  () => ['Ticket ทั้งหมดในขอบเขตที่มองเห็น', 'Ticket Queue', S.role === 'central' ? 'มุมมองรวมทั้งกลุ่ม — 7 บริษัทในเครือ' : 'Data Isolation — เห็นเฉพาะบริษัทที่คุณดูแล'],
-  new:    () => ['แจ้งปัญหา / ขอรับบริการ', 'Smart Intake', 'ฟอร์มปรับตามประเภทธุรกิจของบริษัทที่เลือก พร้อมผู้ช่วย AI ค้นคู่มือก่อนส่ง'],
-  dash:   () => ['Executive Dashboard', 'Analytics', 'ตัวชี้วัดตาม AIDC-IT-SLA-001 ข้อ 7.1 เทียบเป้าหมายรายบริษัท'],
-  assets: () => ['ทะเบียนทรัพย์สินและประวัติซ่อมบำรุง', 'ITAM', 'ผูก Ticket กับรหัสอุปกรณ์และเครื่องจักร พร้อมแผนบำรุงรักษาเชิงป้องกัน'],
-  kb:     () => ['คลังความรู้', 'Knowledge Base', 'คู่มือแก้ปัญหาเบื้องต้นที่ผู้ช่วย AI ใช้อ้างอิงเพื่อลดปริมาณ Ticket'],
-  rules:  () => ['กฎการมอบหมายงานและ SLA', 'Administration', 'Conditional Routing · Priority Matrix · Escalation ตามเอกสาร AIDC-IT-SLA-001']
+  my:      () => ['คิวงานของฉัน', 'Ticket Queue', 'Ticket ที่มอบหมายให้คุณและทีมของคุณ'],
+  track:   () => ['ติดตามเรื่องที่แจ้ง', 'Self-Service', 'เรื่องที่คุณแจ้งไว้และยังไม่ปิด — สถานะปัจจุบัน เวลาคงเหลือตามเป้าหมาย SLA และความคืบหน้าล่าสุด'],
+  history: () => ['ประวัติการแจ้ง', 'Self-Service', 'เรื่องที่ปิดงานแล้ว พร้อมวันที่ปิด คะแนนความพึงพอใจที่คุณเคยให้ และปุ่มเปิดเรื่องซ้ำ'],
+  queue:   () => ['Ticket ทั้งหมดในขอบเขตที่มองเห็น', 'Ticket Queue', 'มุมมองรวมทั้งกลุ่ม — 7 บริษัทในเครือ'],
+  new:     () => ['แจ้งปัญหา / ขอรับบริการ', 'Smart Intake', 'ฟอร์มปรับตามประเภทธุรกิจของบริษัทที่เลือก พร้อมผู้ช่วย AI ค้นคู่มือก่อนส่ง'],
+  dash:    () => ['Executive Dashboard', 'Analytics', 'ตัวชี้วัดตาม AIDC-IT-SLA-001 ข้อ 7.1 เทียบเป้าหมายรายบริษัท'],
+  assets:  () => ['ทะเบียนทรัพย์สินและประวัติซ่อมบำรุง', 'ITAM', 'ผูก Ticket กับรหัสอุปกรณ์และเครื่องจักร พร้อมแผนบำรุงรักษาเชิงป้องกัน'],
+  kb:      () => ['คลังความรู้', 'Knowledge Base', 'คู่มือแก้ปัญหาเบื้องต้นที่ผู้ช่วย AI ใช้อ้างอิงเพื่อลดปริมาณ Ticket'],
+  rules:   () => ['กฎการมอบหมายงานและ SLA', 'Administration', 'Conditional Routing · Priority Matrix · Escalation ตามเอกสาร AIDC-IT-SLA-001'],
+  settings: () => ['ตั้งค่าระบบ', 'Admin Console',
+    canEditData()
+      ? 'ตั้งค่าทั้ง 12 หมวดของกลุ่มบริษัท — การแก้ไขทุกครั้งถูกบันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา'
+      : 'เปิดดูได้ทั้ง 12 หมวดเพื่อใช้อ้างอิงระหว่างทำงาน — ' + NO_EDIT_WHY]
 };
 
 /* ─────────────────────────── 5. Toast ─────────────────────────── */
@@ -1242,8 +1631,8 @@ function loginView() {
 
       '<div class="devnote mt-4">' +
         '<span class="eyebrow eyebrow-accent">Demo build</span>' +
-        '<p class="mt-1">บัญชีทดลอง <code>peerapol.t</code> / <code>demo1234</code> — เปลี่ยนชื่อผู้ใช้เป็น ' +
-          '<code>nattapon.s</code> หรือ <code>kamolchanok.j</code> เพื่อดูสิทธิ์ระดับอื่น (รหัสผ่านเดียวกัน)</p>' +
+        '<p class="mt-1">รหัสผ่านเดียวกันทุกบัญชี <code>demo1234</code> — เปลี่ยนชื่อผู้ใช้เพื่อดูสิทธิ์ทั้งสามระดับ<br>' +
+          '<code>kamolchanok.j</code> ผู้ใช้งานทั่วไป · <code>nattapon.s</code> Team Helpdesk · <code>peerapol.t</code> Super Admin</p>' +
         (locked ? '<button type="button" data-act="unlock" class="btn btn-ghost btn-ghost-sm mt-1">ปลดล็อกสำหรับการสาธิต</button>' : '') +
       '</div>' +
 
@@ -1284,7 +1673,11 @@ function shell() {
         '<span class="tag tag-soft">' + esc(u.roleLabel) + '</span>' +
         '<button data-act="signout" class="btn btn-ghost btn-ghost-sm">ออกจากระบบ</button>' +
       '</div>' +
-      '<p class="mt-3 text-[11.5px] leading-relaxed text-faint">สิทธิ์ (RBAC) กำหนดจาก AD security group ตอนเข้าสู่ระบบ<br><span class="font-medium text-muted">' + esc(u.group) + '</span></p>' +
+      '<p class="mt-3 text-[11.5px] leading-relaxed text-faint">สิทธิ์กำหนดจาก AD security group ตอนเข้าสู่ระบบ<br>' +
+        '<span class="font-medium text-muted">' + esc(u.group) + '</span></p>' +
+      '<p class="mt-2 text-[11.5px] leading-relaxed text-faint flex items-start gap-1.5">' +
+        ic(canEditData() ? 'key' : isEmp() ? 'user' : 'shield', 'w-[13px] h-[13px] flex-none mt-0.5') +
+        '<span>' + esc(u.perm) + '</span></p>' +
     '</div>' +
     '<nav class="flex-1 overflow-y-auto py-3" aria-label="เมนูหลัก">' +
       nav.map(n =>
@@ -1331,7 +1724,8 @@ function shell() {
   '</header>';
 
   // ── bottom nav มือถือ: เฉพาะงานที่ทำจากหน้างานจริง — แดชบอร์ด/ITAM/กฎ เป็นงานโต๊ะ ไปอยู่ในเมนู ──
-  const BOT_KEYS = ['my', 'queue', 'new', 'kb'];
+  // ผู้ใช้ทั่วไปมีเมนูแค่สามรายการ จึงใส่ครบใน bottom nav ได้ · บทบาทอื่นเก็บงานโต๊ะไว้ในเมนูรวม
+  const BOT_KEYS = isEmp() ? ['new', 'track', 'history'] : ['my', 'queue', 'new', 'kb'];
   const bn = nav.filter(n => BOT_KEYS.indexOf(n.key) >= 0);
   const botnav =
   '<nav class="botnav lg:hidden" aria-label="เมนูหลัก (มือถือ)">' +
@@ -1369,10 +1763,13 @@ function skeleton() {
 }
 
 function viewBody(view) {
+  if (view === 'track') return trackView();
+  if (view === 'history') return historyView();
   if (view === 'new') return newTicketView();
   if (view === 'dash') return dashView();
   if (view === 'assets') return assetsView();
   if (view === 'rules') return rulesView();
+  if (view === 'settings') return settingsView();
   if (view === 'kb') return kbView();
   return listView();
 }
@@ -1394,9 +1791,9 @@ function listView() {
   const r = S.fresh ? ' rise' : '';
 
   // ชิปบริษัทในเครือ
-  const chips = [{ code:'ALL', name:'ทุกบริษัท' }].concat(CO).map(c => {
+  const chips = [{ code:'ALL', name:'ทุกบริษัท' }].concat(activeCO()).map(c => {
     const n = c.code === 'ALL' ? vis.length : vis.filter(x => x.company === c.code).length;
-    const inScope = c.code === 'ALL' || n > 0 || S.role === 'central';
+    const inScope = c.code === 'ALL' || n > 0 || canWorkTickets();
     return '<button data-act="cf" data-code="' + c.code + '" class="chip' + (inScope ? '' : ' dimmed') + '" aria-pressed="' + (S.cf === c.code ? 'true' : 'false') + '">' +
       esc(c.name) + '<span class="cn">' + n + '</span></button>';
   }).join('');
@@ -1467,9 +1864,189 @@ function listView() {
     (rows.length ? table + cards : empty) +
     '<p class="text-[12.5px] text-faint flex items-start gap-2 leading-relaxed">' + ic('shield', 'w-4 h-4 flex-none mt-0.5') +
       '<span>' + esc(
-        S.role === 'employee' ? 'ขอบเขตการมองเห็น: พนักงานทั่วไปเห็นเฉพาะ Ticket ที่ตนเองแจ้ง (Data Isolation)'
-        : S.role === 'agent' ? 'ขอบเขตการมองเห็น: เจ้าหน้าที่เห็น Ticket ของบริษัทที่ตนดูแล — AIDC HQ และ AIDC Tech'
-        : 'ขอบเขตการมองเห็น: Central IT เห็น Ticket ทุกบริษัทในเครือ · แสดง ' + rows.length + ' จาก ' + vis.length + ' รายการ') + '</span></p>' +
+        isEmp()
+          ? 'ขอบเขตการมองเห็น: ผู้ใช้งานทั่วไปเห็นเฉพาะ Ticket ที่ตนเองแจ้ง (Data Isolation)'
+          : canEditData()
+            ? 'ขอบเขตการมองเห็น: Super Admin เห็นและจัดการ Ticket ได้ทุกบริษัทในเครือ ไม่มีข้อจำกัด · แสดง ' + rows.length + ' จาก ' + vis.length + ' รายการ'
+            : 'ขอบเขตการมองเห็น: Team Helpdesk เห็นและจัดการ Ticket ได้ทุกบริษัทในเครือ · แสดง ' + rows.length + ' จาก ' + vis.length + ' รายการ · ' +
+              'ข้อมูลตั้งค่าระบบเปิดดูได้แต่แก้ไขไม่ได้') + '</span></p>' +
+  '</div>';
+}
+
+/* ══════════ 8b. หน้าของผู้ใช้งานทั่วไป — แยกเป็นสองหน้าจริง ไม่ใช่ตัวกรองในหน้าเดียว ══════════
+   ติดตามเรื่องที่แจ้ง = เรื่องที่ยังไม่ปิด · เน้นสถานะปัจจุบัน SLA คงเหลือ และความคืบหน้าล่าสุด
+   ประวัติการแจ้ง      = เรื่องที่ปิดแล้ว · เน้นวันที่ปิด คะแนน CSAT ที่เคยให้ และการเปิดเรื่องซ้ำ
+   ══════════════════════════════════════════════════════════════════════════════════════ */
+
+// ความคืบหน้าล่าสุดของ Ticket หนึ่งรายการ (รายการบนสุดของ audit trail)
+function lastMove(t) {
+  const tl = timelineOf(t);
+  return tl[0] || { what:'—', who:'—', when:'' };
+}
+// ดาว CSAT ที่ผู้ใช้เคยให้ — 0 = ยังไม่ได้ประเมิน
+function csatStars(n) {
+  if (!n) return '<span class="text-[12.5px] text-faint whitespace-nowrap">ยังไม่ได้ประเมิน</span>';
+  let h = '';
+  for (let i = 1; i <= 5; i++) {
+    h += '<span class="' + (i <= n ? 'text-accent-text' : 'text-hair') + '">' +
+      ic('star', 'w-[13px] h-[13px] flex-none', i <= n ? 2.2 : 1.4) + '</span>';
+  }
+  return '<span class="inline-flex items-center gap-1.5 whitespace-nowrap">' +
+    '<span class="inline-flex items-center gap-0.5">' + h + '</span>' +
+    '<span class="num text-[12.5px] font-semibold">' + n + '/5</span></span>';
+}
+
+/* ── หน้า 1: ติดตามเรื่องที่แจ้ง ── */
+function trackView() {
+  const rows = myOpenTickets();
+  const r = S.fresh ? ' rise' : '';
+  const atRisk = rows.filter(t => { const s = slaOf(t); return s.level === 'crit' || s.level === 'breach'; }).length;
+  const paused = rows.filter(t => t.status === 'รอข้อมูลเพิ่ม').length;
+
+  const summary =
+  '<section class="setstat">' +
+    [['เรื่องที่ยังไม่ปิด', String(rows.length), 'รวมทุกสถานะที่ยังดำเนินการอยู่'],
+     ['ใกล้ครบ / เกินเป้าหมาย', String(atRisk), atRisk ? 'ทีมงานได้รับแจ้งเตือนอัตโนมัติแล้ว' : 'ทุกเรื่องยังอยู่ในกรอบเวลา'],
+     ['รอข้อมูลจากคุณ', String(paused), paused ? 'นาฬิกา SLA หยุดจนกว่าคุณจะตอบกลับ' : 'ไม่มีเรื่องที่รอข้อมูลจากคุณ'],
+     ['ช่องทางติดต่อเร่งด่วน', 'IT Hotline', 'รับสายภายใน 3 นาที สำหรับเหตุ P1/P2']
+    ].map(x =>
+      '<div><div class="eyebrow">' + esc(x[0]) + '</div>' +
+        '<div class="display-sm num mt-1.5 truncate">' + esc(x[1]) + '</div>' +
+        '<div class="text-[11.5px] text-faint leading-snug mt-0.5">' + esc(x[2]) + '</div></div>').join('') +
+  '</section>';
+
+  const empty =
+  '<div class="panel p-10 text-center">' +
+    '<div class="mx-auto w-11 h-11 grid place-items-center text-faint hair-all">' + ic('check', 'w-5 h-5') + '</div>' +
+    '<h3 class="display-md mt-4">ไม่มีเรื่องที่กำลังดำเนินการ</h3>' +
+    '<p class="lede mx-auto mt-2 text-[13.5px]">ทุกเรื่องที่คุณแจ้งไว้ปิดงานครบแล้ว — ดูย้อนหลังได้ที่หน้าประวัติการแจ้ง</p>' +
+    '<div class="mt-5 flex flex-wrap gap-2 justify-center">' +
+      '<button data-act="nav" data-view="new" class="btn btn-primary btn-sm">' + ic('plus', 'w-4 h-4') + 'แจ้งเรื่องใหม่</button>' +
+      '<button data-act="nav" data-view="history" class="btn btn-secondary btn-sm">' + ic('clock', 'w-4 h-4') + 'ดูประวัติการแจ้ง</button>' +
+    '</div>' +
+  '</div>';
+
+  // การ์ดต่อเรื่อง — อ่านง่ายกว่าตารางสำหรับผู้ใช้ที่ไม่ได้ทำงานกับ Ticket ทั้งวัน
+  const cards =
+  '<ul class="flex flex-col gap-4">' +
+    rows.map(t => {
+      const mv = lastMove(t);
+      return '<li><article class="panel">' +
+        '<div class="p-5 flex flex-wrap items-start gap-x-4 gap-y-3">' +
+          '<div class="min-w-0 flex-1">' +
+            '<div class="eyebrow num">' + esc(t.id) + ' · แจ้งผ่าน ' + esc(t.channel) + '</div>' +
+            '<h3 class="display-md leading-snug mt-1.5">' + esc(t.title) + '</h3>' +
+            '<p class="text-[12.5px] text-faint mt-1.5">' + esc(t.cat + ' · ' + t.dept + ' · ' + CONAME(t.company)) + '</p>' +
+          '</div>' +
+          '<div class="flex-none flex flex-col items-end gap-2">' + prioTag(t.prio) + statusTag(t.status) + '</div>' +
+        '</div>' +
+        '<div class="px-5 pb-5 grid sm:grid-cols-[minmax(0,1fr)_200px] gap-x-5 gap-y-4 items-end">' +
+          '<div class="min-w-0">' +
+            '<div class="eyebrow">ความคืบหน้าล่าสุด</div>' +
+            '<p class="text-[13.5px] leading-snug font-medium mt-1.5">' + esc(mv.what) + '</p>' +
+            '<p class="text-[11.5px] text-faint mt-1">' + esc(mv.who + ' · ' + mv.when) + '</p>' +
+          '</div>' +
+          '<div class="min-w-0">' +
+            '<div class="eyebrow">เวลาคงเหลือตามเป้าหมาย</div>' +
+            '<div class="mt-1.5">' + slaCell(t) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="px-5 py-4 rule-in bg-surface flex flex-wrap items-center gap-2">' +
+          '<button data-act="open" data-id="' + t.id + '" class="btn btn-primary btn-sm">' +
+            ic('arrowR', 'w-4 h-4') + 'เปิดดูและตอบกลับ</button>' +
+          '<span class="text-[11.5px] text-faint flex-1 min-w-[180px] leading-relaxed">' +
+            (t.status === 'รอข้อมูลเพิ่ม'
+              ? 'เจ้าหน้าที่รอข้อมูลเพิ่มจากคุณ — ตอบกลับเพื่อให้นาฬิกา SLA เดินต่อ'
+              : 'ผู้รับผิดชอบ ' + t.assignee + ' · เป้าหมายแก้ไข ' + PRIO(t.prio).res) + '</span>' +
+        '</div>' +
+      '</article></li>';
+    }).join('') +
+  '</ul>';
+
+  return '<div class="flex flex-col gap-5' + r + '">' + summary + (rows.length ? cards : empty) +
+    '<p class="text-[12.5px] text-faint flex items-start gap-2 leading-relaxed">' + ic('shield', 'w-4 h-4 flex-none mt-0.5') +
+      '<span>คุณเห็นเฉพาะเรื่องที่ตนเองแจ้ง (Data Isolation) · ' +
+        'สิ่งที่ทำได้ในแต่ละเรื่อง: อ่าน ตอบกลับ แนบไฟล์เพิ่ม ยืนยันปิดงาน และให้คะแนนความพึงพอใจ</span></p>' +
+  '</div>';
+}
+
+/* ── หน้า 2: ประวัติการแจ้ง ── */
+function historyView() {
+  const rows = myClosedTickets();
+  const r = S.fresh ? ' rise' : '';
+  const rated = rows.filter(t => t.csat);
+  const avg = rated.length ? (rated.reduce((a, t) => a + t.csat, 0) / rated.length).toFixed(1) : '—';
+
+  const summary =
+  '<section class="setstat">' +
+    [['เรื่องที่ปิดแล้ว', String(rows.length), 'เก็บย้อนหลังตามนโยบาย PDPA ' + SECU.pdpaKeep + ' เดือน'],
+     ['ประเมินแล้ว', rated.length + ' / ' + rows.length, 'คะแนนช่วยให้ทีมงานปรับปรุงบริการ'],
+     ['คะแนนเฉลี่ยที่คุณให้', avg, 'เป้าหมายองค์กร ≥ 4.2 / 5.0'],
+     ['เปิดเรื่องซ้ำได้ภายใน', '7 วัน', 'หลังพ้นกำหนดให้แจ้งเป็นเรื่องใหม่']
+    ].map(x =>
+      '<div><div class="eyebrow">' + esc(x[0]) + '</div>' +
+        '<div class="display-sm num mt-1.5 truncate">' + esc(x[1]) + '</div>' +
+        '<div class="text-[11.5px] text-faint leading-snug mt-0.5">' + esc(x[2]) + '</div></div>').join('') +
+  '</section>';
+
+  const empty =
+  '<div class="panel p-10 text-center">' +
+    '<div class="mx-auto w-11 h-11 grid place-items-center text-faint hair-all">' + ic('clock', 'w-5 h-5') + '</div>' +
+    '<h3 class="display-md mt-4">ยังไม่มีเรื่องที่ปิดงานแล้ว</h3>' +
+    '<p class="lede mx-auto mt-2 text-[13.5px]">เมื่อเรื่องที่คุณแจ้งถูกปิดงาน รายการจะมาแสดงที่นี่พร้อมคะแนนที่คุณให้ไว้</p>' +
+    '<div class="mt-5"><button data-act="nav" data-view="track" class="btn btn-secondary btn-sm">' +
+      ic('inbox', 'w-4 h-4') + 'ไปที่เรื่องที่กำลังดำเนินการ</button></div>' +
+  '</div>';
+
+  const table =
+  '<div class="panel hidden md:block">' +
+    '<div class="tbl-wrap"><table class="tbl tbl-sticky"><thead><tr>' +
+      '<th>Ticket</th><th class="min-w-[260px]">เรื่อง</th><th>ระดับ</th><th>ผู้ปิดงาน</th>' +
+      '<th>วันที่ปิด</th><th>คะแนนที่ให้</th><th>การจัดการ</th>' +
+    '</tr></thead><tbody>' +
+      rows.map(t =>
+        '<tr>' +
+          '<td class="num text-[12.5px] font-semibold text-muted whitespace-nowrap">' + esc(t.id) + '</td>' +
+          '<td><div class="cell-title font-medium leading-snug">' + esc(t.title) + '</div>' +
+            '<div class="text-[11.5px] text-faint mt-1 truncate max-w-[320px]">' + esc(t.cat + ' · ' + t.dept + ' · แจ้งผ่าน ' + t.channel) + '</div></td>' +
+          '<td>' + prioTag(t.prio) + '</td>' +
+          '<td class="text-[13.5px] whitespace-nowrap">' + esc(t.assignee) + '</td>' +
+          '<td class="num text-[12.5px] whitespace-nowrap">' + esc(t.closedAt || '—') + '</td>' +
+          '<td>' + csatStars(t.csat) + '</td>' +
+          '<td><div class="flex items-center gap-1.5 whitespace-nowrap">' +
+            '<button data-act="open" data-id="' + t.id + '" class="btn btn-secondary btn-sm" ' +
+              'title="ดูรายละเอียด" aria-label="' + esc('ดูรายละเอียด ' + t.id) + '">' + ic('eye', 'w-4 h-4') + '</button>' +
+            (t.csat ? '' : '<button data-act="raterow" data-id="' + t.id + '" class="btn btn-secondary btn-sm">' + ic('star', 'w-4 h-4') + 'ให้คะแนน</button>') +
+            '<button data-act="reopen" data-id="' + t.id + '" class="btn btn-secondary btn-sm">' + ic('refresh', 'w-4 h-4') + 'เปิดเรื่องซ้ำ</button>' +
+          '</div></td>' +
+        '</tr>').join('') +
+    '</tbody></table></div>' +
+  '</div>';
+
+  const cards =
+  '<ul class="md:hidden flex flex-col gap-px bg-hair border border-hair">' +
+    rows.map(t =>
+      '<li class="bg-card p-4">' +
+        '<div class="flex items-center justify-between gap-2">' +
+          '<span class="eyebrow num">' + esc(t.id) + '</span>' + prioTag(t.prio) +
+        '</div>' +
+        '<div class="font-semibold text-[15px] leading-snug mt-2">' + esc(t.title) + '</div>' +
+        '<div class="text-[11.5px] text-faint mt-1">' + esc(t.cat + ' · ปิดโดย ' + t.assignee) + '</div>' +
+        '<div class="flex items-center justify-between gap-3 mt-3 pt-3 rule-in">' +
+          '<span class="num text-[12.5px] text-muted">ปิด ' + esc(t.closedAt || '—') + '</span>' + csatStars(t.csat) +
+        '</div>' +
+        '<div class="flex flex-wrap gap-2 mt-3">' +
+          '<button data-act="open" data-id="' + t.id + '" class="btn btn-secondary btn-sm">' + ic('eye', 'w-4 h-4') + 'ดูรายละเอียด</button>' +
+          (t.csat ? '' : '<button data-act="raterow" data-id="' + t.id + '" class="btn btn-secondary btn-sm">' + ic('star', 'w-4 h-4') + 'ให้คะแนน</button>') +
+          '<button data-act="reopen" data-id="' + t.id + '" class="btn btn-secondary btn-sm">' + ic('refresh', 'w-4 h-4') + 'เปิดเรื่องซ้ำ</button>' +
+        '</div>' +
+      '</li>').join('') +
+  '</ul>';
+
+  return '<div class="flex flex-col gap-5' + r + '">' + summary + (rows.length ? table + cards : empty) +
+    '<p class="text-[12.5px] text-faint flex items-start gap-2 leading-relaxed">' + ic('shield', 'w-4 h-4 flex-none mt-0.5') +
+      '<span>เปิดเรื่องซ้ำได้ภายใน 7 วันหลังปิดงาน โดยระบบจะสร้างต่อจากประวัติเดิมทั้งหมด · ' +
+        'คะแนนความพึงพอใจรวมเข้าค่า CSAT ของบริษัทและของเจ้าหน้าที่</span></p>' +
   '</div>';
 }
 
@@ -1481,22 +2058,31 @@ function aiHits() {
   if (txt.trim().length < 8) return [];
   return KB.filter(a => a.keys.some(k => txt.includes(k.toLowerCase()))).slice(0, 2);
 }
-// กฎ routing ที่ตรงกับฟอร์มปัจจุบัน
+/* กฎ routing ที่ตรงกับฟอร์มปัจจุบัน — กฎที่ถูกปิดในหน้าตั้งค่าจะไม่ถูกเลือก
+   ทำให้ผลของ "ปิด/เปิดกฎ" เห็นได้ทันทีในแผง Auto Routing ของฟอร์มแจ้งเรื่อง */
 function ruleForForm() {
   const cat = S.form.cat;
-  if (cat.indexOf('เครื่องจักร') === 0) return RULES[0];
-  if (cat.indexOf('สิทธิ์') === 0) return RULES[1];
-  if (cat.indexOf('ระบบ POS') === 0) return RULES[2];
-  if (cat.indexOf('ERP') === 0) return RULES[3];
-  if (cat.indexOf('GPS') === 0) return RULES[4];
-  return { cond:CONAME(S.form.company) + ' + ' + S.form.dept + ' + ' + cat, team:'Central IT — Service Desk', mode:'Round-Robin', prio:S.form.prio };
+  let i = -1;
+  if (cat.indexOf('เครื่องจักร') === 0) i = 0;
+  else if (cat.indexOf('สิทธิ์') === 0) i = 1;
+  else if (cat.indexOf('ระบบ POS') === 0) i = 2;
+  else if (cat.indexOf('ERP') === 0) i = 3;
+  else if (cat.indexOf('GPS') === 0) i = 4;
+  if (i >= 0 && RULES[i] && RULES[i].on) return RULES[i];
+  return {
+    cond: i >= 0 ? 'ไม่มีกฎเฉพาะที่เปิดใช้อยู่ — ใช้กฎตั้งต้นของ Service Desk'
+                 : CONAME(S.form.company) + ' + ' + S.form.dept + ' + ' + cat,
+    team:'Central IT — Service Desk', mode:'Round-Robin', prio:S.form.prio
+  };
 }
 const formReady = () => S.form.title.trim().length > 3 && S.form.desc.trim().length > 8;
 
 function newTicketView() {
   const f = S.form;
-  const cats = CATS[f.company] || CATS.HQ;
-  const needAsset = f.cat.indexOf('เครื่องจักร') === 0 || f.cat.indexOf('GPS') === 0 || f.cat.indexOf('อะไหล่') === 0;
+  const cats = catsOf(f.company);
+  // ฟิลด์ ITAM / GPS เปิดตามที่ตั้งไว้ในหน้าตั้งค่า › หมวดหมู่และแบบฟอร์ม
+  const cc = catCfg(f.company, f.cat);
+  const needAsset = !!(cc.itam || cc.gps);
   const hits = aiHits();
   const showAi = hits.length > 0 && !S.deflected;
   const rule = ruleForForm();
@@ -1515,7 +2101,7 @@ function newTicketView() {
     '<div class="grid sm:grid-cols-2 gap-4">' +
       '<div class="field"><label for="fco">บริษัท / Entity</label>' +
         '<select id="fco" data-act="f" data-k="company" data-fkey="fco" class="input">' +
-          CO.map(c => '<option value="' + c.code + '"' + (c.code === f.company ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') +
+          activeCO().map(c => '<option value="' + c.code + '"' + (c.code === f.company ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') +
         '</select></div>' +
       '<div class="field"><label for="fdept">แผนกผู้แจ้ง</label>' +
         '<input id="fdept" data-act="f" data-k="dept" data-fkey="fdept" class="input" value="' + esc(f.dept) + '"></div>' +
@@ -1523,9 +2109,10 @@ function newTicketView() {
 
     '<div class="field"><label for="fcat">หมวดหมู่ปัญหา</label>' +
       '<select id="fcat" data-act="f" data-k="cat" data-fkey="fcat" class="input">' +
-        cats.map(c => '<option value="' + esc(c) + '"' + (c === f.cat ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+        cats.map(c => '<option value="' + esc(c.n) + '"' + (c.n === f.cat ? ' selected' : '') + '>' + esc(c.n) + '</option>').join('') +
       '</select>' +
-      '<p class="text-[11.5px] text-faint">มี ' + cats.length + ' หมวดสำหรับ ' + esc(CONAME(f.company)) + '</p></div>' +
+      '<p class="text-[11.5px] text-faint">มี ' + cats.length + ' หมวดสำหรับ ' + esc(CONAME(f.company)) +
+        ' · ความเร่งด่วนเริ่มต้นของหมวดนี้คือ ' + esc(cc.prio || 'P3') + '</p></div>' +
 
     '<div class="field"><label for="ftitle">หัวเรื่อง</label>' +
       '<input id="ftitle" data-act="f" data-k="title" data-fkey="ftitle" class="input" placeholder="สรุปปัญหาสั้น ๆ เช่น เครื่องพิมพ์ชั้น 3 พิมพ์ไม่ออก" value="' + esc(f.title) + '"></div>' +
@@ -1537,15 +2124,17 @@ function newTicketView() {
     // ฟิลด์ ITAM + GPS โผล่เฉพาะหมวดเครื่องจักร / GPS / อะไหล่
     (needAsset ?
     '<div class="panel-flat p-4 grid sm:grid-cols-2 gap-4 rise">' +
-      '<div class="sm:col-span-2 flex items-center gap-2 eyebrow eyebrow-accent">' + ic('box', 'w-4 h-4') + 'ฟิลด์เพิ่มเติมสำหรับงานเครื่องจักร / ไซต์งาน</div>' +
+      '<div class="sm:col-span-2 flex items-center gap-2 eyebrow eyebrow-accent">' + ic('box', 'w-4 h-4') + 'ฟิลด์บังคับเพิ่มเติมของหมวดนี้ (ตั้งไว้ในหน้าตั้งค่าระบบ)</div>' +
+      (cc.itam ?
       '<div class="field"><label for="fasset">รหัสอุปกรณ์ / เครื่องจักร (ITAM)</label>' +
         '<input id="fasset" data-act="f" data-k="asset" data-fkey="fasset" class="input" placeholder="เช่น EXC-CON-118" value="' + esc(f.asset) + '" list="assetlist">' +
-        '<datalist id="assetlist">' + ASSETS.map(a => '<option value="' + a.code + '">' + esc(a.name) + '</option>').join('') + '</datalist></div>' +
+        '<datalist id="assetlist">' + ASSETS.map(a => '<option value="' + a.code + '">' + esc(a.name) + '</option>').join('') + '</datalist></div>' : '') +
+      (cc.gps ?
       '<div class="field"><label for="fgps">ตำแหน่งไซต์งาน (GPS)</label>' +
         '<div class="flex gap-2">' +
           '<input id="fgps" data-act="f" data-k="gps" data-fkey="fgps" class="input" placeholder="ยังไม่ระบุ" value="' + esc(f.gps) + '">' +
           '<button type="button" data-act="pin" class="btn btn-secondary flex-none">' + ic('pin', 'w-4 h-4') + 'ปักหมุด</button>' +
-        '</div></div>' +
+        '</div></div>' : '') +
     '</div>' : '') +
 
     // ความเร่งด่วน P1–P4 พร้อมเป้าหมาย SLA จริง
@@ -1779,11 +2368,12 @@ function rulesView() {
   '<section class="panel">' +
     '<div class="panel-head"><div class="eyebrow">Conditional Routing</div>' +
       '<h2 class="display-md mt-1.5">กฎการมอบหมายงานอัตโนมัติ</h2>' +
-      '<p class="text-[12.5px] text-faint mt-1.5">การเปิด/ปิดกฎทุกครั้งถูกบันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา</p></div>' +
+      '<p class="text-[12.5px] text-faint mt-1.5">การเปิด/ปิดกฎทุกครั้งถูกบันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา' +
+        (canEditData() ? '' : ' · ' + esc(NO_EDIT_WHY)) + '</p></div>' +
     '<div class="tbl-wrap">' +
       '<table class="tbl"><thead><tr><th>#</th><th class="min-w-[280px]">เงื่อนไข (Company + Department + Category)</th><th>มอบหมายให้</th><th>วิธีกระจาย</th><th>ระดับ</th><th>เปิดใช้</th></tr></thead><tbody>' +
       RULES.map((x, i) => {
-        const off = !!S.disabledRules[i];
+        const off = !x.on;
         return '<tr class="' + (off ? 'opacity-55' : '') + '">' +
           '<td class="num text-faint text-[12.5px]">' + String(i + 1).padStart(2, '0') + '</td>' +
           '<td class="font-medium">' + esc(x.cond) + '</td>' +
@@ -1791,7 +2381,7 @@ function rulesView() {
           '<td class="text-[12.5px] text-faint whitespace-nowrap">' + esc(x.mode) + '</td>' +
           '<td>' + prioTag(x.prio) + '</td>' +
           '<td><button data-act="rule" data-i="' + i + '" class="sw" role="switch" aria-checked="' + (off ? 'false' : 'true') + '" ' +
-            'aria-label="' + (off ? 'เปิดใช้' : 'ปิดใช้') + 'กฎข้อ ' + (i + 1) + '"><i></i></button></td>' +
+            'aria-label="' + (off ? 'เปิดใช้' : 'ปิดใช้') + 'กฎข้อ ' + (i + 1) + '"' + roAttr() + '><i></i></button></td>' +
         '</tr>';
       }).join('') +
       '</tbody></table>' +
@@ -1862,6 +2452,1071 @@ function rulesView() {
   return '<div class="flex flex-col gap-5' + r + '">' + rulesTable + matrix + escal + '</div>';
 }
 
+/* ═════════════════════ 12b. หน้า: ตั้งค่าระบบ (Admin Console) ═════════════════════
+   สถาปัตยกรรมเดียวกับส่วนอื่นของแอป: ไม่มี state ซ้อน ไม่มีระบบใหม่
+   — ทุกหมวดมี "ร่าง" (draft) ของตัวเอง แก้ในร่างก่อน แล้วกดบันทึกจึงมีผลกับข้อมูลจริง
+   — ปุ่มยกเลิกทิ้งร่างนั้นทิ้ง ค่ากลับไปเท่ากับที่บันทึกล่าสุด
+   — บันทึกแล้วผลจะไปถึงหน้าอื่นทันที (ชิปบริษัท / ฟอร์มแจ้งเรื่อง / แถบ SLA / Auto Routing)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+const clone = o => JSON.parse(JSON.stringify(o));
+
+/* คลังข้อมูลของแต่ละหมวด: live() = ถ่ายสำเนาค่าปัจจุบัน · apply() = เขียนกลับเข้าระบบจริง */
+const SECSTORE = {
+  co: {
+    live: () => clone(CO),
+    apply: d => { CO.length = 0; d.forEach(x => CO.push(x)); syncFormScope(); }
+  },
+  user: {
+    live: () => ({ list:clone(USERS), admap:clone(ADMAP) }),
+    apply: d => { USERS.length = 0; d.list.forEach(x => USERS.push(x)); ADMAP.length = 0; d.admap.forEach(x => ADMAP.push(x)); }
+  },
+  role: {
+    live: () => ({ roles:clone(ROLES), rbac:clone(RBAC) }),
+    apply: d => {
+      ROLES.length = 0; d.roles.forEach(x => ROLES.push(x));
+      Object.keys(RBAC).forEach(k => delete RBAC[k]);
+      Object.assign(RBAC, clone(d.rbac));
+    }
+  },
+  cat: {
+    live: () => clone(CATS),
+    apply: d => { Object.keys(CATS).forEach(k => delete CATS[k]); Object.assign(CATS, clone(d)); syncFormScope(); }
+  },
+  sla: {
+    live: () => ({
+      p: PRIOS.map(p => ({ key:p.key, respMin:p.respMin, resMin:p.resMin, mode:p.mode, report:p.report })),
+      cal: clone(BIZCAL), hol: clone(HOLIDAYS), pause: clone(PAUSE), mw: clone(MAINTW)
+    }),
+    apply: applySla
+  },
+  rt: {
+    live: () => ({ list:clone(RULES) }),
+    apply: d => { RULES.length = 0; d.list.forEach(x => { x.cond = condText(x); RULES.push(x); }); }
+  },
+  team: {
+    live: () => ({ teams:clone(TEAMS), oncall:clone(ONCALL), esc:clone(ESCCONTACT) }),
+    apply: d => {
+      TEAMS.length = 0; d.teams.forEach(x => TEAMS.push(x));
+      ONCALL.length = 0; d.oncall.forEach(x => ONCALL.push(x));
+      ESCCONTACT.length = 0; d.esc.forEach(x => ESCCONTACT.push(x));
+    }
+  },
+  noti: {
+    live: () => ({ ch:clone(NOTICH), rules:clone(NOTIRULES), tmpl:clone(NOTITMPL) }),
+    apply: d => {
+      NOTICH.length = 0; d.ch.forEach(x => NOTICH.push(x));
+      NOTIRULES.length = 0; d.rules.forEach(x => NOTIRULES.push(x));
+      Object.assign(NOTITMPL, d.tmpl);
+    }
+  },
+  chan: {
+    live: () => ({ list:clone(CHAN) }),
+    apply: d => { CHAN.length = 0; d.list.forEach(x => CHAN.push(x)); }
+  },
+  sec:  { live: () => clone(SECU), apply: d => Object.assign(SECU, d) },
+  intg: {
+    live: () => ({ list:clone(INTG) }),
+    apply: d => { INTG.length = 0; d.list.forEach(x => INTG.push(x)); }
+  },
+  sys:  { live: () => clone(SYS), apply: d => Object.assign(SYS, d) }
+};
+
+const DRAFTS = {};
+function draftOf(sec) { if (!DRAFTS[sec]) DRAFTS[sec] = SECSTORE[sec].live(); return DRAFTS[sec]; }
+function viewOf(sec) { return DRAFTS[sec] || SECSTORE[sec].live(); }
+const isDirty = sec => Object.prototype.hasOwnProperty.call(DRAFTS, sec);
+const secLabel = k => (SECS.find(s => s.k === k) || {}).label || k;
+
+// อ่าน/เขียนค่าตาม path แบบ 'list.2.name' — ใช้ผูกทุกช่องกรอกในหน้านี้เข้ากับร่างด้วย handler เดียว
+function getPath(o, p) { return p.split('.').reduce((a, k) => (a == null ? a : a[k]), o); }
+function setPath(o, p, v) {
+  const ks = p.split('.');
+  const last = ks.pop();
+  const t = ks.reduce((a, k) => a[k], o);
+  t[last] = v;
+}
+
+/* เมื่อบริษัทถูกปิดใช้งานหรือหมวดหมู่ถูกลบ ต้องดึงฟอร์มและตัวกรองกลับมาอยู่ในค่าที่ยังมีอยู่จริง */
+function syncFormScope() {
+  const act = activeCO();
+  if (!act.length) return;
+  if (!act.some(c => c.code === S.form.company)) {
+    S.form.company = act[0].code; S.form.asset = ''; S.form.gps = '';
+  }
+  const cats = catsOf(S.form.company);
+  if (!cats.some(c => c.n === S.form.cat)) S.form.cat = cats[0] ? cats[0].n : '';
+  S.form.prio = catCfg(S.form.company, S.form.cat).prio || S.form.prio;
+  if (S.cf !== 'ALL' && !act.some(c => c.code === S.cf)) S.cf = 'ALL';
+  if (S.set.catco && !CATS[S.set.catco]) S.set.catco = act[0].code;
+}
+
+/* บันทึกค่า SLA ใหม่ → สร้างข้อความเป้าหมายใหม่ และคำนวณเวลาคงเหลือของ Ticket ที่ยังเปิดอยู่ใหม่
+   ใช้หลัก "เวลาที่ใช้ไปแล้วคงเดิม เป้าหมายเปลี่ยน" → คงเหลือ = เป้าหมายใหม่ − เวลาที่ใช้ไปแล้ว */
+function applySla(d) {
+  d.p.forEach(x => {
+    const p = PRIO(x.key);
+    const respMin = Math.max(1, +x.respMin || p.respMin);
+    const resMin = Math.max(1, +x.resMin || p.resMin);
+    const biz = x.mode === 'business';
+    p.respMin = respMin; p.resMin = resMin; p.mode = x.mode; p.report = x.report;
+    p.resp = slaLabel(respMin, biz) + (biz ? '' : ' (24×7)');
+    p.res = slaLabel(resMin, biz) + (biz ? '' : ' (นับต่อเนื่อง)');
+    p.respShort = slaLabel(respMin, biz, true);
+    p.resShort = slaLabel(resMin, biz, true);
+    p.clock = biz
+      ? 'นับเฉพาะเวลาทำการ จ–ศ ' + d.cal.from + '–' + d.cal.to
+      : 'นับต่อเนื่อง 24×7 · มีทีม On-call นอกเวลาทำการ';
+    allTickets().forEach(t => {
+      if (t.prio !== x.key || t.status === 'ปิดงานแล้ว') return;
+      const used = Math.max(0, t.totalMins - t.slaMins);
+      t.totalMins = resMin;
+      t.slaMins = Math.max(0, resMin - used);
+    });
+  });
+  Object.assign(BIZCAL, d.cal);
+  HOLIDAYS.length = 0; d.hol.forEach(h => HOLIDAYS.push(h));
+  PAUSE.length = 0; d.pause.forEach(p => PAUSE.push(p));
+  Object.assign(MAINTW, d.mw);
+}
+
+// ข้อความเงื่อนไขของกฎ routing ที่สร้างจากตัวสร้างเงื่อนไข
+function condText(r) {
+  return (r.co === 'ALL' ? 'ทุกบริษัท' : CONAME(r.co)) + ' + ' + (r.dept || 'ทุกแผนก') +
+    ' + ' + (r.cat || 'ทุกหมวดหมู่') + ' + ' + (r.urg || 'ทุกระดับ');
+}
+
+// ข้อความบอกผลที่เกิดขึ้นจริงหลังกดบันทึกในแต่ละหมวด
+function saveNote(sec) {
+  const n = {
+    co:'ชิปบริษัทในหน้าคิวงานและตัวเลือกบริษัทในฟอร์มแจ้งเรื่องอัปเดตตามแล้ว',
+    user:'สิทธิ์ใหม่จะมีผลกับผู้ใช้ในการเข้าสู่ระบบครั้งถัดไป',
+    role:'สิทธิ์ของทุกบัญชีที่ถือบทบาทเหล่านี้อัปเดตแล้ว',
+    cat:'ตัวเลือกหมวดหมู่และฟิลด์บังคับในฟอร์มแจ้งเรื่องอัปเดตตามแล้ว',
+    sla:'แถบ SLA และเวลาคงเหลือของ Ticket ที่ยังเปิดอยู่คำนวณใหม่แล้ว',
+    rt:'แผง Auto Routing ในฟอร์มแจ้งเรื่องใช้กฎชุดใหม่แล้ว',
+    team:'ตารางเวร on-call และผู้รับ escalation อัปเดตแล้ว',
+    noti:'กฎการแจ้งเตือนชุดใหม่มีผลกับเหตุการณ์ถัดไป',
+    chan:'ช่องทางรับแจ้งที่ปิดไว้จะไม่สร้าง Ticket ใหม่อีก',
+    sec:'นโยบายรหัสผ่านและ session มีผลกับการเข้าสู่ระบบครั้งถัดไป',
+    intg:'การตั้งค่าการเชื่อมต่อถูกบันทึกแล้ว',
+    sys:'การตั้งค่าระบบและรอบสำรองข้อมูลถูกบันทึกแล้ว'
+  };
+  return (n[sec] || 'บันทึกแล้ว') + ' · บันทึกใน Audit Log โดย ' + me().name;
+}
+
+function saveSec(sec) {
+  if (!isDirty(sec)) { say('ยังไม่มีการแก้ไขในหมวดนี้ — ไม่มีอะไรต้องบันทึก'); return; }
+  SECSTORE[sec].apply(DRAFTS[sec]);
+  delete DRAFTS[sec];
+  paint();
+  say('บันทึกหมวด "' + secLabel(sec) + '" เรียบร้อย — ' + saveNote(sec));
+}
+
+/* เพิ่ม / ลบแถวในตารางของแต่ละหมวด (ทำงานบนร่างเสมอ) */
+function secAdd(sec, what) {
+  const d = draftOf(sec);
+  const mine = 'HQ';
+  if (sec === 'co') {
+    d.push({ code:'NEW' + (d.length + 1), name:'บริษัทใหม่', users:0, domain:'', from:'08:30', to:'17:30', active:true });
+    say('เพิ่มแถวบริษัทใหม่ในร่างแล้ว — กรอกรหัสและชื่อ แล้วกดบันทึก');
+  } else if (sec === 'user') {
+    d.list.unshift({ name:'ผู้ใช้ใหม่', mail:'', co:mine, dept:'', role:'employee', ad:'AIDC-ALL-EMPLOYEES', on:true, locked:false, last:'ยังไม่เคยเข้าใช้' });
+  } else if (sec === 'role') {
+    const k = 'custom_role_' + (d.roles.length + 1);
+    d.roles.push({ k:k, label:'บทบาทใหม่', en:k, n:0, sys:false });
+    d.rbac[k] = { 'ticket.view.own':true, 'ticket.create':true };
+  } else if (sec === 'cat') {
+    const co = S.set.catco;
+    if (!d[co]) d[co] = [];
+    d[co].push({ n:'หมวดหมู่ใหม่', itam:false, gps:false, prio:'P3' });
+  } else if (sec === 'sla') {
+    d.hol.push({ d:'2569-00-00', n:'วันหยุดใหม่' });
+  } else if (sec === 'rt') {
+    d.list.push({ on:true, co:'ALL', dept:'ทุกแผนก', cat:'ทุกหมวดหมู่', urg:'เร่งด่วนปานกลาง',
+      cond:'', team:'Central IT — Service Desk', mode:'Round-Robin', prio:'P3' });
+  } else if (sec === 'team' && what === 'oncall') {
+    d.oncall.push({ week:'', main:'', backup:'', tel:'', now:false });
+  } else if (sec === 'noti') {
+    d.rules.push({ ev:'เหตุการณ์ใหม่', to:'', email:true, teams:false, line:false, inapp:true });
+  }
+}
+function secDel(sec, what, i) {
+  const d = draftOf(sec);
+  if (sec === 'co') d.splice(i, 1);
+  else if (sec === 'user') d.list.splice(i, 1);
+  else if (sec === 'cat') d[S.set.catco].splice(i, 1);
+  else if (sec === 'sla') d.hol.splice(i, 1);
+  else if (sec === 'rt') d.list.splice(i, 1);
+  else if (sec === 'team') d.oncall.splice(i, 1);
+  else if (sec === 'noti') d.rules.splice(i, 1);
+}
+
+/* ─────────── ตัวช่วยวาดฟอร์ม — สไตล์เดียวกันทั้ง 12 หมวด ─────────── */
+const fid = (sec, path) => 'st-' + sec + '-' + path.replace(/[^a-zA-Z0-9]/g, '_');
+
+function setHead(t, d) {
+  return '<div class="mb-3.5"><h3 class="display-sm">' + esc(t) + '</h3>' +
+    (d ? '<p class="text-[12.5px] text-faint leading-relaxed mt-1 max-w-[74ch]">' + esc(d) + '</p>' : '') + '</div>';
+}
+function setBlock(t, d, body) { return '<section class="setsec">' + setHead(t, d) + body + '</section>'; }
+
+/* ช่องกรอกที่ผูกกับ path ในร่างของหมวด
+   o.bare = อยู่ในตารางจึงไม่มีป้ายกำกับให้เห็น แต่ยังมี aria-label ให้โปรแกรมอ่านหน้าจอ (ค่าเป็นคลาสความกว้าง)
+   o.span = กินสองคอลัมน์ · o.num = ตัวเลข · o.ro = ปิดตามสิทธิ์ · o.hint = คำอธิบายใต้ช่อง */
+function fWrap(o, label, id, inner) {
+  if (o.bare) return '<div class="field ' + o.bare + '">' + inner + '</div>';
+  return '<div class="field' + (o.span ? ' span2' : '') + '">' +
+    '<label for="' + id + '">' + esc(label) + '</label>' + inner +
+    (o.hint ? '<p class="text-[11.5px] text-faint leading-relaxed">' + esc(o.hint) + '</p>' : '') + '</div>';
+}
+function fIn(sec, path, label, val, o) {
+  o = o || {};
+  const id = fid(sec, path);
+  return fWrap(o, label, id,
+    '<input id="' + id + '" data-fkey="' + id + '" data-act="' + (o.num ? 'setn' : 'setf') + '" ' +
+      'data-sec="' + sec + '" data-path="' + esc(path) + '" class="input"' +
+      (o.num ? ' type="number" inputmode="numeric" min="0"' : ' type="text"') +
+      (o.bare ? ' aria-label="' + esc(label) + '"' : '') +
+      (o.ro ? ' disabled' : '') + ' value="' + esc(val) + '">');
+}
+// select ที่ผูกกับ path — opts เป็น array ของสตริง หรือ [value, label]
+function fSel(sec, path, label, val, opts, o) {
+  o = o || {};
+  const id = fid(sec, path);
+  return fWrap(o, label, id,
+    '<select id="' + id + '" data-fkey="' + id + '" data-act="setf" data-sec="' + sec + '" data-path="' + esc(path) + '" ' +
+      'class="input"' + (o.bare ? ' aria-label="' + esc(label) + '"' : '') + (o.ro ? ' disabled' : '') + '>' +
+      opts.map(x => {
+        const v = Array.isArray(x) ? x[0] : x, l = Array.isArray(x) ? x[1] : x;
+        return '<option value="' + esc(v) + '"' + (String(v) === String(val) ? ' selected' : '') + '>' + esc(l) + '</option>';
+      }).join('') +
+    '</select>');
+}
+function fTa(sec, path, label, val, o) {
+  o = o || {};
+  const id = fid(sec, path);
+  return '<div class="field span2">' +
+    '<label for="' + id + '">' + esc(label) + '</label>' +
+    '<textarea id="' + id + '" data-fkey="' + id + '" data-act="setf" data-sec="' + sec + '" data-path="' + esc(path) + '" ' +
+      'class="input"' + (o.ro ? ' disabled' : '') + (o.tall ? ' style="min-height:170px"' : '') + '>' + esc(val) + '</textarea>' +
+    (o.hint ? '<p class="text-[11.5px] text-faint leading-relaxed">' + esc(o.hint) + '</p>' : '') +
+  '</div>';
+}
+// สวิตช์เต็มแถว: ป้าย + คำอธิบายซ้าย สวิตช์ชิดขวา
+function fSw(sec, path, title, desc, on, ro, act) {
+  return '<div class="swrow">' +
+    '<span class="min-w-0 flex-1">' +
+      '<span class="block text-[13.5px] font-semibold leading-snug">' + esc(title) + '</span>' +
+      (desc ? '<span class="block text-[12.5px] text-faint leading-relaxed mt-0.5">' + esc(desc) + '</span>' : '') +
+    '</span>' +
+    '<button data-act="' + (act || 'setsw') + '" data-sec="' + sec + '" data-path="' + esc(path) + '" class="sw" role="switch" ' +
+      'aria-checked="' + (on ? 'true' : 'false') + '" aria-label="' + esc((on ? 'ปิด' : 'เปิด') + title) + '"' + (ro ? ' disabled' : '') + '><i></i></button>' +
+  '</div>';
+}
+// สวิตช์ขนาดเล็กในตาราง
+function swCell(sec, path, on, ro, label, act) {
+  return '<button data-act="' + (act || 'setsw') + '" data-sec="' + sec + '" data-path="' + esc(path) + '" class="sw" role="switch" ' +
+    'aria-checked="' + (on ? 'true' : 'false') + '" aria-label="' + esc(label || 'สลับค่า') + '"' + (ro ? ' disabled' : '') + '><i></i></button>';
+}
+// กล่องแสดงค่าที่ระบบคำนวณเอง แก้ด้วยมือไม่ได้
+function roBox(label, val, hint) {
+  return '<div class="field"><span class="lbl">' + esc(label) + '</span>' +
+    '<div class="robox num">' + esc(val) + '</div>' +
+    (hint ? '<p class="text-[11.5px] text-faint leading-relaxed">' + esc(hint) + '</p>' : '') + '</div>';
+}
+function delBtn(sec, what, i, label, ro) {
+  return '<button data-act="setdel" data-sec="' + sec + '" data-what="' + (what || '') + '" data-i="' + i + '" ' +
+    'class="btn btn-secondary btn-sm" aria-label="' + esc('ลบ ' + label) + '"' + (ro ? ' disabled' : '') + '>' +
+    ic('trash', 'w-4 h-4') + '</button>';
+}
+// ตารางตั้งค่าบางตัวกว้างกว่าแผงเสมอ — บอกให้ชัดว่าเลื่อนดูคอลัมน์ที่เหลือได้ (คอลัมน์แรกตรึงไว้แล้ว)
+function tblHint(mobileOnly) {
+  return '<p class="tbl-hint' + (mobileOnly ? ' lg:hidden' : '') + '">' + ic('arrowR') +
+    'เลื่อนตารางแนวนอนเพื่อดูคอลัมน์ที่เหลือ — คอลัมน์แรกตรึงไว้ให้อ้างอิงได้ตลอด</p>';
+}
+function addBtn(sec, what, label, ro) {
+  return '<button data-act="setadd" data-sec="' + sec + '" data-what="' + (what || '') + '" class="btn btn-secondary btn-sm"' +
+    (ro ? ' disabled' : '') + '>' + ic('plus', 'w-4 h-4') + esc(label) + '</button>';
+}
+
+/* แถบอธิบายสิทธิ์ของหมวดที่กำลังเปิดอยู่ — ไม่ซ่อนเงียบ ๆ ต้องบอกเหตุผล */
+/* ─────────── 1. บริษัทในเครือ ─────────── */
+function secCo(perm) {
+  const d = viewOf('co');
+  const openOf = code => allTickets().filter(t => t.company === code && t.status !== 'ปิดงานแล้ว').length;
+  const rows = d.map((c, i) => {
+    const ro = !rowEditable(perm);
+    return '<tr' + (c.active ? '' : ' class="opacity-60"') + '>' +
+      '<td>' + fIn('co', i + '.code', 'รหัสบริษัท', c.code, { ro:ro, bare:'w-[76px]' }) + '</td>' +
+      '<td>' + fIn('co', i + '.name', 'ชื่อบริษัท', c.name, { ro:ro, bare:'min-w-[164px]' }) + '</td>' +
+      '<td class="rt num whitespace-nowrap"><div>' + c.users.toLocaleString() + '</div>' +
+        '<div class="text-[11.5px] text-faint">เปิดอยู่ ' + openOf(c.code) + '</div></td>' +
+      '<td><div class="flex items-center gap-1 whitespace-nowrap">' +
+        fIn('co', i + '.from', 'เวลาเริ่มงานของ ' + c.name, c.from, { ro:ro, bare:'w-[72px]' }) +
+        '<span class="text-faint">–</span>' +
+        fIn('co', i + '.to', 'เวลาเลิกงานของ ' + c.name, c.to, { ro:ro, bare:'w-[72px]' }) +
+      '</div></td>' +
+      '<td>' + fIn('co', i + '.domain', 'โดเมนอีเมล', c.domain, { ro:ro, bare:'min-w-[148px]' }) + '</td>' +
+      '<td><div class="flex items-center gap-2 whitespace-nowrap">' +
+        '<button data-act="askco" data-i="' + i + '" class="sw" role="switch" aria-checked="' + (c.active ? 'true' : 'false') + '" ' +
+          'aria-label="' + esc((c.active ? 'ปิดใช้งาน ' : 'เปิดใช้งาน ') + c.name) + '"' + (ro ? ' disabled' : '') + '><i></i></button>' +
+        '<span class="text-[12.5px] ' + (c.active ? 'text-ink' : 'text-faint') + '">' + (c.active ? 'เปิด' : 'ปิด') + '</span>' +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+
+  return setBlock('ทะเบียนบริษัทในเครือ',
+    'ปิดใช้งานบริษัทใดก็ตาม ชิปของบริษัทนั้นจะหายจากหน้าคิวงานและจากตัวเลือกในฟอร์มแจ้งเรื่องทันทีที่กดบันทึก — ' +
+    'Ticket เดิมยังอยู่ครบเพื่อการตรวจสอบย้อนหลัง · เวลาทำการตั้งต้นคือ จ.–ศ. 08:30–17:30 ตามปฏิทินกลาง',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
+      '<th>รหัส</th><th class="min-w-[164px]">ชื่อบริษัท</th><th class="rt">ผู้ใช้ / Ticket</th>' +
+      '<th class="min-w-[160px]">เวลาทำการ</th><th class="min-w-[148px]">โดเมนอีเมล</th><th>สถานะ</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>' + tblHint(true) +
+    '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      addBtn('co', '', 'เพิ่มบริษัทในเครือ', perm !== 'edit') +
+      '<span class="text-[11.5px] text-faint leading-relaxed flex-1 min-w-[220px]">' +
+        'เปิดใช้งานอยู่ ' + activeCO().length + ' จาก ' + CO.length + ' บริษัท · รวมผู้ใช้ ' +
+        CO.reduce((s, c) => s + c.users, 0).toLocaleString() + ' บัญชี' +
+        (perm === 'edit' ? '' : ' · เพิ่มบริษัทใหม่ได้เฉพาะ Central IT') + '</span>' +
+    '</div>');
+}
+
+/* ─────────── 2. ผู้ใช้และสิทธิ์ ─────────── */
+function secUser(perm) {
+  const d = viewOf('user');
+  const q = S.set.uq.trim().toLowerCase();
+  const list = d.list.map((u, i) => ({ u:u, i:i })).filter(x =>
+    (S.set.uco === 'ALL' || x.u.co === S.set.uco) &&
+    (S.set.urole === 'ALL' || x.u.role === S.set.urole) &&
+    (!q || (x.u.name + x.u.mail + x.u.dept + x.u.ad).toLowerCase().includes(q)));
+
+  const coChips = [['ALL', 'ทุกบริษัท']].concat(CO.map(c => [c.code, c.name])).map(c =>
+    '<button data-act="setpick" data-k="uco" data-v="' + c[0] + '" class="chip" aria-pressed="' + (S.set.uco === c[0] ? 'true' : 'false') + '">' +
+      esc(c[1]) + '</button>').join('');
+  const roleChips = [['ALL', 'ทุกบทบาท']].concat(ROLES.map(r => [r.k, r.label])).map(r =>
+    '<button data-act="setpick" data-k="urole" data-v="' + r[0] + '" class="chip" aria-pressed="' + (S.set.urole === r[0] ? 'true' : 'false') + '">' +
+      esc(r[1]) + '</button>').join('');
+
+  const rows = list.map(x => {
+    const u = x.u, i = x.i, ro = !rowEditable(perm);
+    return '<tr' + (u.on ? '' : ' class="opacity-60"') + '>' +
+      '<td><div class="font-medium leading-snug">' + esc(u.name) + '</div>' +
+        '<div class="text-[11.5px] text-faint">' + esc(u.mail || 'ยังไม่ระบุอีเมล') + '</div></td>' +
+      '<td class="whitespace-nowrap"><div class="text-[13.5px]">' + esc(CONAME(u.co)) + '</div>' +
+        '<div class="text-[11.5px] text-faint">' + esc(u.dept || '—') + '</div></td>' +
+      '<td>' + fSel('user', 'list.' + i + '.role', 'บทบาทของ ' + u.name, u.role, ROLES.map(r => [r.k, r.label]), { ro:ro, bare:'min-w-[146px]' }) + '</td>' +
+      '<td class="text-[12.5px] text-faint"><span class="block max-w-[124px] truncate" title="' + esc(u.ad) + '">' + esc(u.ad) + '</span></td>' +
+      '<td><div class="flex items-center gap-2 whitespace-nowrap">' +
+        swCell('user', 'list.' + i + '.on', u.on, ro, (u.on ? 'ปิดใช้งาน ' : 'เปิดใช้งาน ') + u.name) +
+        (u.locked ? '<span class="tag tag-soft">' + ic('lock') + 'ล็อก</span>' : '') +
+      '</div>' +
+      '<div class="num text-[11.5px] text-faint whitespace-nowrap mt-1">' + esc(u.last) + '</div></td>' +
+      '<td><div class="flex items-center gap-1.5 whitespace-nowrap">' +
+        '<button data-act="setpw" data-n="' + esc(u.name) + '" class="btn btn-secondary btn-sm" ' +
+          'title="รีเซ็ตรหัสผ่าน" aria-label="' + esc('รีเซ็ตรหัสผ่านของ ' + u.name) + '"' + (ro ? ' disabled' : '') + '>' +
+          ic('key', 'w-4 h-4') + '</button>' +
+        (u.locked ? '<button data-act="setunlock" data-m="' + esc(u.mail) + '" data-n="' + esc(u.name) + '" class="btn btn-secondary btn-sm" ' +
+          'title="ปลดล็อกบัญชี" aria-label="' + esc('ปลดล็อกบัญชีของ ' + u.name) + '"' + (ro ? ' disabled' : '') + '>' + ic('lock', 'w-4 h-4') + '</button>' : '') +
+        delBtn('user', '', i, u.name, ro) +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+
+  const adRows = d.admap.map((a, i) =>
+    '<tr>' +
+      '<td class="font-medium whitespace-nowrap">' + esc(a.g) + '</td>' +
+      '<td>' + fSel('user', 'admap.' + i + '.role', 'บทบาท', a.role, ROLES.map(r => [r.k, r.en]), { ro:perm !== 'edit', bare:'min-w-[168px]' }) + '</td>' +
+      '<td class="text-[12.5px] text-muted">' + esc(a.scope) + '</td>' +
+      '<td class="rt num">' + a.n.toLocaleString() + '</td>' +
+    '</tr>').join('');
+
+  return setBlock('ทะเบียนผู้ใช้',
+    'ค้นหาและกรองตามบริษัทและบทบาท · ปิดใช้งานบัญชีแทนการลบเสมอ เพื่อให้ประวัติ Ticket ยังอ้างอิงผู้แจ้งได้',
+    '<div class="flex flex-col gap-3">' +
+      '<div class="relative max-w-[420px]">' +
+        '<span class="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none">' + ic('search', 'w-4 h-4') + '</span>' +
+        '<input data-act="setq" data-k="uq" data-fkey="setuq" value="' + esc(S.set.uq) + '" class="input input-search" ' +
+          'placeholder="ค้นหาชื่อ อีเมล แผนก หรือ AD group" aria-label="ค้นหาผู้ใช้">' +
+      '</div>' +
+      '<div><div class="eyebrow mb-1.5">บริษัท</div><div class="chiprow">' + coChips + '</div></div>' +
+      '<div><div class="eyebrow mb-1.5">บทบาท</div><div class="chiprow">' + roleChips + '</div></div>' +
+    '</div>' +
+    '<div class="tbl-wrap mt-4"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
+      '<th class="min-w-[180px]">ชื่อ / อีเมล</th><th>บริษัท / แผนก</th><th class="min-w-[146px]">บทบาท</th>' +
+      '<th>AD group</th><th>สถานะ / เข้าใช้ล่าสุด</th><th>จัดการ</th>' +
+    '</tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="text-center text-faint py-6">ไม่พบผู้ใช้ที่ตรงกับเงื่อนไข</td></tr>') + '</tbody></table></div>' + tblHint() +
+    '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      addBtn('user', '', 'เพิ่มผู้ใช้', perm !== 'edit') +
+      '<span class="text-[11.5px] text-faint">แสดง ' + list.length + ' จาก ' + d.list.length + ' บัญชี</span>' +
+    '</div>')
+  + setBlock('แมป AD security group → บทบาท',
+    'ผู้ใช้ได้สิทธิ์อัตโนมัติจาก security group ตอนเข้าสู่ระบบผ่าน SSO — ไม่ต้องตั้งค่ารายคน เมื่อ HR ย้ายกลุ่มใน AD สิทธิ์จะตามไปเอง',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight"><thead><tr>' +
+      '<th class="min-w-[230px]">AD security group</th><th class="min-w-[168px]">บทบาทในระบบ</th><th class="min-w-[200px]">ขอบเขตข้อมูล</th><th class="rt">สมาชิก</th>' +
+    '</tr></thead><tbody>' + adRows + '</tbody></table></div>' + tblHint(true));
+}
+
+/* ─────────── 3. บทบาทและสิทธิ์ (RBAC) ─────────── */
+function secRole(perm) {
+  const d = viewOf('role');
+  const ro = perm !== 'edit';
+  let lastG = '';
+  const rows = PERMS.map(p => {
+    const head = p.g === lastG ? '' :
+      '<tr><td colspan="' + (d.roles.length + 1) + '" class="bg-surface"><span class="eyebrow">' + esc(p.g) + '</span></td></tr>';
+    lastG = p.g;
+    return head + '<tr>' +
+      '<td><div class="font-medium text-[12.5px] num">' + esc(p.k) + '</div>' +
+        '<div class="text-[11.5px] text-faint leading-snug">' + esc(p.d) + '</div></td>' +
+      d.roles.map(r =>
+        '<td class="text-center">' +
+          '<label class="check justify-center w-full"><input type="checkbox" data-act="setperm" ' +
+            'data-r="' + r.k + '" data-p="' + esc(p.k) + '"' + (d.rbac[r.k] && d.rbac[r.k][p.k] ? ' checked' : '') + (ro ? ' disabled' : '') +
+            ' aria-label="' + esc(r.label + ' — ' + p.k) + '"><i aria-hidden="true"></i></label>' +
+        '</td>').join('') +
+    '</tr>';
+  }).join('');
+
+  const roleCards = d.roles.map((r, i) =>
+    '<div class="setcard flex items-start gap-3">' +
+      '<div class="min-w-0 flex-1">' +
+        '<div class="font-semibold text-[13.5px] leading-snug">' + esc(r.label) + '</div>' +
+        '<div class="eyebrow mt-1">' + esc(r.en) + '</div>' +
+        (r.note ? '<div class="text-[12.5px] text-muted leading-snug mt-1.5">' + esc(r.note) + '</div>' : '') +
+        '<div class="text-[12.5px] text-faint mt-1 num">' + r.n.toLocaleString() + ' ผู้ใช้ถือบทบาทนี้</div>' +
+      '</div>' +
+      (r.sys
+        ? '<span class="tag tag-quiet flex-none">' + ic('lock') + 'บทบาทระบบ</span>'
+        : '<button data-act="askrole" data-i="' + i + '" class="btn btn-secondary btn-sm flex-none"' + (ro ? ' disabled' : '') + '>' +
+            ic('trash', 'w-4 h-4') + 'ลบ</button>') +
+    '</div>').join('');
+
+  return setBlock('บทบาทในระบบ',
+    'ระบบมีสามระดับตามที่ผู้บริหารกำหนดและลบไม่ได้ — ผู้ใช้งานทั่วไป · Team Helpdesk · Super Admin · ' +
+    'สร้างบทบาทเพิ่มได้เมื่อต้องการชุดสิทธิ์เฉพาะกิจ เช่น ผู้ตรวจสอบภายใน',
+    '<div class="setcards">' + roleCards + '</div>' +
+    '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      '<button data-act="setadd" data-sec="role" class="btn btn-secondary btn-sm"' + (ro ? ' disabled' : '') + '>' +
+        ic('plus', 'w-4 h-4') + 'สร้างบทบาทใหม่</button>' +
+      '<span class="text-[11.5px] text-faint">การลบบทบาทต้องยืนยันก่อน เพราะผู้ใช้ที่ถืออยู่จะถูกลดสิทธิ์ทันที</span>' +
+    '</div>')
+  + setBlock('เมทริกซ์สิทธิ์ (role × permission)',
+    'ติ๊กเพื่อเปิด/ปิดสิทธิ์รายข้อ · Team Helpdesk ได้สิทธิ์กลุ่ม "งานประจำวันกับ Ticket" และ "เปิดดูข้อมูลระบบ" ครบทุกข้อ ' +
+    'ส่วนกลุ่ม "แก้ไข / ลบข้อมูลระบบ" รวมถึง settings.manage สงวนไว้ให้ Super Admin เท่านั้น',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
+      '<th class="min-w-[260px]">Permission</th>' +
+      d.roles.map(r => '<th class="text-center whitespace-nowrap">' + esc(r.label) + '</th>').join('') +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>' + tblHint(true));
+}
+
+/* ─────────── 4. หมวดหมู่และแบบฟอร์ม ─────────── */
+function secCat(perm) {
+  const d = viewOf('cat');
+  const co = CATS[S.set.catco] ? S.set.catco : (activeCO()[0] || CO[0]).code;
+  const list = d[co] || [];
+  const ro = !rowEditable(perm);
+
+  const tabs = CO.map(c =>
+    '<button data-act="setpick" data-k="catco" data-v="' + c.code + '" class="chip" aria-pressed="' + (co === c.code ? 'true' : 'false') + '">' +
+      esc(c.name) + '<span class="cn">' + ((d[c.code] || []).length) + '</span></button>').join('');
+
+  const rows = list.map((x, i) =>
+    '<tr>' +
+      '<td class="num text-faint text-[12.5px]">' + String(i + 1).padStart(2, '0') + '</td>' +
+      '<td>' + fIn('cat', co + '.' + i + '.n', 'ชื่อหมวด', x.n, { ro:ro, bare:'min-w-[210px]' }) + '</td>' +
+      '<td class="text-center">' + swCell('cat', co + '.' + i + '.itam', x.itam, ro, 'บังคับรหัสทรัพย์สินของ ' + x.n) + '</td>' +
+      '<td class="text-center">' + swCell('cat', co + '.' + i + '.gps', x.gps, ro, 'บังคับพิกัด GPS ของ ' + x.n) + '</td>' +
+      '<td>' + fSel('cat', co + '.' + i + '.prio', 'ระดับ', x.prio, PRIOS.map(p => [p.key, p.key + ' · ' + p.th]), { ro:ro, bare:'w-[142px]' }) + '</td>' +
+      '<td><div class="flex items-center gap-1.5">' +
+        '<button data-act="setmove" data-sec="cat" data-path="' + co + '" data-i="' + i + '" data-dir="up" class="btn btn-secondary btn-sm" ' +
+          'aria-label="เลื่อนขึ้น"' + (ro || i === 0 ? ' disabled' : '') + '>' + ic('up', 'w-4 h-4') + '</button>' +
+        '<button data-act="setmove" data-sec="cat" data-path="' + co + '" data-i="' + i + '" data-dir="down" class="btn btn-secondary btn-sm" ' +
+          'aria-label="เลื่อนลง"' + (ro || i === list.length - 1 ? ' disabled' : '') + '>' + ic('down', 'w-4 h-4') + '</button>' +
+        delBtn('cat', '', i, x.n, ro) +
+      '</div></td>' +
+    '</tr>').join('');
+
+  return setBlock('หมวดหมู่ปัญหาแยกตามบริษัท',
+    'ลำดับในตารางคือลำดับที่ผู้แจ้งเห็นในฟอร์ม · เปิด "รหัสทรัพย์สิน" หรือ "พิกัด GPS" แล้วฟอร์มแจ้งเรื่องจะโผล่ฟิลด์นั้นให้กรอกอัตโนมัติ · ' +
+    'ความเร่งด่วนเริ่มต้นจะถูกเลือกให้ทันทีเมื่อผู้แจ้งเลือกหมวดนี้',
+    '<div class="chiprow mb-4">' + tabs + '</div>' +
+    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
+      '<th>ลำดับ</th><th class="min-w-[210px]">ชื่อหมวดหมู่</th><th class="text-center">บังคับรหัสทรัพย์สิน</th>' +
+      '<th class="text-center">บังคับพิกัด GPS</th><th>ความเร่งด่วนเริ่มต้น</th><th>จัดลำดับ / ลบ</th>' +
+    '</tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="text-center text-faint py-6">บริษัทนี้ยังไม่มีหมวดหมู่</td></tr>') + '</tbody></table></div>' + tblHint(true) +
+    '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      addBtn('cat', '', 'เพิ่มหมวดหมู่ให้ ' + CONAME(co), ro) +
+      '<span class="text-[11.5px] text-faint">' + CONAME(co) + ' มี ' + list.length + ' หมวด</span>' +
+    '</div>');
+}
+
+/* ─────────── 5. SLA และเวลาทำการ ─────────── */
+function secSla(perm) {
+  const d = viewOf('sla');
+  const ro = perm !== 'edit';
+
+  const slaRows = d.p.map((x, i) => {
+    const p = PRIO(x.key);
+    const biz = x.mode === 'business';
+    return '<tr>' +
+      '<td><div>' + prioTag(x.key) + '</div>' +
+        '<div class="text-[11.5px] text-faint leading-snug mt-1 max-w-[230px]">' + esc(p.desc) + '</div></td>' +
+      '<td>' + fIn('sla', 'p.' + i + '.respMin', 'เวลาตอบรับของ ' + x.key + ' (นาที)', x.respMin, { num:true, ro:ro, bare:'w-[102px]' }) +
+        '<span class="block text-[11.5px] text-faint mt-1">' + esc(slaLabel(x.respMin, biz)) + '</span></td>' +
+      '<td>' + fIn('sla', 'p.' + i + '.resMin', 'เวลาแก้ไขของ ' + x.key + ' (นาที)', x.resMin, { num:true, ro:ro, bare:'w-[102px]' }) +
+        '<span class="block text-[11.5px] text-faint mt-1">' + esc(slaLabel(x.resMin, biz)) + '</span></td>' +
+      '<td>' + fSel('sla', 'p.' + i + '.mode', 'โหมดนาฬิกาของ ' + x.key, x.mode,
+          [['business', 'เวลาทำการ (business)'], ['calendar', 'ต่อเนื่อง 24×7 (calendar)']], { ro:ro, bare:'min-w-[196px]' }) + '</td>' +
+      '<td>' + fIn('sla', 'p.' + i + '.report', 'รอบรายงานสถานะของ ' + x.key, x.report, { ro:ro, bare:'min-w-[196px]' }) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  const dayRow = DAYKEYS.map(k =>
+    '<label class="check"><input type="checkbox" data-act="setsw" data-sec="sla" data-path="cal.' + k[0] + '"' +
+      (d.cal[k[0]] ? ' checked' : '') + (ro ? ' disabled' : '') + '><i aria-hidden="true"></i><span>' + k[1] + '</span></label>').join('');
+
+  const holRows = d.hol.map((h, i) =>
+    '<tr>' +
+      '<td>' + fIn('sla', 'hol.' + i + '.d', 'วันที่', h.d, { ro:ro, bare:'w-[152px]' }) + '</td>' +
+      '<td>' + fIn('sla', 'hol.' + i + '.n', 'ชื่อวันหยุด', h.n, { ro:ro, bare:'min-w-[230px]' }) + '</td>' +
+      '<td>' + delBtn('sla', '', i, h.n, ro) + '</td>' +
+    '</tr>').join('');
+
+  const matrixTbl =
+    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr><th class="min-w-[200px]">ผลกระทบ \\ ความเร่งด่วน</th>' +
+      MATRIX.cols.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' +
+      MATRIX.rows.map(r => '<tr><td class="font-medium">' + esc(r.label) + '</td>' +
+        r.cells.map(p => '<td>' + prioTag(p) + '</td>').join('') + '</tr>').join('') +
+    '</tbody></table></div>';
+
+  return setBlock('เป้าหมาย SLA ตามระดับความสำคัญ',
+    'อ้างอิง AIDC-IT-SLA-001 v1.1 ข้อ 5.1 · กรอกเป็น "นาที" ระบบจะแปลงเป็นชั่วโมง/วันทำการให้เอง · ' +
+    'เมื่อบันทึก เวลาคงเหลือและแถบ SLA ของ Ticket ที่ยังเปิดอยู่จะถูกคำนวณใหม่จากเวลาที่ใช้ไปแล้ว',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
+      '<th class="min-w-[230px]">ระดับและนิยาม</th><th>เวลาตอบรับ (นาที)</th><th>เวลาแก้ไข (นาที)</th>' +
+      '<th class="min-w-[196px]">โหมดนาฬิกา</th><th class="min-w-[196px]">รอบรายงานสถานะ</th>' +
+    '</tr></thead><tbody>' + slaRows + '</tbody></table></div>' + tblHint() +
+    '<p class="mt-3 text-[11.5px] text-faint leading-relaxed">1 วันทำการ = ' + BIZ_DAY_MIN + ' นาที (9 ชั่วโมง) · ' +
+      'P1 ต้องใช้โหมดนาฬิกาต่อเนื่อง 24×7 เสมอตามเอกสารควบคุม</p>')
+
+  + setBlock('Priority Matrix — ผลกระทบ × ความเร่งด่วน',
+    'Service Desk กำหนดระดับเบื้องต้นจากเมทริกซ์นี้ ผู้รับบริการขอทบทวนระดับได้โดยระบุเหตุผลทางธุรกิจ (AIDC-IT-SLA-001 ข้อ 4)',
+    matrixTbl + tblHint(true))
+
+  + setBlock('ปฏิทินเวลาทำการ',
+    'ใช้เป็นฐานการนับเวลาของทุกระดับที่ตั้งโหมดนาฬิกาเป็น "เวลาทำการ" — บริษัทที่ตั้งเวลาต่างจากนี้ใช้ค่าของตัวเองในหมวดบริษัทในเครือ',
+    '<div class="setgrid setgrid-2">' +
+      fIn('sla', 'cal.from', 'เวลาเริ่มงาน', d.cal.from, { ro:ro }) +
+      fIn('sla', 'cal.to', 'เวลาเลิกงาน', d.cal.to, { ro:ro }) +
+      fIn('sla', 'cal.tz', 'เขตเวลา', d.cal.tz, { ro:ro }) +
+      roBox('ชั่วโมงทำการต่อวัน', (BIZ_DAY_MIN / 60).toFixed(1) + ' ชั่วโมง', 'คำนวณจากเวลาเริ่ม–เลิกงานมาตรฐาน') +
+      '<div class="field span2"><span class="lbl">วันทำการ</span>' +
+        '<div class="flex flex-wrap gap-x-5 gap-y-1">' + dayRow + '</div></div>' +
+    '</div>')
+
+  + setBlock('วันหยุดประจำปี 2569',
+    'วันในตารางนี้ไม่ถูกนับเป็นเวลาทำการ — ใช้กับทุกบริษัทในเครือ ยกเว้นวันหยุดเฉพาะกิจของแต่ละบริษัท',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight"><thead><tr>' +
+      '<th class="min-w-[152px]">วันที่</th><th class="min-w-[230px]">ชื่อวันหยุด</th><th>ลบ</th>' +
+    '</tr></thead><tbody>' + holRows + '</tbody></table></div>' +
+    '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      addBtn('sla', '', 'เพิ่มวันหยุด', ro) +
+      '<span class="text-[11.5px] text-faint">มี ' + d.hol.length + ' วันหยุดในปฏิทินปีนี้</span>' +
+    '</div>')
+
+  + setBlock('กฎการหยุดนับเวลา (SLA pause)',
+    'ตาม AIDC-IT-SLA-001 ข้อ 5.4 — เวลาตอบรับไม่หยุดนับในทุกกรณี วัดถึงการตอบครั้งแรกเท่านั้น',
+    d.pause.map((p, i) => fSw('sla', 'pause.' + i + '.on', p.t, p.d, p.on, ro)).join(''))
+
+  + setBlock('ช่วงปิดปรับปรุงตามแผน',
+    'เวลาในช่วงนี้ไม่ถือเป็นการผิด SLA (ข้อยกเว้นตาม AIDC-IT-SLA-001 ข้อ 9) และต้องแจ้งล่วงหน้าตามจำนวนวันทำการที่กำหนด',
+    '<div class="setgrid setgrid-2">' +
+      fSel('sla', 'mw.day', 'วันในสัปดาห์', d.mw.day, DAYKEYS.map(k => k[1]), { ro:ro }) +
+      fIn('sla', 'mw.notice', 'แจ้งล่วงหน้า (วันทำการ)', d.mw.notice, { num:true, ro:ro }) +
+      fIn('sla', 'mw.from', 'เริ่มปิดปรับปรุง', d.mw.from, { ro:ro }) +
+      fIn('sla', 'mw.to', 'สิ้นสุด', d.mw.to, { ro:ro }) +
+    '</div>');
+}
+
+/* ─────────── 6. กฎการมอบหมาย (Routing) ─────────── */
+function secRt(perm) {
+  const d = viewOf('rt');
+  const catNames = ['ทุกหมวดหมู่'].concat(
+    Object.keys(CATS).reduce((a, k) => a.concat(CATS[k].map(x => x.n)), []).filter((v, i, a) => a.indexOf(v) === i));
+  const teamNames = TEAMS.map(t => t.name).concat(['Central IT — Identity', 'Cosi IT + Vendor POS', 'ดันขึ้นหัวหน้าทีม + Central IT'])
+    .filter((v, i, a) => a.indexOf(v) === i);
+
+  /* ตัวสร้างเงื่อนไขมี 7 ฟิลด์ต่อกฎ — ถ้าทำเป็นตารางจะกว้างเกินแผงเสมอและปุ่มเปิด/ปิดจะหลุดออกนอกจอ
+     จึงวางเป็นบล็อกต่อกฎ คั่นด้วยเส้นภายใน แล้วใช้ฟอร์มสามคอลัมน์บนจอกว้าง */
+  const rows = d.list.map((r, i) => {
+    const ro = !rowEditable(perm);
+    return '<article class="rule-in pt-5 mt-5 first:border-t-0 first:pt-0 first:mt-0' + (r.on ? '' : ' opacity-60') + '">' +
+      '<div class="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3.5">' +
+        '<span class="tag tag-outline num flex-none">กฎข้อ ' + String(i + 1).padStart(2, '0') + '</span>' +
+        '<span class="text-[12.5px] text-muted leading-snug flex-1 min-w-[200px]">' +
+          esc(condText(r)) + ' → ' + esc(r.team) + (r.on ? '' : ' · ปิดใช้อยู่') + '</span>' +
+        '<div class="flex items-center gap-1.5 flex-none">' +
+          swCell('rt', 'list.' + i + '.on', r.on, ro, (r.on ? 'ปิดใช้' : 'เปิดใช้') + 'กฎข้อ ' + (i + 1)) +
+          '<button data-act="setmove" data-sec="rt" data-path="list" data-i="' + i + '" data-dir="up" class="btn btn-secondary btn-sm" ' +
+            'title="เพิ่มลำดับความสำคัญ" aria-label="เพิ่มลำดับความสำคัญของกฎข้อ ' + (i + 1) + '"' +
+            (ro || i === 0 ? ' disabled' : '') + '>' + ic('up', 'w-4 h-4') + '</button>' +
+          '<button data-act="setmove" data-sec="rt" data-path="list" data-i="' + i + '" data-dir="down" class="btn btn-secondary btn-sm" ' +
+            'title="ลดลำดับความสำคัญ" aria-label="ลดลำดับความสำคัญของกฎข้อ ' + (i + 1) + '"' +
+            (ro || i === d.list.length - 1 ? ' disabled' : '') + '>' + ic('down', 'w-4 h-4') + '</button>' +
+          delBtn('rt', '', i, 'กฎข้อ ' + (i + 1), ro) +
+        '</div>' +
+      '</div>' +
+      '<div class="setgrid setgrid-3">' +
+        fSel('rt', 'list.' + i + '.co', 'บริษัท', r.co, [['ALL', 'ทุกบริษัท']].concat(CO.map(c => [c.code, c.name])), { ro:ro }) +
+        fIn('rt', 'list.' + i + '.dept', 'แผนก', r.dept, { ro:ro }) +
+        fSel('rt', 'list.' + i + '.cat', 'หมวดหมู่', r.cat, catNames, { ro:ro }) +
+        fSel('rt', 'list.' + i + '.urg', 'ความเร่งด่วนที่เข้าเงื่อนไข', r.urg, MATRIX.cols.concat(['ทุกระดับ']), { ro:ro }) +
+        fSel('rt', 'list.' + i + '.team', 'ทีมผู้รับ', r.team, teamNames, { ro:ro }) +
+        fSel('rt', 'list.' + i + '.mode', 'วิธีกระจายงาน', r.mode, ROUTE_MODES, { ro:ro }) +
+        fSel('rt', 'list.' + i + '.prio', 'ระดับที่บังคับใช้', r.prio, PRIOS.map(p => [p.key, p.key + ' · ' + p.th]), { ro:ro }) +
+      '</div>' +
+    '</article>';
+  }).join('');
+
+  const escRows = ESCALATION.map(e =>
+    '<tr>' +
+      '<td><span class="tag ' + (e.kind === 'hier' ? 'tag-solid' : 'tag-outline') + '">' + esc(e.tier) + '</span></td>' +
+      '<td class="font-medium min-w-[190px]">' + esc(e.who) + '</td>' +
+      '<td class="text-[12.5px] text-muted leading-relaxed min-w-[300px]">' + esc(e.when) + '</td>' +
+      '<td class="text-[12.5px] text-faint whitespace-nowrap">' + (e.kind === 'hier' ? 'Hierarchical' : 'Functional') + '</td>' +
+    '</tr>').join('');
+
+  return setBlock('กฎการมอบหมายอัตโนมัติ',
+    'ระบบไล่กฎจากบนลงล่างและใช้กฎแรกที่ตรงเงื่อนไข — เลื่อนลำดับเพื่อเปลี่ยนความสำคัญ · ' +
+    'ปิดกฎแล้วแผง Auto Routing ในฟอร์มแจ้งเรื่องจะตกไปใช้ทีมตั้งต้นของ Service Desk ทันทีที่กดบันทึก',
+    rows +
+    '<div class="mt-5 pt-5 rule-in flex flex-wrap items-center gap-3">' +
+      addBtn('rt', '', 'เพิ่มกฎการมอบหมาย', perm !== 'edit') +
+      '<span class="text-[11.5px] text-faint">เปิดใช้อยู่ ' + d.list.filter(r => r.on).length + ' จาก ' + d.list.length + ' กฎ</span>' +
+    '</div>')
+
+  + setBlock('กฎการยกระดับ (Escalation)',
+    'อ้างอิง AIDC-IT-SLA-001 ข้อ 6 — Functional ไล่ตามระดับทีมสนับสนุน Hierarchical ยกระดับสู่ผู้บริหาร เงื่อนไขเหล่านี้กำหนดในเอกสารควบคุมและปรับได้เฉพาะเมื่อทบทวนเอกสาร',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight"><thead><tr>' +
+      '<th>ระดับ</th><th class="min-w-[190px]">ผู้รับผิดชอบ</th><th class="min-w-[300px]">เงื่อนไขการยกระดับ</th><th>ประเภท</th>' +
+    '</tr></thead><tbody>' + escRows + '</tbody></table></div>' + tblHint());
+}
+
+/* ─────────── 7. ทีมและเจ้าหน้าที่ ─────────── */
+function secTeam(perm) {
+  const d = viewOf('team');
+  const ro = perm !== 'edit';
+
+  const teamCards = d.teams.map((t, i) => {
+    const cap = t.members.reduce((s, m) => s + m.cap, 0);
+    const load = t.members.reduce((s, m) => s + m.load, 0);
+    return '<article class="setcard">' +
+      '<div class="flex items-start justify-between gap-3">' +
+        '<div class="min-w-0">' +
+          '<div class="eyebrow">' + esc(t.tier) + ' · ' + esc(t.co) + '</div>' +
+          '<h4 class="display-sm mt-1.5 leading-snug">' + esc(t.name) + '</h4>' +
+        '</div>' +
+        swCell('team', 'teams.' + i + '.on', t.on, ro, (t.on ? 'ปิด' : 'เปิด') + 'ทีม ' + t.name) +
+      '</div>' +
+      '<dl class="mt-4 pt-4 rule-in flex flex-col gap-2">' +
+        t.members.map(m =>
+          '<div class="flex items-center justify-between gap-3">' +
+            '<dt class="text-[13.5px] min-w-0 truncate">' + esc(m.n) + '</dt>' +
+            '<dd class="num text-[12.5px] text-faint whitespace-nowrap">' + m.load + ' / ' + m.cap + ' งาน</dd>' +
+          '</div>').join('') +
+      '</dl>' +
+      '<p class="mt-3 pt-3 rule-in text-[11.5px] text-faint num">ความจุรวม ' + load + ' / ' + cap + ' งานพร้อมกัน · ' +
+        'ใช้ไป ' + Math.round(load / cap * 100) + '%</p>' +
+    '</article>';
+  }).join('');
+
+  const ocRows = d.oncall.map((o, i) =>
+    '<tr' + (o.now ? ' class="is-active"' : '') + '>' +
+      '<td>' + fIn('team', 'oncall.' + i + '.week', 'สัปดาห์เวร', o.week, { ro:ro, bare:'min-w-[144px]' }) + '</td>' +
+      '<td>' + fSel('team', 'oncall.' + i + '.main', 'ผู้รับสายหลัก', o.main, AGENTS, { ro:ro, bare:'min-w-[142px]' }) + '</td>' +
+      '<td>' + fSel('team', 'oncall.' + i + '.backup', 'ผู้รับสายสำรอง', o.backup, AGENTS, { ro:ro, bare:'min-w-[142px]' }) + '</td>' +
+      '<td>' + fIn('team', 'oncall.' + i + '.tel', 'เบอร์ติดต่อ', o.tel, { ro:ro, bare:'min-w-[146px]' }) + '</td>' +
+      '<td class="whitespace-nowrap">' + (o.now ? '<span class="tag tag-solid">เวรปัจจุบัน</span>' : '<span class="text-[12.5px] text-faint">ล่วงหน้า</span>') + '</td>' +
+      '<td>' + delBtn('team', '', i, 'เวรสัปดาห์ ' + o.week, ro) + '</td>' +
+    '</tr>').join('');
+
+  const escRows = d.esc.map((e, i) =>
+    '<tr>' +
+      '<td class="whitespace-nowrap"><span class="tag tag-outline">' + esc(e.r) + '</span></td>' +
+      '<td>' + fIn('team', 'esc.' + i + '.who', 'ผู้รับ', e.who, { ro:ro, bare:'min-w-[210px]' }) + '</td>' +
+      '<td>' + fIn('team', 'esc.' + i + '.mail', 'อีเมล', e.mail, { ro:ro, bare:'min-w-[230px]' }) + '</td>' +
+      '<td class="text-[12.5px] text-muted leading-relaxed min-w-[300px]">' + esc(e.when) + '</td>' +
+    '</tr>').join('');
+
+  return setBlock('ทีมสนับสนุนและความจุงาน',
+    'ความจุงานต่อคนใช้เป็นฐานของวิธีกระจายแบบ Load-based ในกฎการมอบหมาย — ปิดทีมแล้วกฎที่ชี้มาที่ทีมนี้จะตกไปที่ Service Desk',
+    '<div class="setcards">' + teamCards + '</div>')
+
+  + setBlock('ตารางเวรรับสาย on-call 24×7 (เหตุ P1)',
+    'P1 นับเวลาต่อเนื่องตลอด 24 ชั่วโมงทุกวัน จึงต้องมีผู้รับสายหลักและสำรองทุกสัปดาห์ตาม AIDC-IT-SLA-001 ข้อ 3.1',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
+      '<th class="min-w-[144px]">สัปดาห์</th><th class="min-w-[142px]">ผู้รับสายหลัก</th><th class="min-w-[142px]">ผู้รับสายสำรอง</th>' +
+      '<th class="min-w-[146px]">เบอร์ติดต่อ</th><th>สถานะ</th><th>ลบ</th>' +
+    '</tr></thead><tbody>' + ocRows + '</tbody></table></div>' + tblHint() +
+    '<div class="mt-4">' + addBtn('team', 'oncall', 'เพิ่มสัปดาห์เวร', ro) + '</div>')
+
+  + setBlock('ผู้รับการยกระดับ (Escalation Contact)',
+    'ผู้รับแจ้งเมื่อเกิดเงื่อนไขยกระดับสู่ผู้บริหาร — DPO ต้องได้รับแจ้งทุกครั้งที่เป็นเหตุข้อมูลส่วนบุคคลรั่วไหล',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight"><thead><tr>' +
+      '<th>บทบาท</th><th class="min-w-[210px]">ผู้รับผิดชอบ</th><th class="min-w-[230px]">อีเมล</th><th class="min-w-[300px]">เงื่อนไขที่ทำให้ได้รับแจ้ง</th>' +
+    '</tr></thead><tbody>' + escRows + '</tbody></table></div>' + tblHint());
+}
+
+/* ─────────── 8. การแจ้งเตือน ─────────── */
+function secNoti(perm) {
+  const d = viewOf('noti');
+  const ro = perm !== 'edit';
+
+  const chBlocks = d.ch.map((c, i) =>
+    '<div class="rule-in pt-4 mt-4 first:border-t-0 first:pt-0 first:mt-0">' +
+      fSw('noti', 'ch.' + i + '.on', c.name, '', c.on, ro) +
+      '<div class="mt-2">' + fIn('noti', 'ch.' + i + '.cfg', 'การตั้งค่าปลายทาง', c.cfg, { ro:ro || !c.on, span:true }) + '</div>' +
+      '<div class="mt-2"><button data-act="settest" data-ch="' + esc(c.name) + '" class="btn btn-secondary btn-sm"' +
+        (c.on && !ro ? '' : ' disabled') + (ro ? ' title="' + esc(NO_EDIT_WHY) + '"' : '') + '>' +
+        ic('spark', 'w-4 h-4') + 'ทดสอบส่ง</button></div>' +
+    '</div>').join('');
+
+  const cols = [['email', 'อีเมล'], ['teams', 'Teams'], ['line', 'LINE OA'], ['inapp', 'ในระบบ']];
+  const nrRows = d.rules.map((r, i) =>
+    '<tr>' +
+      '<td>' + fIn('noti', 'rules.' + i + '.ev', 'ชื่อเหตุการณ์', r.ev, { ro:ro, bare:'min-w-[198px]' }) + '</td>' +
+      '<td>' + fIn('noti', 'rules.' + i + '.to', 'ผู้รับการแจ้งเตือน', r.to, { ro:ro, bare:'min-w-[224px]' }) + '</td>' +
+      cols.map(c =>
+        '<td class="text-center"><label class="check justify-center w-full">' +
+          '<input type="checkbox" data-act="setsw" data-sec="noti" data-path="rules.' + i + '.' + c[0] + '"' +
+            (r[c[0]] ? ' checked' : '') + (ro ? ' disabled' : '') +
+            ' aria-label="' + esc(r.ev + ' — ' + c[1]) + '"><i aria-hidden="true"></i></label></td>').join('') +
+      '<td>' + delBtn('noti', '', i, r.ev, ro) + '</td>' +
+    '</tr>').join('');
+
+  return '<div class="setsec">' +
+    '<div class="setwarn">' + ic('alert', 'w-[18px] h-[18px] flex-none mt-0.5') +
+      '<div class="min-w-0"><p class="text-[13.5px] font-semibold">LINE Notify ปิดให้บริการแล้ว (สิ้นสุด 31 มีนาคม 2025)</p>' +
+        '<p class="text-[12.5px] leading-relaxed mt-1">token เดิมใช้ไม่ได้และออกใหม่ไม่ได้ ระบบจึงต้องใช้ทางเลือกแทน — ' +
+        'ทางเลือกที่รองรับแล้วคือ (1) อีเมลกับการแจ้งเตือนในระบบ เป็นช่องทางพื้นฐานที่เปิดไว้เสมอ ' +
+        '(2) Microsoft Teams webhook สำหรับการยกระดับเข้าห้องทีม และ (3) LINE Official Account ผ่าน Messaging API ' +
+        'ซึ่งต้องมีบัญชี OA ค่าบริการรายเดือน และผู้ใช้ต้องเพิ่มเพื่อนก่อน — รอการตัดสินใจของ PM ก่อนเปิดใช้จริง</p></div>' +
+    '</div></div>'
+
+  + setBlock('ช่องทางการแจ้งเตือน', 'เปิด/ปิดและตั้งค่าปลายทางของแต่ละช่องทาง · ปุ่มทดสอบส่งจะส่งข้อความจริงถึงบัญชีของผู้ที่กด', chBlocks)
+
+  + setBlock('กฎการแจ้งเตือน',
+    'กำหนดว่าเหตุการณ์ใดส่งถึงใครทางช่องทางไหน — ช่องทางที่ปิดอยู่ในตารางด้านบนจะถูกข้ามแม้ติ๊กไว้ในกฎ',
+    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
+      '<th class="min-w-[198px]">เหตุการณ์</th><th class="min-w-[224px]">ผู้รับ</th>' +
+      cols.map(c => '<th class="text-center">' + c[1] + '</th>').join('') + '<th>ลบ</th>' +
+    '</tr></thead><tbody>' + nrRows + '</tbody></table></div>' + tblHint() +
+    '<div class="mt-4">' + addBtn('noti', '', 'เพิ่มกฎการแจ้งเตือน', ro) + '</div>')
+
+  + setBlock('เทมเพลตข้อความ',
+    'ตัวแปรในวงเล็บปีกกาจะถูกแทนค่าตอนส่งจริง เช่น {{ticket_id}} {{priority}} {{sla_remaining}}',
+    '<div class="setgrid">' +
+      fIn('noti', 'tmpl.subj', 'หัวเรื่องอีเมล', d.tmpl.subj, { ro:ro, span:true }) +
+      fTa('noti', 'tmpl.body', 'เนื้อความ', d.tmpl.body, { ro:ro, tall:true }) +
+    '</div>' +
+    '<div class="mt-3"><button data-act="settest" data-ch="อีเมลด้วยเทมเพลตนี้" class="btn btn-secondary btn-sm"' +
+      (ro ? ' disabled title="' + esc(NO_EDIT_WHY) + '"' : '') + '>' +
+      ic('spark', 'w-4 h-4') + 'ส่งตัวอย่างถึงตัวเอง</button></div>');
+}
+
+/* ─────────── 9. ช่องทางรับแจ้ง ─────────── */
+function secChan(perm) {
+  const d = viewOf('chan');
+  const ro = perm !== 'edit';
+  return setBlock('ช่องทางรับแจ้งที่นโยบายรองรับ',
+    'AIDC-IT-SLA-001 ข้อ 3.2 และ SOP-01 ข้อ 1 กำหนดให้ทุกเรื่องที่รับแจ้งต้องลงทะเบียนเป็น Ticket ทุกครั้ง ไม่ว่าจะมาทางใด — ' +
+    'ปิดช่องทางใดแล้วช่องทางนั้นจะไม่สร้าง Ticket ใหม่อีก',
+    d.list.map((c, i) =>
+      '<div class="rule-in pt-4 mt-4 first:border-t-0 first:pt-0 first:mt-0">' +
+        fSw('chan', 'list.' + i + '.on', c.name, c.note, c.on, ro) +
+        '<div class="setgrid setgrid-2 mt-3">' +
+          fIn('chan', 'list.' + i + '.addr', 'ที่อยู่ / ปลายทาง', c.addr, { ro:ro || !c.on }) +
+          fIn('chan', 'list.' + i + '.map', 'การแมปเข้าระบบ', c.map, { ro:ro || !c.on }) +
+        '</div>' +
+      '</div>').join('') +
+    '<p class="mt-5 pt-4 rule-in text-[11.5px] text-faint leading-relaxed">' +
+      'เป้าหมาย "รับสายภายใน 3 นาที" เป็นตัวชี้วัดของระบบโทรศัพท์ ไม่ใช่ของ Ticket — ' +
+      'เจ้าหน้าที่กรอกเวลารับสายตอนสร้าง Ticket จากช่องทาง Hotline เพื่อให้รายงานได้แบบประมาณการ</p>');
+}
+
+/* ─────────── 10. ความปลอดภัย ─────────── */
+function secSecu(perm) {
+  const d = viewOf('sec');
+  const ro = perm !== 'edit';
+  return setBlock('นโยบายรหัสผ่าน',
+    'ใช้กับบัญชีในระบบและซิงค์กับนโยบายของ Active Directory — ผู้ใช้รีเซ็ตเองได้ที่ sspr.aidc-group.local',
+    '<div class="setgrid setgrid-2">' +
+      fIn('sec', 'minLen', 'ความยาวขั้นต่ำ (ตัวอักษร)', d.minLen, { num:true, ro:ro, hint:'เอกสารกำหนดขั้นต่ำ 12 ตัวอักษร' }) +
+      fIn('sec', 'hist', 'ห้ามซ้ำรหัสเดิมย้อนหลัง (ครั้ง)', d.hist, { num:true, ro:ro, hint:'ค่ามาตรฐาน 5 รหัสล่าสุด' }) +
+      fIn('sec', 'ageDays', 'อายุรหัสผ่าน (วัน)', d.ageDays, { num:true, ro:ro, hint:'0 = ไม่บังคับเปลี่ยนตามรอบเวลา' }) +
+      roBox('ผลลัพธ์ที่ผู้ใช้จะเห็น', 'อย่างน้อย ' + d.minLen + ' ตัว · ไม่ซ้ำ ' + d.hist + ' รหัสล่าสุด', 'ข้อความนี้แสดงในหน้าตั้งรหัสผ่านใหม่') +
+    '</div>' +
+    '<div class="mt-4 pt-1">' +
+      fSw('sec', 'complex', 'บังคับความซับซ้อน', 'ต้องมีตัวพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข และอักขระพิเศษอย่างน้อยอย่างละหนึ่ง', d.complex, ro) +
+      fSw('sec', 'mfa', 'บังคับยืนยันตัวตนสองขั้น (MFA)', d.mfaScope + ' — ยืนยันผ่านแอปยืนยันตัวตนภายใน 60 วินาที', d.mfa, ro) +
+      fSw('sec', 'ipOn', 'จำกัดการเข้าถึงตามช่วง IP (IP allowlist)', 'เปิดแล้วจะเข้าระบบได้เฉพาะจากช่วง IP ที่ระบุไว้ด้านล่าง — ใช้กับบัญชีผู้ดูแลเป็นหลัก', d.ipOn, ro) +
+    '</div>' +
+    '<div class="setgrid mt-4">' +
+      fIn('sec', 'ips', 'ช่วง IP ที่อนุญาต (CIDR คั่นด้วยจุลภาค)', d.ips, { ro:ro || !d.ipOn, span:true,
+        hint:d.ipOn ? 'มีผลกับทุกการเข้าสู่ระบบรวมถึง SSO' : 'เปิดสวิตช์ IP allowlist ก่อนจึงจะแก้ช่องนี้ได้' }) +
+    '</div>')
+
+  + setBlock('การล็อกบัญชีและอายุเซสชัน',
+    'ตัวเลขชุดนี้ต้องตรงกับที่แจ้งผู้ใช้ในหน้าเข้าสู่ระบบ เพื่อไม่ให้ผู้ใช้เจอพฤติกรรมที่ไม่ตรงกับที่ประกาศไว้',
+    '<div class="setgrid setgrid-2">' +
+      fIn('sec', 'lockTries', 'ล็อกเมื่อกรอกผิดครบ (ครั้ง)', d.lockTries, { num:true, ro:ro }) +
+      fIn('sec', 'lockMin', 'ระยะเวลาล็อก (นาที)', d.lockMin, { num:true, ro:ro }) +
+      fIn('sec', 'sessionMin', 'อายุเซสชันสูงสุด (นาที)', d.sessionMin, { num:true, ro:ro, hint:'ปัจจุบัน = ' + (d.sessionMin / 60).toFixed(0) + ' ชั่วโมง' }) +
+      fIn('sec', 'idleMin', 'ตัดเซสชันเมื่อไม่มีการใช้งาน (นาที)', d.idleMin, { num:true, ro:ro }) +
+    '</div>')
+
+  + setBlock('Audit Log และการคุ้มครองข้อมูลส่วนบุคคล (PDPA)',
+    'นโยบายความปลอดภัยข้อ 3.8 กำหนดให้บันทึกทุกครั้งที่มีการอ่านข้อมูลส่วนบุคคลของผู้อื่น และลบข้อมูลเมื่อพ้นระยะเวลาเก็บรักษา',
+    '<div class="setgrid setgrid-2">' +
+      fIn('sec', 'auditKeep', 'ระยะเก็บ Audit Log (เดือน)', d.auditKeep, { num:true, ro:ro, hint:'ปัจจุบัน = ' + (d.auditKeep / 12).toFixed(1) + ' ปี' }) +
+      fIn('sec', 'pdpaKeep', 'ระยะเก็บข้อมูลส่วนบุคคลใน Ticket (เดือน)', d.pdpaKeep, { num:true, ro:ro }) +
+      fIn('sec', 'offboardDays', 'ลบบัญชีถาวรหลังพ้นสภาพ (วัน)', d.offboardDays, { num:true, ro:ro, hint:'SOP-05 กำหนด 30 วันหลังโอนย้ายข้อมูลให้หัวหน้า' }) +
+      fIn('sec', 'breachHrs', 'กำหนดแจ้งหน่วยงานกำกับเมื่อข้อมูลรั่วไหล (ชั่วโมง)', d.breachHrs, { num:true, ro:ro }) +
+      fIn('sec', 'dpoMail', 'อีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO)', d.dpoMail, { ro:ro, span:true }) +
+    '</div>');
+}
+
+/* ─────────── 11. การเชื่อมต่อและ Audit Log ─────────── */
+function secIntg(perm) {
+  const d = viewOf('intg');
+  const ro = perm !== 'edit';
+  const stText = { ok:'เชื่อมต่อปกติ', warn:'ตอบช้ากว่าเกณฑ์', off:'ไม่ได้เชื่อมต่อ' };
+
+  const conn = d.list.map((c, i) =>
+    '<div class="rule-in pt-4 mt-4 first:border-t-0 first:pt-0 first:mt-0">' +
+      '<div class="flex items-start justify-between gap-3 flex-wrap">' +
+        '<div class="min-w-0">' +
+          '<div class="flex items-center gap-2">' +
+            '<span class="cdot cdot--' + c.st + '" aria-hidden="true"></span>' +
+            '<span class="text-[13.5px] font-semibold">' + esc(c.name) + '</span>' +
+            '<span class="tag ' + (c.st === 'ok' ? 'tag-quiet' : 'tag-soft') + '">' + esc(stText[c.st]) + '</span>' +
+          '</div>' +
+          '<p class="text-[12.5px] text-faint leading-relaxed mt-1">' + esc(c.note) + ' · ตรวจล่าสุด ' + esc(c.last) + '</p>' +
+        '</div>' +
+        '<button data-act="setping" data-k="' + c.k + '" class="btn btn-secondary btn-sm flex-none">' +
+          ic('refresh', 'w-4 h-4') + 'ทดสอบการเชื่อมต่อ</button>' +
+      '</div>' +
+      '<div class="mt-3">' + fIn('intg', 'list.' + i + '.host', 'ที่อยู่ปลายทาง', c.host, { ro:ro, span:true }) + '</div>' +
+    '</div>').join('');
+
+  const q = S.set.aq.trim().toLowerCase();
+  const logs = AUDIT.filter(a =>
+    (S.set.aact === 'ทุกการกระทำ' || a.a === S.set.aact) &&
+    (!q || (a.ts + a.u + a.a + a.tgt + a.ip).toLowerCase().includes(q)));
+
+  const logRows = logs.map(a =>
+    '<tr>' +
+      '<td class="num text-[12.5px] whitespace-nowrap">' + esc(a.ts) + '</td>' +
+      '<td class="text-[12.5px] font-medium whitespace-nowrap">' + esc(a.u) + '</td>' +
+      '<td class="text-[12.5px] num whitespace-nowrap">' + esc(a.a) + '</td>' +
+      '<td class="text-[12.5px] text-muted min-w-[280px]">' + esc(a.tgt) + '</td>' +
+      '<td class="num text-[12.5px] text-faint whitespace-nowrap">' + esc(a.ip) + '</td>' +
+    '</tr>').join('');
+
+  return setBlock('สถานะการเชื่อมต่อระบบภายนอก',
+    'ระบบตรวจการเชื่อมต่อทุก 5 นาที และสร้าง Ticket ระดับ P1 อัตโนมัติเมื่อ AD หรือ SMTP ล่ม', conn)
+
+  + setBlock('Audit Log',
+    'บันทึกทุกการกระทำที่เปลี่ยนแปลงข้อมูลหรืออ่านข้อมูลส่วนบุคคลของผู้อื่น — เก็บ ' + SECU.auditKeep + ' เดือนตามนโยบาย PDPA ข้อ 3.8' +
+    '',
+    '<div class="flex flex-wrap items-end gap-3">' +
+      '<div class="relative flex-1 min-w-[220px] max-w-[420px]">' +
+        '<span class="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none">' + ic('search', 'w-4 h-4') + '</span>' +
+        '<input data-act="setq" data-k="aq" data-fkey="setaq" value="' + esc(S.set.aq) + '" class="input input-search" ' +
+          'placeholder="ค้นหาผู้ใช้ เป้าหมาย หรือ IP" aria-label="ค้นหา Audit Log">' +
+      '</div>' +
+      '<div class="field w-[230px]"><span class="lbl">การกระทำ</span>' +
+        '<select data-act="setq" data-k="aact" data-fkey="setaact" class="input">' +
+          AUDIT_ACTS.map(a => '<option value="' + esc(a) + '"' + (S.set.aact === a ? ' selected' : '') + '>' + esc(a) + '</option>').join('') +
+        '</select></div>' +
+      '<button data-act="setexport" class="btn btn-secondary">' + ic('save', 'w-4 h-4') + 'ส่งออก CSV</button>' +
+    '</div>' +
+    '<div class="tbl-wrap mt-4"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
+      '<th>เวลา</th><th>ผู้ใช้</th><th>การกระทำ</th><th class="min-w-[280px]">เป้าหมาย</th><th>IP</th>' +
+    '</tr></thead><tbody>' + (logRows || '<tr><td colspan="5" class="text-center text-faint py-6">ไม่พบรายการที่ตรงกับเงื่อนไข</td></tr>') + '</tbody></table></div>' + tblHint(true) +
+    '<p class="mt-3 text-[11.5px] text-faint">แสดง ' + logs.length + ' จาก ' + AUDIT.length + ' รายการล่าสุด</p>');
+}
+
+/* ─────────── 12. ระบบและการสำรองข้อมูล ─────────── */
+function secSys(perm) {
+  const d = viewOf('sys');
+  const ro = perm !== 'edit';
+  return setBlock('ข้อมูลระบบ', 'เวอร์ชันที่ติดตั้งอยู่บนเครื่องแม่ข่ายของกลุ่มบริษัท',
+    '<div class="setgrid setgrid-2">' +
+      roBox('เวอร์ชันระบบ', 'v' + d.ver, 'build ' + d.build) +
+      roBox('ฐานข้อมูล', d.db, 'เครื่อง ' + d.node) +
+      roBox('พื้นที่จัดเก็บที่ใช้ไป', d.diskPct + '%', d.diskText) +
+      roBox('ผู้ใช้ทั้งหมดในระบบ', CO.reduce((s, c) => s + c.users, 0).toLocaleString() + ' บัญชี', activeCO().length + ' บริษัทที่เปิดใช้งาน') +
+    '</div>')
+
+  + setBlock('รอบการสำรองข้อมูล',
+    'สำรองฐานข้อมูลและไฟล์แนบทุกคืน และทดสอบกู้คืนอัตโนมัติทุกสัปดาห์ — การมีปลายทางนอกเครื่องเป็นเงื่อนไขบังคับก่อนขึ้นระบบจริง',
+    '<div class="setgrid setgrid-2">' +
+      fIn('sys', 'backupTime', 'เวลาที่เริ่มสำรองข้อมูล', d.backupTime, { ro:ro }) +
+      fIn('sys', 'backupDest', 'ปลายทางนอกเครื่อง', d.backupDest, { ro:ro }) +
+      fIn('sys', 'keepDaily', 'เก็บชุดรายวัน (วัน)', d.keepDaily, { num:true, ro:ro }) +
+      fIn('sys', 'keepMonthly', 'เก็บชุดรายเดือน (เดือน)', d.keepMonthly, { num:true, ro:ro }) +
+      roBox('สำรองข้อมูลล่าสุด', d.lastBackup, '') +
+      roBox('ผลทดสอบกู้คืนล่าสุด', d.lastRestore, 'ทดสอบอัตโนมัติทุกวันอาทิตย์ 03:30 น.') +
+    '</div>')
+
+  + setBlock('ไฟล์แนบ',
+    'ค่าที่ตั้งต้องสอดคล้องกับขนาดที่เว็บเซิร์ฟเวอร์ยอมรับ — เอกสารกำหนดไว้ 5 ไฟล์ × 20 MB ต่อหนึ่ง Ticket',
+    '<div class="setgrid setgrid-2">' +
+      fIn('sys', 'maxFiles', 'จำนวนไฟล์สูงสุดต่อ Ticket', d.maxFiles, { num:true, ro:ro }) +
+      fIn('sys', 'maxMb', 'ขนาดสูงสุดต่อไฟล์ (MB)', d.maxMb, { num:true, ro:ro }) +
+      roBox('ขนาดอัปโหลดรวมสูงสุด', (d.maxFiles * d.maxMb) + ' MB', 'ต้องไม่เกินค่า client_max_body_size ของ nginx (110 MB)') +
+    '</div>')
+
+  + setBlock('โหมดปิดปรับปรุงระบบ',
+    'เปิดแล้วผู้ใช้ทุกคนยกเว้น Central IT จะเห็นเฉพาะข้อความประกาศ และช่องทางรับแจ้งทั้งหมดจะหยุดสร้าง Ticket ใหม่',
+    '<div class="swrow">' +
+      '<span class="min-w-0 flex-1">' +
+        '<span class="block text-[13.5px] font-semibold leading-snug">เปิดโหมดปิดปรับปรุง</span>' +
+        '<span class="block text-[12.5px] text-faint leading-relaxed mt-0.5">' +
+          (d.maint ? 'กำลังเปิดอยู่ในร่าง — กดบันทึกเพื่อให้มีผลจริง' : 'ปิดอยู่ — ระบบให้บริการตามปกติ') + '</span>' +
+      '</span>' +
+      '<button data-act="askmaint" class="sw" role="switch" aria-checked="' + (d.maint ? 'true' : 'false') + '" ' +
+        'aria-label="สลับโหมดปิดปรับปรุงระบบ"' + (ro ? ' disabled' : '') + '><i></i></button>' +
+    '</div>' +
+    '<div class="setgrid mt-4">' + fTa('sys', 'maintMsg', 'ข้อความประกาศที่ผู้ใช้จะเห็น', d.maintMsg, { ro:ro }) + '</div>')
+
+  + setBlock('เอกสารควบคุมที่ระบบยึดถือ',
+    'ค่าตั้งต้นทั้งหมดในหน้านี้มาจากเอกสารด้านล่าง — การแก้ค่าให้ต่างจากเอกสารต้องผ่านการทบทวนเอกสารก่อน',
+    '<ul class="flex flex-col gap-px bg-hair border border-hair">' +
+      CTRLDOCS.map(x =>
+        '<li class="bg-card p-3.5 flex items-start gap-3">' +
+          '<span class="flex-none text-faint mt-0.5">' + ic('book', 'w-4 h-4') + '</span>' +
+          '<span class="min-w-0 flex-1">' +
+            '<span class="block eyebrow">' + esc(x.id) + '</span>' +
+            '<span class="block text-[13.5px] font-medium leading-snug mt-1">' + esc(x.t) + '</span>' +
+            '<span class="block text-[11.5px] text-faint mt-0.5">' + esc(x.d) + '</span>' +
+          '</span>' +
+        '</li>').join('') +
+    '</ul>');
+}
+
+const SECBODY = { co:secCo, user:secUser, role:secRole, cat:secCat, sla:secSla, rt:secRt,
+                  team:secTeam, noti:secNoti, chan:secChan, sec:secSecu, intg:secIntg, sys:secSys };
+
+/* ─────────── กล่องยืนยันก่อนทำสิ่งที่ย้อนกลับไม่ได้ ─────────── */
+function confirmModal() {
+  const c = S.confirm || { title:'ยืนยันการทำรายการ', body:'', ok:'ยืนยัน' };
+  return '' +
+  '<div class="p-5 hair-b flex items-start gap-3">' +
+    '<span class="flex-none text-accent-text mt-0.5">' + ic('alert', 'w-[18px] h-[18px]') + '</span>' +
+    '<div class="flex-1 min-w-0"><div class="eyebrow eyebrow-accent">ต้องยืนยันก่อนดำเนินการ</div>' +
+      '<h2 class="display-md mt-1.5">' + esc(c.title) + '</h2></div>' +
+    '<button data-act="closemodal" class="btn btn-icon btn-secondary flex-none" aria-label="ปิด">' + ic('close', 'w-5 h-5') + '</button>' +
+  '</div>' +
+  '<div class="p-5">' +
+    '<p class="text-[13.5px] text-muted leading-relaxed">' + esc(c.body) + '</p>' +
+    '<p class="mt-4 panel-flat p-3 text-[11.5px] text-faint leading-relaxed">' +
+      'การกระทำนี้จะถูกบันทึกใน Audit Log พร้อมชื่อผู้ทำและเวลา และจะมีผลจริงเมื่อกด "บันทึกการเปลี่ยนแปลง" ของหมวดนี้</p>' +
+  '</div>' +
+  '<div class="p-5 hair-t flex justify-end gap-2 bg-surface">' +
+    '<button data-act="closemodal" class="btn btn-secondary">ยกเลิก</button>' +
+    '<button data-act="cfmgo" class="btn btn-primary">' + ic('check', 'w-4 h-4') + esc(c.ok) + '</button>' +
+  '</div>';
+}
+
+/* ─────────── หน้าตั้งค่าระบบ ─────────── */
+function settingsView() {
+  const cur = curSec();
+  const meta = SECS.find(s => s.k === cur);
+  const perm = secPerm(cur);
+  const dirty = isDirty(cur);
+  const r = S.fresh ? ' rise' : '';
+  const okConn = INTG.filter(x => x.st === 'ok').length;
+
+  // แถบสรุปสถานะระบบ
+  const stats = [
+    ['เวอร์ชันระบบ', 'v' + SYS.ver, 'build ' + SYS.build],
+    ['การเชื่อมต่อ', okConn + ' / ' + INTG.length + ' ปกติ', 'AD · SMTP · ERP · Monitoring'],
+    ['สำรองข้อมูลล่าสุด', SYS.lastBackup.split(' · ')[0], 'ปลายทาง ' + SYS.backupDest.split(':')[0]],
+    ['ผู้ใช้ทั้งหมด', CO.reduce((s, c) => s + c.users, 0).toLocaleString(), activeCO().length + ' บริษัทที่เปิดใช้งาน']
+  ];
+  const bar =
+  '<div class="setstat">' + stats.map(s =>
+    '<div><div class="eyebrow">' + esc(s[0]) + '</div>' +
+      '<div class="display-sm num mt-1.5 truncate">' + esc(s[1]) + '</div>' +
+      '<div class="text-[11.5px] text-faint truncate mt-0.5">' + esc(s[2]) + '</div></div>').join('') +
+  '</div>' +
+  (canEditData() ? '' :
+    '<div class="setwarn mt-4">' + ic('lock', 'w-[18px] h-[18px] flex-none mt-0.5') +
+      '<div><p class="text-[13.5px] font-semibold">' + esc(NO_EDIT_WHY) + '</p>' +
+      '<p class="text-[12.5px] leading-relaxed mt-1">' +
+        'Team Helpdesk เปิดดูการตั้งค่าได้ครบทั้ง 12 หมวดเพื่อใช้อ้างอิงระหว่างทำงาน — ' +
+        'ช่องกรอก สวิตช์ และปุ่มเพิ่ม/แก้/ลบ/บันทึกทั้งหมดถูกปิดไว้ · ' +
+        'งานประจำวันกับ Ticket (รับเรื่อง มอบหมาย เปลี่ยนสถานะ ตอบกลับ ส่งต่อ ปิดงาน) ยังทำได้เต็มที่ตามปกติ</p></div>' +
+    '</div>') +
+  (SYS.maint
+    ? '<div class="setwarn mt-4">' + ic('alert', 'w-[18px] h-[18px] flex-none mt-0.5') +
+      '<div><p class="text-[13.5px] font-semibold">ระบบอยู่ในโหมดปิดปรับปรุง</p>' +
+      '<p class="text-[12.5px] leading-relaxed mt-1">' + esc(SYS.maintMsg) + '</p></div></div>'
+    : '');
+
+  // แถบเมนูหมวด — บนมือถือทำหน้าที่เป็นรายการก่อนเข้าไปในหมวด
+  const subnav =
+  '<nav class="panel ' + (S.set.inSec ? 'hidden lg:block' : 'block') + ' lg:sticky lg:top-[92px]" aria-label="หมวดการตั้งค่า">' +
+    '<div class="px-5 pt-4 pb-2 flex items-baseline justify-between gap-2">' +
+      '<span class="eyebrow">หมวดการตั้งค่า</span>' +
+      '<span class="eyebrow num">' + SECS.length + '</span>' +
+    '</div>' +
+    SECS.map(s => {
+      const p = secPerm(s.k);
+      return '<button data-act="settab" data-k="' + s.k + '" class="navitem"' + (s.k === cur ? ' aria-current="page"' : '') + '>' +
+        ic(s.icon, 'w-[18px] h-[18px] flex-none') +
+        '<span class="flex-1 min-w-0 truncate">' + esc(s.label) + '</span>' +
+        (isDirty(s.k)
+          ? '<span class="flex-none w-[7px] h-[7px] bg-accent" role="img" aria-label="มีการแก้ไขที่ยังไม่บันทึก"></span>'
+          : (p !== 'edit' ? '<span class="flex-none text-faint" role="img" aria-label="ดูอย่างเดียว">' + ic('lock', 'w-[14px] h-[14px]') + '</span>' : '')) +
+      '</button>';
+    }).join('') +
+    '<p class="px-5 py-4 hair-t text-[11.5px] text-faint leading-relaxed">' +
+      (perm === 'edit'
+        ? 'คุณมีสิทธิ์ settings.manage เต็มรูปแบบ — แก้ไขและบันทึกได้ทุกหมวดของทั้ง 7 บริษัท'
+        : 'ไอคอนกุญแจ = ทุกหมวดเป็นแบบดูอย่างเดียวสำหรับ Team Helpdesk · งานกับ Ticket ยังทำได้ตามปกติ') + '</p>' +
+  '</nav>';
+
+  const panel =
+  '<section class="panel ' + (S.set.inSec ? 'block' : 'hidden lg:block') + '">' +
+    '<div class="panel-head flex flex-wrap items-start gap-3">' +
+      '<button data-act="setback" class="btn btn-secondary btn-icon lg:hidden flex-none" aria-label="กลับไปรายการหมวดการตั้งค่า">' +
+        ic('arrowL', 'w-5 h-5') + '</button>' +
+      '<div class="min-w-0 flex-1">' +
+        '<div class="eyebrow">' + esc(meta.kicker) + '</div>' +
+        '<h2 class="display-md mt-1.5">' + esc(meta.label) + '</h2>' +
+      '</div>' +
+      '<div class="flex items-center gap-2 flex-wrap w-full lg:w-auto">' +
+        (dirty ? '<span class="dirty flex-1 lg:flex-none">มีการแก้ไขที่ยังไม่บันทึก</span>' : '') +
+        (perm === 'edit' ? '' : '<span class="tag tag-quiet">' + ic('lock') + 'ดูอย่างเดียว</span>') +
+        '<button data-act="setcancel" class="btn btn-secondary btn-sm"' +
+          (perm === 'edit' ? (dirty ? '' : ' disabled') : ' disabled title="' + esc(NO_EDIT_WHY) + '"') + '>ยกเลิก</button>' +
+        '<button data-act="setsave" class="btn btn-primary btn-sm"' +
+          (perm === 'edit' ? (dirty ? '' : ' disabled') : ' disabled title="' + esc(NO_EDIT_WHY) + '"') + '>' +
+          ic('save', 'w-4 h-4') + 'บันทึกการเปลี่ยนแปลง</button>' +
+      '</div>' +
+    '</div>' +
+    SECBODY[cur](perm) +
+  '</section>';
+
+  return '<div class="flex flex-col gap-5' + r + '">' + bar +
+    '<div class="grid lg:grid-cols-[216px_minmax(0,1fr)] gap-4 items-start">' + subnav + panel + '</div>' +
+  '</div>';
+}
+
 /* ─────────────────────────── 13. หน้า: คลังความรู้ ─────────────────────────── */
 function kbView() {
   const r = S.fresh ? ' rise' : '';
@@ -1919,8 +3574,9 @@ function timelineOf(t) {
 function drawerHtml(t) {
   const s = slaOf(t), p = PRIO(t.prio);
   const a = ASSETS.find(x => x.code === t.asset);
-  const canClaim = t.assignee === '—';
-  const canResolve = t.status !== 'ปิดงานแล้ว' && S.role !== 'employee';
+  const work = canWorkTickets();                 // helpdesk + superadmin — งานประจำวันกับ Ticket
+  const canClaim = work && t.assignee === '—';
+  const open = t.status !== 'ปิดงานแล้ว';
 
   return '' +
   '<header class="flex-none p-5 hair-b flex items-start gap-3">' +
@@ -1990,15 +3646,34 @@ function drawerHtml(t) {
 
   // กล่องตอบกลับ + การกระทำ
   '<footer class="flex-none p-5 hair-t bg-surface">' +
-    '<label for="dreply" class="lbl">ตอบกลับผู้แจ้ง / บันทึกภายใน</label>' +
+    '<label for="dreply" class="lbl">' + (work ? 'ตอบกลับผู้แจ้ง / บันทึกภายใน' : 'ตอบกลับเจ้าหน้าที่') + '</label>' +
     '<textarea id="dreply" data-act="reply" data-fkey="dreply" class="input mt-1.5" style="min-height:80px" ' +
-      'placeholder="พิมพ์ข้อความถึงผู้แจ้ง — จะส่งไปที่ LINE OA และอีเมลองค์กรพร้อมกัน">' + esc(S.reply) + '</textarea>' +
+      'placeholder="' + (work ? 'พิมพ์ข้อความถึงผู้แจ้ง — จะส่งไปที่ LINE OA และอีเมลองค์กรพร้อมกัน'
+                              : 'พิมพ์ข้อความหรือข้อมูลเพิ่มเติมถึงเจ้าหน้าที่ผู้รับผิดชอบ') + '">' + esc(S.reply) + '</textarea>' +
+
+    // แถวควบคุมสถานะ — เฉพาะผู้ที่ทำงานกับ Ticket
+    (work && open ?
+    '<div class="mt-3 field">' +
+      '<label for="dst" class="lbl">เปลี่ยนสถานะ</label>' +
+      '<select id="dst" data-act="dstatus" data-fkey="dst" class="input mt-1">' +
+        STATUSES.map(st => '<option value="' + esc(st) + '"' + (st === t.status ? ' selected' : '') + '>' + esc(st) + '</option>').join('') +
+      '</select>' +
+    '</div>' : '') +
+
     '<div class="mt-3 flex flex-wrap gap-2">' +
       '<button data-act="send" class="btn btn-primary btn-sm"' + (S.reply.trim() ? '' : ' disabled') + '>' + ic('arrowR', 'w-4 h-4') + 'ส่งข้อความ</button>' +
+      '<button data-act="dattach" class="btn btn-secondary btn-sm">' + ic('clip', 'w-4 h-4') + 'แนบไฟล์เพิ่ม</button>' +
       (canClaim ? '<button data-act="claim" class="btn btn-secondary btn-sm">' + ic('user', 'w-4 h-4') + 'รับเรื่อง</button>' : '') +
-      '<button data-act="escopen" class="btn btn-secondary btn-sm">' + ic('route', 'w-4 h-4') + 'ส่งต่อข้ามบริษัท</button>' +
-      (canResolve ? '<button data-act="resolve" class="btn btn-secondary btn-sm">' + ic('check', 'w-4 h-4') + 'ปิดงาน</button>' : '') +
+      (work ? '<button data-act="escopen" class="btn btn-secondary btn-sm">' + ic('route', 'w-4 h-4') + 'ส่งต่อข้ามบริษัท</button>' : '') +
+      (work && open ? '<button data-act="resolve" class="btn btn-secondary btn-sm">' + ic('check', 'w-4 h-4') + 'ปิดงาน</button>' : '') +
+      (!work && open ? '<button data-act="confirmclose" class="btn btn-secondary btn-sm">' + ic('check', 'w-4 h-4') + 'ยืนยันปิดงาน</button>' : '') +
+      (!work && !open && !t.csat ? '<button data-act="raterow" data-id="' + t.id + '" class="btn btn-secondary btn-sm">' + ic('star', 'w-4 h-4') + 'ให้คะแนนความพึงพอใจ</button>' : '') +
     '</div>' +
+    '<p class="text-[11.5px] text-faint leading-relaxed mt-3">' +
+      (work
+        ? 'สิทธิ์ ' + esc(me().roleLabel) + ' — จัดการ Ticket ได้เต็มที่ (รับเรื่อง มอบหมาย เปลี่ยนสถานะ ตอบกลับ ส่งต่อ ปิดงาน)' +
+          (canEditData() ? '' : ' · การแก้ไขข้อมูลตั้งค่าระบบเป็นคนละสิทธิ์และต้องใช้ Super Admin')
+        : 'สิ่งที่คุณทำได้ในเรื่องนี้: อ่าน ตอบกลับ แนบไฟล์เพิ่ม ยืนยันปิดงาน และให้คะแนนความพึงพอใจ') + '</p>' +
   '</footer>';
 }
 
@@ -2042,7 +3717,7 @@ function openModal(html) {
   if (first) first.focus();
 }
 function closeModal() {
-  S.escOpen = false; S.csatOpen = false; S.csatPick = 0;
+  S.escOpen = false; S.csatOpen = false; S.csatPick = 0; S.csatFor = null;
   const w = $('#modalWrap');
   w.classList.remove('on');
   w.setAttribute('aria-hidden', 'true');
@@ -2061,7 +3736,7 @@ function escModal() {
       (t ? esc(t.id + ' · ' + t.title) + ' — ประวัติและไฟล์แนบทั้งหมดจะถูกส่งไปพร้อมกัน' : 'ประวัติและไฟล์แนบทั้งหมดจะถูกส่งไปพร้อมกัน') + '</p>' +
     '<div class="field"><label for="escto">ส่งต่อไปยังบริษัท</label>' +
       '<select id="escto" data-act="escto" data-fkey="escto" class="input">' +
-        CO.map(c => '<option value="' + c.code + '"' + (c.code === S.escTo ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') +
+        activeCO().map(c => '<option value="' + c.code + '"' + (c.code === S.escTo ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') +
       '</select></div>' +
     '<div class="field"><label for="escwhy">เหตุผลในการส่งต่อ (บันทึกใน Audit Log)</label>' +
       '<textarea id="escwhy" data-act="escwhy" data-fkey="escwhy" class="input" style="min-height:84px" ' +
@@ -2205,13 +3880,13 @@ const ACTIONS = {
   // — เข้าสู่ระบบ —
   login(el) {
     const a = ACCOUNTS[+el.dataset.i];
-    Object.assign(S, { authed:true, role:a.role, view:'my', openId:null, statusF:'all', cf:'ALL', fresh:true });
+    Object.assign(S, { authed:true, role:a.role, view:a.role === 'employee' ? 'track' : 'my', openId:null, statusF:'all', cf:'ALL', fresh:true });
     paint();
     say('เข้าสู่ระบบสำเร็จผ่าน Active Directory SSO — สิทธิ์ ' + a.roleLabel + ' จาก group ' + a.group);
   },
   sso() {
     const a = ACCOUNTS[0];
-    Object.assign(S, { authed:true, role:a.role, view:'my', fresh:true });
+    Object.assign(S, { authed:true, role:a.role, view:a.role === 'employee' ? 'track' : 'my', fresh:true });
     paint();
     say('เข้าสู่ระบบสำเร็จ — ' + a.name + ' · สิทธิ์ ' + a.roleLabel);
   },
@@ -2249,7 +3924,7 @@ const ACTIONS = {
     }
     const a = loginAccountFor(L.user) || ACCOUNTS[0];
     const matched = !!loginAccountFor(L.user);
-    Object.assign(S, { authed:true, role:a.role, view:'my', openId:null, statusF:'all', cf:'ALL', fresh:true });
+    Object.assign(S, { authed:true, role:a.role, view:a.role === 'employee' ? 'track' : 'my', openId:null, statusF:'all', cf:'ALL', fresh:true });
     S.login = { user:'', pass:'', show:false, remember:L.remember, eu:'', ep:'', tries:0, lockUntil:0, disc:false };
     paint();
     say('เข้าสู่ระบบสำเร็จ — ' + a.name + ' · สิทธิ์ ' + a.roleLabel +
@@ -2264,6 +3939,7 @@ const ACTIONS = {
   signout() {
     closeDrawer(); closeModal(); closeMenu();
     Object.assign(S, { authed:false, view:'my', q:'', cf:'ALL', statusF:'all', kbId:null, fresh:true });
+    S.role = 'employee';
     paint();
     say('ออกจากระบบแล้ว — เซสชัน SSO ถูกยกเลิกบนอุปกรณ์นี้');
   },
@@ -2299,6 +3975,7 @@ const ACTIONS = {
     say('ส่งข้อความถึงผู้แจ้งแล้ว — แจ้งเตือนไปที่ LINE OA และอีเมลองค์กรพร้อมกัน');
   },
   claim() {
+    if (!canWorkTickets()) return;
     const t = allTickets().find(x => x.id === S.openId);
     if (!t) return;
     t.assignee = me().name.split(' ')[0] + ' ' + (me().name.split(' ')[1] || '').charAt(0) + '.';
@@ -2308,11 +3985,56 @@ const ACTIONS = {
     say('รับเรื่อง ' + t.id + ' แล้ว — สถานะเปลี่ยนเป็นกำลังดำเนินการ นาฬิกาตอบสนองแรกหยุดนับ');
   },
   resolve() {
+    if (!canWorkTickets()) return;
     const t = allTickets().find(x => x.id === S.openId);
-    if (t) { t.status = 'ปิดงานแล้ว'; t.slaMins = 0; }
+    if (t) { t.status = 'ปิดงานแล้ว'; t.slaMins = 0; t.closedAt = 'วันนี้ ' + nowHHMM(); S.csatFor = t.id; }
     closeDrawer();
     S.csatOpen = true; S.csatPick = 0;
     openModal(csatModal());
+  },
+  // เปลี่ยนสถานะจากแผงรายละเอียด — งานประจำวันของ Helpdesk
+  dstatus(el) {
+    if (!canWorkTickets()) return;
+    const t = allTickets().find(x => x.id === S.openId);
+    if (!t) return;
+    t.status = el.value;
+    if (t.status === 'ปิดงานแล้ว') { t.slaMins = 0; t.closedAt = 'วันนี้ ' + nowHHMM(); }
+    $('#drawer').innerHTML = drawerHtml(t);
+    paint();
+    say('เปลี่ยนสถานะ ' + t.id + ' เป็น "' + t.status + '" แล้ว — บันทึกใน Audit Trail พร้อมผู้แก้ไขและเวลา');
+  },
+  // แนบไฟล์เพิ่มในเรื่องที่เปิดอยู่ — ทำได้ทุกบทบาท
+  dattach() {
+    say('แนบไฟล์เพิ่มใน ' + (S.openId || 'Ticket') + ' แล้ว — สูงสุด ' + SYS.maxFiles + ' ไฟล์ × ' + SYS.maxMb + ' MB ต่อหนึ่ง Ticket');
+  },
+  // ผู้ใช้ทั่วไปยืนยันปิดงานเอง แล้วเข้าสู่แบบประเมิน CSAT ทันที
+  confirmclose() {
+    const t = allTickets().find(x => x.id === S.openId);
+    if (!t) return;
+    t.status = 'ปิดงานแล้ว'; t.slaMins = 0; t.closedAt = 'วันนี้ ' + nowHHMM();
+    S.csatFor = t.id;
+    closeDrawer();
+    S.csatOpen = true; S.csatPick = 0;
+    openModal(csatModal());
+    say('ยืนยันปิดงาน ' + t.id + ' แล้ว — ขอบคุณที่ยืนยันกลับมา');
+  },
+  // ให้คะแนนย้อนหลังจากหน้าประวัติการแจ้ง
+  raterow(el) {
+    S.csatFor = el.dataset.id;
+    S.csatOpen = true; S.csatPick = 0;
+    closeDrawer();
+    openModal(csatModal());
+  },
+  // เปิดเรื่องซ้ำจากประวัติ
+  reopen(el) {
+    const t = allTickets().find(x => x.id === el.dataset.id);
+    if (!t) return;
+    const p = PRIO(t.prio);
+    t.status = 'รอรับเรื่อง'; t.assignee = '—';
+    t.slaMins = p.resMin; t.totalMins = p.resMin; t.closedAt = ''; 
+    S.fresh = true;
+    goView('track');
+    say('เปิด ' + t.id + ' ขึ้นมาใหม่แล้ว — ประวัติเดิมถูกคงไว้ทั้งหมด และนาฬิกา SLA เริ่มนับใหม่ตามระดับ ' + t.prio);
   },
   viewasset(el) {
     const i = ASSETS.findIndex(a => a.code === el.dataset.code);
@@ -2336,8 +4058,12 @@ const ACTIONS = {
   csatpick(el) { S.csatPick = +el.dataset.n; $('#modal').innerHTML = csatModal(); },
   csatsend() {
     const n = S.csatPick;
+    const t = allTickets().find(x => x.id === S.csatFor);
+    if (t) t.csat = n;
+    S.csatFor = null;
     closeModal();
-    say('ขอบคุณสำหรับคะแนน ' + n + '/5 — บันทึกเข้า KPI ของบริษัทและเจ้าหน้าที่แล้ว');
+    paint();
+    say('ขอบคุณสำหรับคะแนน ' + n + '/5 — บันทึกไว้กับ ' + (t ? t.id : 'Ticket') + ' และรวมเข้า KPI ของบริษัทและเจ้าหน้าที่แล้ว');
   },
   closemodal() { closeModal(); },
 
@@ -2347,9 +4073,12 @@ const ACTIONS = {
     S.form[k] = el.value;
     if (k === 'company') {
       // เปลี่ยนบริษัท → รีเซ็ตหมวดหมู่เป็นหมวดแรกของบริษัทนั้น (dynamic form)
-      S.form.cat = (CATS[el.value] || CATS.HQ)[0];
+      const first = catsOf(el.value)[0];
+      S.form.cat = first ? first.n : '';
       S.form.asset = ''; S.form.gps = '';
     }
+    // เปลี่ยนหมวดหมู่ → ใช้ความเร่งด่วนเริ่มต้นที่ตั้งไว้ในหน้าตั้งค่าระบบ
+    if (k === 'company' || k === 'cat') S.form.prio = catCfg(S.form.company, S.form.cat).prio || 'P3';
     if (k === 'title' || k === 'desc') S.deflected = false;
     paint();
   },
@@ -2398,11 +4127,149 @@ const ACTIONS = {
   // — ทรัพย์สิน / กฎ —
   asset(el) { S.assetIdx = +el.dataset.i; paint(); },
   rule(el) {
+    if (!canEditData()) { say(NO_EDIT_WHY); return; }
     const i = +el.dataset.i;
-    const off = !!S.disabledRules[i];
-    S.disabledRules[i] = !off;
+    const off = !RULES[i].on;
+    RULES[i].on = off;
     paint();
     say((off ? 'เปิดใช้' : 'ปิดใช้') + 'กฎข้อ ' + (i + 1) + ' แล้ว — บันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา');
+  },
+
+  /* ─────────── หน้าตั้งค่าระบบ ─────────── */
+  settab(el) {
+    S.set.tab = el.dataset.k;
+    S.set.inSec = true;
+    S.fresh = true;
+    paint();
+    window.scrollTo(0, 0);
+  },
+  setback() { S.set.inSec = false; S.fresh = true; paint(); window.scrollTo(0, 0); },
+  // แก้ค่าใน draft (ยังไม่มีผลกับระบบจนกว่าจะกดบันทึก)
+  setf(el) {
+    if (!canEditData()) return;
+    setPath(draftOf(el.dataset.sec), el.dataset.path, el.value);
+    paint();
+  },
+  setn(el) {
+    if (!canEditData()) return;
+    const v = el.value === '' ? '' : Math.max(0, +el.value || 0);
+    setPath(draftOf(el.dataset.sec), el.dataset.path, v);
+    paint();
+  },
+  setsw(el) {
+    if (!canEditData()) return;
+    const sec = el.dataset.sec, p = el.dataset.path, d = draftOf(sec);
+    setPath(d, p, !getPath(d, p));
+    paint();
+  },
+  // เมทริกซ์ RBAC แยกเป็น action ของตัวเอง เพราะรหัสสิทธิ์มีจุดอยู่ในชื่อ (ticket.view.own)
+  setperm(el) {
+    if (!canEditData()) return;
+    const d = draftOf('role'), r = el.dataset.r, k = el.dataset.p;
+    if (!d.rbac[r]) d.rbac[r] = {};
+    d.rbac[r][k] = !d.rbac[r][k];
+    paint();
+  },
+  setadd(el) { if (!canEditData()) return say(NO_EDIT_WHY); secAdd(el.dataset.sec, el.dataset.what); paint(); },
+  setdel(el) { if (!canEditData()) return say(NO_EDIT_WHY); secDel(el.dataset.sec, el.dataset.what, +el.dataset.i); paint(); },
+  setmove(el) {
+    if (!canEditData()) return say(NO_EDIT_WHY);
+    const d = draftOf(el.dataset.sec), arr = getPath(d, el.dataset.path);
+    const i = +el.dataset.i, j = i + (el.dataset.dir === 'up' ? -1 : 1);
+    if (!arr || j < 0 || j >= arr.length) return;
+    const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    paint();
+  },
+  setsave() { if (!canEditData()) return say(NO_EDIT_WHY); saveSec(curSec()); },
+  setcancel() {
+    if (!canEditData()) return;
+    const k = curSec();
+    if (!isDirty(k)) return;
+    delete DRAFTS[k];
+    paint();
+    say('ยกเลิกการแก้ไขหมวด "' + secLabel(k) + '" แล้ว — ค่ากลับไปเป็นค่าที่บันทึกไว้ล่าสุด');
+  },
+  // ตัวกรองย่อยภายในหมวด
+  setq(el) { S.set[el.dataset.k] = el.value; paint(); },
+  setpick(el) { S.set[el.dataset.k] = el.dataset.v; paint(); },
+  // ยืนยันก่อนทำสิ่งที่ย้อนกลับไม่ได้
+  askco(el) {
+    if (!canEditData()) return say(NO_EDIT_WHY);
+    const i = +el.dataset.i, c = draftOf('co')[i];
+    if (c.active) {
+      S.confirm = { key:'co-off', i:i,
+        title:'ปิดใช้งาน ' + c.name + '?',
+        body:'บริษัทนี้จะหายจากชิปตัวกรองในหน้าคิวงาน และจากตัวเลือกบริษัทในฟอร์มแจ้งเรื่องทันทีที่กดบันทึก ' +
+             'Ticket เดิมยังอยู่ครบและยังเปิดดูได้ แต่จะแจ้งเรื่องใหม่ในนามบริษัทนี้ไม่ได้อีก',
+        ok:'ปิดใช้งานบริษัท' };
+      openModal(confirmModal());
+    } else { draftOf('co')[i].active = true; paint(); }
+  },
+  askrole(el) {
+    if (!canEditData()) return say(NO_EDIT_WHY);
+    const i = +el.dataset.i, r = draftOf('role').roles[i];
+    S.confirm = { key:'role-del', i:i,
+      title:'ลบบทบาท "' + r.label + '"?',
+      body:'ผู้ใช้ ' + r.n.toLocaleString() + ' คนที่ถือบทบาทนี้จะถูกลดสิทธิ์ลงเหลือ "ผู้ใช้งานทั่วไป" ทันที ' +
+           'การลบบทบาทย้อนกลับไม่ได้ — ต้องสร้างใหม่และตั้งค่าสิทธิ์ใหม่ทั้งหมด',
+      ok:'ลบบทบาทนี้' };
+    openModal(confirmModal());
+  },
+  askmaint() {
+    if (!canEditData()) return say(NO_EDIT_WHY);
+    const d = draftOf('sys');
+    if (d.maint) { d.maint = false; paint(); return; }
+    S.confirm = { key:'maint',
+      title:'เปิดโหมดปิดปรับปรุงระบบ?',
+      body:'ผู้ใช้ทุกคนยกเว้น Central IT จะถูกตัดออกจากระบบและเห็นเฉพาะข้อความประกาศ ' +
+           'ช่องทางรับแจ้งทั้งหมดจะหยุดสร้าง Ticket ใหม่ นาฬิกา SLA ของ Ticket ที่ค้างอยู่จะหยุดนับตามข้อยกเว้น "ปิดปรับปรุงตามแผน" (SLA ข้อ 9)',
+      ok:'เปิดโหมดปิดปรับปรุง' };
+    openModal(confirmModal());
+  },
+  cfmgo() {
+    if (!canEditData()) return closeModal();
+    const c = S.confirm;
+    if (!c) return closeModal();
+    if (c.key === 'co-off') {
+      const co = draftOf('co')[c.i];
+      co.active = false;
+      closeModal();
+      paint();
+      say('ตั้งค่าให้ปิดใช้งาน ' + co.name + ' แล้ว — กด "บันทึกการเปลี่ยนแปลง" เพื่อให้มีผลกับทั้งระบบ');
+    } else if (c.key === 'role-del') {
+      const d = draftOf('role');
+      const r = d.roles[c.i];
+      d.roles.splice(c.i, 1);
+      delete d.rbac[r.k];
+      closeModal();
+      paint();
+      say('ลบบทบาท ' + r.label + ' ออกจากร่างแล้ว — กดบันทึกเพื่อยืนยัน');
+    } else if (c.key === 'maint') {
+      draftOf('sys').maint = true;
+      closeModal();
+      paint();
+      say('ตั้งค่าเปิดโหมดปิดปรับปรุงแล้ว — จะมีผลเมื่อกดบันทึกการเปลี่ยนแปลง');
+    } else closeModal();
+    S.confirm = null;
+  },
+  // ปุ่มสาธิตที่ทำงานได้จริงในระดับ prototype
+  settest(el) {
+    if (!canEditData()) return say(NO_EDIT_WHY);
+    const ch = el.dataset.ch || 'อีเมล';
+    say('ส่งข้อความทดสอบผ่าน ' + ch + ' ไปยัง ' + me().mail + ' แล้ว — ตรวจผลได้ที่ Audit Log หมวดการเชื่อมต่อ');
+  },
+  setping(el) {
+    const n = (INTG.find(x => x.k === el.dataset.k) || {}).name || 'ระบบปลายทาง';
+    say('ทดสอบการเชื่อมต่อ ' + n + ' สำเร็จ — ตอบกลับใน 0.4 วินาที และบันทึกผลลง Audit Log แล้ว');
+  },
+  setexport() { say('ส่งออก Audit Log ตามตัวกรองปัจจุบันเป็นไฟล์ CSV แล้ว — ไฟล์ถูกเข้ารหัสตามนโยบาย PDPA ข้อ 3.8'); },
+  setpw(el) { if (!canEditData()) return say(NO_EDIT_WHY); say('ส่งลิงก์รีเซ็ตรหัสผ่านให้ ' + el.dataset.n + ' ทางอีเมลองค์กรแล้ว — ลิงก์หมดอายุใน 30 นาที'); },
+  setunlock(el) {
+    if (!canEditData()) return say(NO_EDIT_WHY);
+    const u = draftOf('user').list.find(x => x.mail === el.dataset.m);
+    if (u) u.locked = false;
+    paint();
+    say('ปลดล็อกบัญชี ' + el.dataset.n + ' แล้ว — กดบันทึกเพื่อยืนยันการเปลี่ยนแปลง');
   }
 };
 
