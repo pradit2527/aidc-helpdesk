@@ -1,8 +1,8 @@
 # ต้องตัด node_modules ออกเสมอ
 #
-# ไม่ใช่แค่เรื่องขนาด — argon2 เป็น native module ที่คอมไพล์ผูกกับเครื่อง
-# ถ้าปล่อยให้ node_modules ของ Windows ถูกคัดลอกเข้า image ของ alpine
-# มันจะทับตัวที่คอมไพล์ถูกต้องแล้วพังตอนรัน ด้วย "invalid ELF header"
+# ไม่ใช่แค่เรื่องขนาด — argon2 เป็น native module ที่ผูกกับระบบปฏิบัติการ
+# ถ้าปล่อยให้ node_modules ของ Windows ถูกคัดลอกเข้า image ของ Linux
+# มันจะทับตัวที่ถูกต้องแล้วพังตอนรัน ด้วย "invalid ELF header"
 node_modules
 dist
 

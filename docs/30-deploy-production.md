@@ -63,6 +63,26 @@ postgresql://user:pass@ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=requir
 
 ---
 
+## หมายเหตุเรื่อง base image ของ Docker
+
+`backend/Dockerfile` ใช้ `node:22-slim` (Debian) ไม่ใช่ alpine โดยตั้งใจ
+
+`argon2` ที่ใช้แฮชรหัสผ่านมี prebuild สำหรับ linux แบบ **glibc** เท่านั้น
+ส่วน alpine ใช้ **musl** ซึ่งเป็น libc คนละตัว บน alpine ตัวโหลดโมดูลจะเลือก
+prebuild ที่สถาปัตยกรรมตรงมาใช้ แล้วล้มตอนรันด้วย
+
+```
+Error relocating .../argon2.node: __strdup: symbol not found
+```
+
+ที่ร้ายคือมันพังตอน **รัน** ไม่ใช่ตอน build — build ผ่านหมด แล้วค่อยพังบนเซิร์ฟเวอร์
+
+ถ้าจะเปลี่ยนไปใช้ alpine ต้องบังคับให้คอมไพล์ argon2 ใหม่จากซอร์ส
+(`npm ci --build-from-source` พร้อมติดตั้ง `python3 make g++`) ซึ่งช้ากว่า
+และไม่ได้ประโยชน์อะไรนอกจากประหยัดพื้นที่ราว 30 MB
+
+---
+
 ## ขั้นที่ 2 — API (Railway)
 
 1. สมัครที่ https://railway.app แล้ว **New Project → Deploy from GitHub repo**

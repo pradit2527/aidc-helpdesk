@@ -2,27 +2,29 @@
 #
 # AIDC Helpdesk API
 #
-# แยกเป็นสามชั้นเพื่อให้ image สุดท้ายไม่มีเครื่องมือ build ติดไปด้วย
-# ชั้น deps และ build มี TypeScript, NestJS CLI และ devDependencies ครบ
-# แต่ชั้นที่รันจริงมีแค่ dist กับ dependencies ที่ต้องใช้ตอนรัน
+# ⚠️ ใช้ node:22-slim (Debian) ไม่ใช่ alpine โดยตั้งใจ
 #
-# ที่ต้องระวังเป็นพิเศษคือ argon2 — เป็น native module ที่คอมไพล์ตอน
-# npm install ผลลัพธ์จึงผูกกับสถาปัตยกรรมและเวอร์ชัน Node ของเครื่องที่ build
-# ถ้าคัดลอก node_modules ข้ามชั้นที่ base ไม่ตรงกัน จะพังตอนรันด้วยข้อความ
-# "invalid ELF header" ซึ่งอ่านแล้วไม่รู้เลยว่าเกิดจากอะไร
-# ทุกชั้นจึงใช้ node:22-alpine เหมือนกันหมด
+#    argon2 เป็น native module ที่มาพร้อม prebuild สำเร็จรูป แต่ตัวที่ให้มา
+#    สำหรับ linux เป็นแบบ glibc เท่านั้น (linux-x64, linux-arm64)
+#    ส่วน alpine ใช้ musl ซึ่งเป็น libc คนละตัว
+#
+#    ผลคือบน alpine ตัวโหลดโมดูลจะเจอ prebuild ที่สถาปัตยกรรมตรง แล้วเลือกใช้
+#    แทนที่จะคอมไพล์ใหม่ จากนั้นล้มตอนรันด้วยข้อความประมาณ
+#      Error relocating .../argon2.node: __strdup: symbol not found
+#    ซึ่งเกิดตอน "รัน" ไม่ใช่ตอน "build" — build ผ่านหมดแล้วค่อยพังบนเซิร์ฟเวอร์
+#
+#    Debian ใช้ glibc prebuild จึงโหลดได้ตรง ๆ ไม่ต้องคอมไพล์
+#    build เร็วกว่าและไม่มีความเสี่ยงเรื่อง libc ไม่ตรงกัน
+#    image ใหญ่กว่า alpine ราว 30 MB ซึ่งแลกกันคุ้ม
 
-FROM node:22-alpine AS deps
+FROM node:22-slim AS deps
 WORKDIR /app
-
-# argon2 ต้องคอมไพล์จากซอร์ส alpine จึงต้องมีเครื่องมือ build ให้ครบก่อน
-RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json ./
 RUN npm ci
 
 
-FROM node:22-alpine AS build
+FROM node:22-slim AS build
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -34,7 +36,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 
-FROM node:22-alpine AS runtime
+FROM node:22-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -42,29 +44,33 @@ ENV NODE_ENV=production
 # ตัวกันแจ้งเตือนซ้ำ (created_at::date) จะเลื่อนไปจากที่ SLA engine คิดไว้
 ENV TZ=Asia/Vientiane
 
-# tini เก็บกวาด zombie process และส่งต่อสัญญาณ SIGTERM ให้แอปจริง
+# tini เก็บกวาด zombie process และส่งต่อ SIGTERM ให้แอปจริง
 # ถ้าไม่มี Node จะเป็น PID 1 ซึ่งไม่จัดการสัญญาณตามค่าเริ่มต้น
-# ผลคือตอน deploy ใหม่ คอนเทนเนอร์จะถูกฆ่าทิ้งแทนที่จะปิดตัวเองอย่างเรียบร้อย
+# ผลคือตอน deploy ใหม่ คอนเทนเนอร์ถูกฆ่าทิ้งแทนที่จะปิดตัวเองอย่างเรียบร้อย
 # แล้ว connection ที่ค้างกับงานที่กำลังทำอยู่จะหายไปกลางคัน
-RUN apk add --no-cache tini
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends tini \
+  && rm -rf /var/lib/apt/lists/*
 
 # ไม่รันด้วย root — ถ้ามีช่องโหว่ในแอป ผู้โจมตีจะได้สิทธิ์แค่ผู้ใช้ธรรมดา
+# ผู้ใช้ node มีมาให้แล้วใน image ทางการของ Node
 USER node
 
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package.json ./package.json
 # migration เป็นไฟล์ .sql ที่อ่านตอนรัน ไม่ได้ถูกคอมไพล์เข้า dist
+# และ migrate.ts อ้างพาธ './src/db/migrations' เทียบกับ working directory
 COPY --from=build --chown=node:node /app/src/db/migrations ./src/db/migrations
 
 EXPOSE 8000
 
 # ใช้ /livez ไม่ใช่ /health โดยตั้งใจ
-# /health ตรวจฐานข้อมูลกับ Redis ด้วย ซึ่งถ้าฐานข้อมูลล่มชั่วคราว
-# healthcheck จะสั่งรีสตาร์ทคอนเทนเนอร์วนไปเรื่อย ทั้งที่การรีสตาร์ท
-# แก้ปัญหาฐานข้อมูลไม่ได้ มีแต่จะทำให้เหตุขัดข้องยาวขึ้น
+# /health ตรวจฐานข้อมูลกับ Redis ด้วย ถ้าฐานข้อมูลล่มชั่วคราว healthcheck
+# จะสั่งรีสตาร์ทคอนเทนเนอร์วนไปเรื่อย ทั้งที่การรีสตาร์ทแก้ปัญหาฐานข้อมูลไม่ได้
+# มีแต่จะทำให้เหตุขัดข้องยาวขึ้น
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8000)+'/api/v1/livez').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/main.js"]
