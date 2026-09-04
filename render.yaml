@@ -1,0 +1,89 @@
+# Blueprint สำหรับ Render — https://render.com/docs/blueprint-spec
+#
+# วิธีใช้
+#   1. Render Dashboard → New → Blueprint
+#   2. เลือก repo aidc-helpdesk
+#   3. Render อ่านไฟล์นี้แล้วตั้งค่าให้เองทั้งหมด
+#   4. เหลือแค่กรอกค่าที่เป็นความลับ 3 ตัวที่ทำเครื่องหมาย sync: false ไว้
+#
+# ทำไมวาง blueprint ไว้ที่รากของ repo ไม่ใช่ใน backend/
+#   Render มองหา render.yaml ที่รากเท่านั้น ส่วน rootDir ด้านล่าง
+#   เป็นตัวบอกว่าให้ build จากโฟลเดอร์ไหน
+
+services:
+  - type: web
+    name: aidc-helpdesk-api
+    runtime: docker
+    # ใกล้ลาวที่สุดเท่าที่ Render มี
+    region: singapore
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+
+    # ⚠️ ใช้ /livez ไม่ใช่ /health
+    #    /health ตรวจฐานข้อมูลกับ Redis ด้วย ถ้าฐานข้อมูลสะดุดชั่วคราว
+    #    Render จะรีสตาร์ทวนไปเรื่อย ทั้งที่การรีสตาร์ทแก้ปัญหาฐานข้อมูลไม่ได้
+    #    มีแต่จะยืดเวลาที่ระบบใช้งานไม่ได้ออกไป
+    healthCheckPath: /api/v1/livez
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ต้องตรงกับ DB_TIMEZONE ใน src/db/client.ts
+      # ถ้าไม่ตรง การตัดวันของตัวกันแจ้งเตือนซ้ำจะเลื่อนไปจากที่ SLA engine คิดไว้
+      - key: TZ
+        value: Asia/Vientiane
+
+      - key: ACCESS_TOKEN_TTL_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_TTL_DAYS
+        value: "7"
+
+      # ต้องเป็น true เพราะเสิร์ฟผ่าน https
+      # ถ้าเป็น false เบราว์เซอร์จะยอมส่งคุกกี้ผ่าน http ด้วย ซึ่งดักอ่านได้
+      - key: COOKIE_SECURE
+        value: "true"
+
+      # Render มี proxy หนึ่งชั้นหน้าแอป
+      # ⚠️ ถ้าตั้งผิด req.ip จะเป็น IP ของ proxy ทุกคำขอ แล้วการจำกัด
+      #    อัตราการเรียกจะนับผู้ใช้ทุกคนรวมเป็นก้อนเดียว บล็อกทั้งบริษัทพร้อมกัน
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+
+      # ⚠️ ยังเปิดไม่ได้จนกว่าจะมี POST /users/{id}/unlock
+      #    ถ้าเปิดตอนนี้แล้วบัญชีผู้ดูแลถูกล็อก จะไม่มีใครปลดให้ได้เลย
+      #    เพราะนโยบาย 3.2 ห้ามปลดเองตามเวลา
+      - key: LOCKOUT_ENABLED
+        value: "false"
+
+      # ไม่มี Redis ก็รันได้ แค่ไม่มีการประเมิน SLA อัตโนมัติ
+      # /health จะรายงานเป็น degraded ซึ่งถูกต้องตามความจริง
+      - key: JOBS_ENABLED
+        value: "false"
+
+      - key: SEED_ADMIN_USERNAME
+        value: admin
+
+      # ── ค่าที่ต้องกรอกเองในหน้า Render ──────────────────────────────
+      # sync: false = Render จะถามตอนสร้าง และไม่เก็บค่าไว้ใน repo
+      # ค่าพวกนี้ห้ามอยู่ในไฟล์ที่ commit เด็ดขาด
+
+      # connection string จาก Neon
+      - key: DATABASE_URL
+        sync: false
+
+      # บัญชีเจ้าของ schema ใช้ตอน migrate เท่านั้น (ต้องมีสิทธิ์ CREATE EXTENSION)
+      # บน Neon ชั้นฟรีใช้ค่าเดียวกับ DATABASE_URL ไปก่อนได้
+      - key: MIGRATE_URL
+        sync: false
+
+      # สร้างด้วย: node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+      # ห้ามใช้ค่าจากเครื่องพัฒนาหรือจากเอกสาร
+      - key: JWT_SECRET
+        sync: false
+
+      # รหัสผู้ดูแลชุดแรก ใช้ครั้งเดียวตอน seed
+      # ต้องผ่านนโยบาย: 12 ตัวอักษรขึ้นไป มีพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข และอักขระพิเศษ
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
