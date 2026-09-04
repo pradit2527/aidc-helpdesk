@@ -1,0 +1,38 @@
+# Docker อ่านไฟล์นี้จาก "รากของ build context" ซึ่งตอนนี้คือรากของ repo
+# ไม่ใช่ backend/.dockerignore อีกต่อไป
+#
+# ⚠️ ต้องตัด node_modules ออกเสมอ
+#    ไม่ใช่แค่เรื่องขนาด — argon2 เป็น native module ที่ผูกกับระบบปฏิบัติการ
+#    ถ้าปล่อยให้ node_modules ของ Windows ถูกคัดลอกเข้า image ของ Linux
+#    มันจะทับตัวที่ถูกต้องแล้วพังตอนรัน ด้วย "invalid ELF header"
+**/node_modules
+**/dist
+**/.next
+
+# ห้ามให้ค่าจริงหลุดเข้า image — ตัวแปรสภาพแวดล้อมตั้งที่แพลตฟอร์ม
+**/.env
+**/.env.*
+!**/.env.example
+
+**/*.log
+dev-server.log
+
+.git
+.github
+.gitignore
+
+# ส่วนที่ image ของ API ไม่ได้ใช้เลย
+frontend
+prototype
+docs
+deploy
+datasets
+
+# เทสต์ไม่ถูกใช้ตอนรัน และดึงเข้า image ทำให้ layer เปลี่ยนบ่อยโดยไม่จำเป็น
+backend/test
+**/*.spec.ts
+**/vitest.config.ts
+
+.vscode
+.idea
+.claude

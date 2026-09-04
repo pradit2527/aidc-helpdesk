@@ -19,15 +19,13 @@ services:
     region: singapore
     plan: free
 
-    # ⚠️ ทั้ง dockerfilePath และ dockerContext อ้างอิงจาก "รากของ repo" เสมอ
-    #    ไม่ใช่จาก rootDir — เขียน ./Dockerfile เฉย ๆ จะไปหาที่รากแล้วไม่เจอ
-    #    อาการที่เห็นคือ "transferring dockerfile: 2B" (อ่านได้แทบว่าง)
-    #    ตามด้วย "failed to read dockerfile: open Dockerfile: no such file"
+    # Dockerfile อยู่ที่รากของ repo ซึ่งตรงกับค่าเริ่มต้นที่ Render ใช้อยู่แล้ว
+    # จึงไม่ต้องตั้งอะไรในหน้า Settings ของ service เลย
     #
-    #    จึงระบุพาธเต็มจากรากทั้งคู่ และไม่ใช้ rootDir เลย
-    #    เพื่อไม่ให้มีสองที่ที่กำหนดพาธแล้วขัดกันเอง
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    # เคยชี้ไป ./backend/Dockerfile แล้วยังล้ม เพราะ service ที่สร้างแบบธรรมดา
+    # (ไม่ใช่ Blueprint) ใช้ค่าจากหน้า Settings ไม่ได้อ่าน render.yaml
+    # การย้ายไฟล์ไปที่รากจึงแก้ได้ทั้งสองเส้นทางพร้อมกัน
+    dockerfilePath: ./Dockerfile
 
     # ⚠️ ใช้ /livez ไม่ใช่ /health
     #    /health ตรวจฐานข้อมูลกับ Redis ด้วย ถ้าฐานข้อมูลสะดุดชั่วคราว
