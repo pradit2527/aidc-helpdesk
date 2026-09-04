@@ -13,6 +13,9 @@ import type { CurrentUserDto } from './dto/auth.dto';
 /** กรอกรหัสผิดครบเท่านี้ครั้งติดกัน บัญชีถูกล็อก (นโยบาย 3.2) */
 const MAX_FAILED_LOGINS = 5;
 
+/** เปิดการล็อกบัญชีเมื่อกรอกผิดครบจำนวนหรือไม่ — ค่าเริ่มต้นคือปิด */
+const LOCKOUT_ENABLED = process.env.LOCKOUT_ENABLED === 'true';
+
 const ACCESS_TTL_MINUTES = Number(process.env.ACCESS_TOKEN_TTL_MINUTES ?? 30);
 const REFRESH_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 7);
 
@@ -114,7 +117,17 @@ export class AuthService {
       invalid();
     }
 
-    if (found.isLocked) {
+    /*
+     * ปิดการล็อกบัญชีอัตโนมัติไว้ด้วย LOCKOUT_ENABLED
+     *
+     * ค่าเริ่มต้นคือปิด เพราะระบบนี้ยังรันบนเครื่องพัฒนา และการล็อกบัญชี
+     * ผู้ดูแลคนเดียวของระบบทำให้ไม่มีใครเข้ามาปลดได้เลย (นโยบาย 3.2
+     * ห้ามปลดเองตามเวลา และยังไม่มี endpoint ให้ผู้ดูแลปลด)
+     *
+     * ก่อนขึ้นใช้งานจริงต้องตั้ง LOCKOUT_ENABLED=true และต้องมี
+     * POST /users/{id}/unlock พร้อมใช้ก่อน มิฉะนั้นจะเจอปัญหาเดิมบนของจริง
+     */
+    if (LOCKOUT_ENABLED && found.isLocked) {
       throw new UnauthorizedException({
         error: {
           code: 'ACCOUNT_LOCKED',
@@ -128,16 +141,18 @@ export class AuthService {
     const ok = await argon2.verify(found.passwordHash, password).catch(() => false);
 
     if (!ok) {
-      const attempts = found.failedLoginCount + 1;
-      const shouldLock = attempts >= MAX_FAILED_LOGINS;
-      await this.db
-        .update(appUser)
-        .set({
-          failedLoginCount: attempts,
-          isLocked: shouldLock,
-          lockedAt: shouldLock ? new Date() : null,
-        })
-        .where(eq(appUser.id, found.id));
+      if (LOCKOUT_ENABLED) {
+        const attempts = found.failedLoginCount + 1;
+        const shouldLock = attempts >= MAX_FAILED_LOGINS;
+        await this.db
+          .update(appUser)
+          .set({
+            failedLoginCount: attempts,
+            isLocked: shouldLock,
+            lockedAt: shouldLock ? new Date() : null,
+          })
+          .where(eq(appUser.id, found.id));
+      }
       invalid();
     }
 

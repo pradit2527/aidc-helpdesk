@@ -26,3 +26,7 @@ backend/dist/
 
 # ไฟล์แคชของ tsc — สร้างใหม่ได้เสมอ ไม่ควรอยู่ใน repo
 *.tsbuildinfo
+
+# log ของเซิร์ฟเวอร์ตอนพัฒนา
+dev-server.log
+*.log

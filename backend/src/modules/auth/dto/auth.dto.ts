@@ -10,11 +10,11 @@ export class LoginDto {
 
   @ApiProperty({
     example: 'Str0ng-P@ssw0rd!',
-    minLength: 12,
-    description: 'นโยบาย 3.2 บังคับ ≥ 12 ตัวอักษร มีพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข และอักขระพิเศษ',
+    description:
+      'ไม่ตรวจความยาวหรือความซับซ้อนที่นี่ — endpoint นี้แค่ตรวจว่ารหัสตรงกับที่เก็บไว้ไหม ' +
+      'นโยบายความแข็งแรงบังคับตอน "ตั้ง" รหัสที่ /auth/change-password',
   })
   @IsString()
-  @MinLength(12)
   password!: string;
 }
 
