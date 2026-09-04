@@ -55,11 +55,33 @@ function resolveSsl(): 'require' | false {
   }
 }
 
+/**
+ * ต่อผ่านตัวรวม connection (PgBouncer) อยู่หรือไม่
+ *
+ * Neon, Supabase และผู้ให้บริการอื่นให้ endpoint สองแบบ
+ * แบบ pooled จะมี "-pooler" อยู่ในชื่อ host
+ *
+ * ⚠️ สำคัญ: PgBouncer โหมด transaction ไม่รองรับ prepared statement
+ *    แต่ postgres.js เปิดใช้เป็นค่าเริ่มต้น ผลคือพอมีคนใช้พร้อมกันหลายคน
+ *    จะได้ error "prepared statement s1 already exists" แบบสุ่ม
+ *    ซึ่งหาสาเหตุยากมาก เพราะคิวรีเดียวกันบางครั้งผ่านบางครั้งพัง
+ *    ขึ้นกับว่า PgBouncer จับคำขอไปลง connection ไหน
+ */
+function isPooled(): boolean {
+  try {
+    return new URL(DATABASE_URL).hostname.includes('-pooler');
+  } catch {
+    return false;
+  }
+}
+
 export const sql = postgres(DATABASE_URL, {
   max: Number(process.env.DB_POOL_MAX ?? 10),
   idle_timeout: 30,
   connect_timeout: 10,
   ssl: resolveSsl(),
+  // ปิด prepared statement เมื่อต่อผ่าน pooler มิฉะนั้นจะพังเป็นระยะ
+  ...(isPooled() ? { prepare: false } : {}),
   connection: { TimeZone: DB_TIMEZONE },
   // ปิด log ของไดรเวอร์ ให้ Drizzle เป็นคนคุม logger ที่เดียว
   onnotice: () => {},
