@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBody,
+  ApiCookieAuth,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -42,6 +43,18 @@ import { TicketsService } from './tickets.service';
 @ApiTags('Tickets')
 @Controller('tickets')
 @UseGuards(ScopeGuard)
+/*
+ * ต้องประกาศให้ Swagger รู้ว่า endpoint กลุ่มนี้ต้องยืนยันตัวตน
+ *
+ * ScopeGuard บังคับอยู่แล้วในโค้ด แต่ Swagger อ่านจาก decorator เท่านั้น
+ * ถ้าไม่ประกาศ เอกสารจะแสดงว่าเรียกได้เลยโดยไม่ต้องล็อกอิน ทั้งที่ของจริงตอบ 401
+ * คนที่มาต่อ API จะเสียเวลาไล่หาว่าทำไมถูกปฏิเสธ — เอกสารที่บอกผิด
+ * แย่กว่าไม่มีเอกสาร เพราะมันทำให้คนเชื่อในสิ่งที่ไม่จริง
+ *
+ * ใส่ที่ระดับ class เพื่อให้ครอบทุก endpoint ในนี้ และไม่ต้องไล่ใส่ทีละตัว
+ * ซึ่งเป็นวิธีที่ทำให้ลืมได้อีกในอนาคต
+ */
+@ApiCookieAuth('cookie')
 export class TicketsController {
   constructor(private readonly tickets: TicketsService) {}
 

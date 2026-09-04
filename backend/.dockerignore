@@ -1,0 +1,26 @@
+# ต้องตัด node_modules ออกเสมอ
+#
+# ไม่ใช่แค่เรื่องขนาด — argon2 เป็น native module ที่คอมไพล์ผูกกับเครื่อง
+# ถ้าปล่อยให้ node_modules ของ Windows ถูกคัดลอกเข้า image ของ alpine
+# มันจะทับตัวที่คอมไพล์ถูกต้องแล้วพังตอนรัน ด้วย "invalid ELF header"
+node_modules
+dist
+
+.env
+.env.*
+!.env.example
+
+*.log
+dev-server.log
+
+.git
+.gitignore
+README.md
+
+# เทสต์ไม่ได้ถูกใช้ตอนรัน และดึงเข้า image ทำให้ layer เปลี่ยนบ่อยโดยไม่จำเป็น
+test
+**/*.spec.ts
+vitest.config.ts
+
+.vscode
+.idea

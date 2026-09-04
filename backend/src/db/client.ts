@@ -26,10 +26,40 @@ function requireEnv(name: string): string {
  */
 export const DB_TIMEZONE = 'Asia/Vientiane';
 
-export const sql = postgres(requireEnv('DATABASE_URL'), {
+const DATABASE_URL = requireEnv('DATABASE_URL');
+
+/**
+ * เปิด SSL เมื่อฐานข้อมูลอยู่นอกเครื่อง
+ *
+ * ผู้ให้บริการอย่าง Neon, Supabase, Railway บังคับ SSL ทั้งหมด
+ * ถ้าไม่เปิดจะเชื่อมต่อไม่ได้เลย ด้วยข้อความที่ไม่บอกสาเหตุตรง ๆ
+ * ("connection closed" เฉย ๆ) ซึ่งเสียเวลาไล่หามาก
+ *
+ * ตัดสินจาก host แทนการบังคับให้ตั้ง env เพิ่ม — localhost ไม่ต้องใช้ SSL
+ * และการลืมตั้งค่านี้ตอน deploy คือความผิดพลาดที่เกิดซ้ำได้ง่ายที่สุด
+ *
+ * ตั้ง DB_SSL ทับได้ ('require' หรือ 'false') เผื่อกรณีที่เดาผิด
+ */
+function resolveSsl(): 'require' | false {
+  const override = process.env.DB_SSL;
+  if (override === 'require') return 'require';
+  if (override === 'false') return false;
+
+  try {
+    const host = new URL(DATABASE_URL).hostname;
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    return isLocal ? false : 'require';
+  } catch {
+    // อ่าน URL ไม่ออก ให้ปลอดภัยไว้ก่อน
+    return 'require';
+  }
+}
+
+export const sql = postgres(DATABASE_URL, {
   max: Number(process.env.DB_POOL_MAX ?? 10),
   idle_timeout: 30,
   connect_timeout: 10,
+  ssl: resolveSsl(),
   connection: { TimeZone: DB_TIMEZONE },
   // ปิด log ของไดรเวอร์ ให้ Drizzle เป็นคนคุม logger ที่เดียว
   onnotice: () => {},
