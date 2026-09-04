@@ -4,11 +4,12 @@
 #   1. Render Dashboard → New → Blueprint
 #   2. เลือก repo aidc-helpdesk
 #   3. Render อ่านไฟล์นี้แล้วตั้งค่าให้เองทั้งหมด
-#   4. เหลือแค่กรอกค่าที่เป็นความลับ 3 ตัวที่ทำเครื่องหมาย sync: false ไว้
+#   4. เหลือแค่กรอกค่าที่เป็นความลับ 4 ตัวที่ทำเครื่องหมาย sync: false ไว้
 #
 # ทำไมวาง blueprint ไว้ที่รากของ repo ไม่ใช่ใน backend/
-#   Render มองหา render.yaml ที่รากเท่านั้น ส่วน rootDir ด้านล่าง
-#   เป็นตัวบอกว่าให้ build จากโฟลเดอร์ไหน
+#   Render มองหา render.yaml ที่รากเท่านั้น
+#   ส่วนการชี้ว่า build จากโฟลเดอร์ไหน ใช้ dockerfilePath กับ dockerContext
+#   ซึ่งอ้างอิงจากรากของ repo เหมือนกัน
 
 services:
   - type: web
@@ -17,8 +18,16 @@ services:
     # ใกล้ลาวที่สุดเท่าที่ Render มี
     region: singapore
     plan: free
-    rootDir: backend
-    dockerfilePath: ./Dockerfile
+
+    # ⚠️ ทั้ง dockerfilePath และ dockerContext อ้างอิงจาก "รากของ repo" เสมอ
+    #    ไม่ใช่จาก rootDir — เขียน ./Dockerfile เฉย ๆ จะไปหาที่รากแล้วไม่เจอ
+    #    อาการที่เห็นคือ "transferring dockerfile: 2B" (อ่านได้แทบว่าง)
+    #    ตามด้วย "failed to read dockerfile: open Dockerfile: no such file"
+    #
+    #    จึงระบุพาธเต็มจากรากทั้งคู่ และไม่ใช้ rootDir เลย
+    #    เพื่อไม่ให้มีสองที่ที่กำหนดพาธแล้วขัดกันเอง
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
 
     # ⚠️ ใช้ /livez ไม่ใช่ /health
     #    /health ตรวจฐานข้อมูลกับ Redis ด้วย ถ้าฐานข้อมูลสะดุดชั่วคราว
