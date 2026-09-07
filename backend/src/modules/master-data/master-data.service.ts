@@ -1,23 +1,27 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
+import { asc, desc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
 import {
+  appUser,
   approvedSoftware,
   businessHours,
   checklistItem,
   checklistTemplate,
   company,
   department,
+  escalationContact,
   holiday,
+  maintenanceWindow,
   permission,
   role,
   rolePermission,
   service,
   serviceCatalogItem,
+  serviceOutage,
   slaEscalationRule,
   slaPolicy,
   slaTarget,
@@ -259,6 +263,116 @@ export class MasterDataService {
       .from(slaEscalationRule)
       .where(this.companyScope(scope, slaEscalationRule.companyId))
       .orderBy(asc(slaEscalationRule.priority), asc(slaEscalationRule.thresholdMinutes));
+  }
+
+  /**
+   * ผู้รับการยกระดับตามตำแหน่ง
+   *
+   * เชื่อม contact_key ที่กฎยกระดับอ้างถึง (head_of_it, ceo, dpo, …)
+   * เข้ากับคนจริง — ถ้าตารางนี้ว่าง กฎยกระดับจะทำงานแล้วไม่มีใครได้รับแจ้ง
+   * ซึ่งเป็นความล้มเหลวแบบเงียบที่อันตรายที่สุดของระบบยกระดับ
+   */
+  async escalationContacts(scope: AccessScope) {
+    return this.db
+      .select({
+        id: escalationContact.id,
+        company_id: escalationContact.companyId,
+        company_code: company.code,
+        contact_key: escalationContact.contactKey,
+        user_id: escalationContact.userId,
+        user_name: appUser.fullName,
+        user_email: appUser.email,
+        is_primary: escalationContact.isPrimary,
+        is_active: escalationContact.isActive,
+      })
+      .from(escalationContact)
+      .innerJoin(appUser, eq(appUser.id, escalationContact.userId))
+      // leftJoin — company_id = NULL คือผู้รับระดับกลุ่ม ซึ่งเป็นตัวสำรอง
+      // ให้บริษัทที่ยังไม่ได้กำหนดคนของตัวเอง innerJoin จะตัดแถวเหล่านั้นทิ้ง
+      .leftJoin(company, eq(company.id, escalationContact.companyId))
+      .where(this.companyScope(scope, escalationContact.companyId))
+      .orderBy(asc(escalationContact.contactKey), asc(appUser.fullName));
+  }
+
+  /**
+   * เหตุขัดข้องของระบบงาน — ตัวตั้งของ KPI-6 Uptime
+   *
+   * ended_at = NULL แปลว่ายังขัดข้องอยู่ ณ ตอนนี้ ไม่ใช่ข้อมูลไม่ครบ
+   * หน้าจอต้องแยกสองกรณีนี้ให้เห็น
+   */
+  async serviceOutages(scope: AccessScope) {
+    const rows = await this.db
+      .select({
+        id: serviceOutage.id,
+        service_id: serviceOutage.serviceId,
+        service_code: service.code,
+        service_name: service.nameTh,
+        service_tier: service.serviceTier,
+        ticket_id: serviceOutage.ticketId,
+        started_at: serviceOutage.startedAt,
+        ended_at: serviceOutage.endedAt,
+        is_planned: serviceOutage.isPlanned,
+        maintenance_window_id: serviceOutage.maintenanceWindowId,
+        cause: serviceOutage.cause,
+        recorded_by_name: appUser.fullName,
+      })
+      .from(serviceOutage)
+      .innerJoin(service, eq(service.id, serviceOutage.serviceId))
+      .leftJoin(appUser, eq(appUser.id, serviceOutage.recordedBy))
+      // ขอบเขตมาจากระบบงานที่ล่ม ไม่ใช่จากตัวเหตุขัดข้องเอง
+      // เพราะ service_outage ไม่มีคอลัมน์ company_id
+      .where(this.companyScope(scope, service.companyId))
+      .orderBy(desc(serviceOutage.startedAt))
+      .limit(200);
+
+    return rows.map((r) => ({
+      ...r,
+      started_at: r.started_at.toISOString(),
+      ended_at: r.ended_at?.toISOString() ?? null,
+      is_ongoing: r.ended_at === null,
+      duration_minutes:
+        r.ended_at === null
+          ? null
+          : Math.round((r.ended_at.getTime() - r.started_at.getTime()) / 60000),
+    }));
+  }
+
+  /** หน้าต่างบำรุงรักษาที่วางแผนไว้ — downtime ในช่วงนี้ไม่นับเข้า KPI-6 */
+  async maintenanceWindows(scope: AccessScope) {
+    const rows = await this.db
+      .select({
+        id: maintenanceWindow.id,
+        company_id: maintenanceWindow.companyId,
+        company_code: company.code,
+        service_id: maintenanceWindow.serviceId,
+        service_name: service.nameTh,
+        planned_start: maintenanceWindow.plannedStart,
+        planned_end: maintenanceWindow.plannedEnd,
+        notified_at: maintenanceWindow.notifiedAt,
+        notice_lead_business_days: maintenanceWindow.noticeLeadBusinessDays,
+        description: maintenanceWindow.description,
+        created_by_name: appUser.fullName,
+      })
+      .from(maintenanceWindow)
+      .leftJoin(company, eq(company.id, maintenanceWindow.companyId))
+      .leftJoin(service, eq(service.id, maintenanceWindow.serviceId))
+      .innerJoin(appUser, eq(appUser.id, maintenanceWindow.createdBy))
+      .where(this.companyScope(scope, maintenanceWindow.companyId))
+      .orderBy(desc(maintenanceWindow.plannedStart))
+      .limit(200);
+
+    const now = Date.now();
+    return rows.map((r) => ({
+      ...r,
+      planned_start: r.planned_start.toISOString(),
+      planned_end: r.planned_end.toISOString(),
+      notified_at: r.notified_at?.toISOString() ?? null,
+      is_active_now:
+        r.planned_start.getTime() <= now && r.planned_end.getTime() >= now,
+      // SLA 3.1 บังคับให้แจ้งล่วงหน้าตามจำนวนวันที่กำหนด — หน้าต่างที่ยังไม่แจ้ง
+      // ต้องเห็นชัด เพราะการบำรุงรักษาที่ไม่ได้แจ้งนับเป็น downtime เต็มจำนวน
+      is_notified: r.notified_at !== null,
+    }));
   }
 
   /** แม่แบบรายการตรวจ พร้อมรายการย่อย */

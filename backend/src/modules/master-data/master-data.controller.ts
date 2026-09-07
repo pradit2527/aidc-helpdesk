@@ -107,6 +107,44 @@ export class MasterDataController {
     return this.master.escalationRules(scope);
   }
 
+  @Get('escalation-contacts')
+  @ApiOperation({
+    summary: 'ผู้รับการยกระดับตามตำแหน่ง',
+    description:
+      'เชื่อม `contact_key` ที่กฎยกระดับอ้างถึงเข้ากับคนจริง · ' +
+      'แถวที่ `company_id` เป็น null คือผู้รับระดับกลุ่ม ใช้เป็นตัวสำรอง ' +
+      'ให้บริษัทที่ยังไม่ได้กำหนดคนของตัวเอง',
+  })
+  escalationContacts(@CurrentScope() scope: AccessScope) {
+    scope.require('escalation.manage', 'sla.read');
+    return this.master.escalationContacts(scope);
+  }
+
+  @Get('service-outages')
+  @ApiOperation({
+    summary: 'เหตุขัดข้องของระบบงาน (200 รายการล่าสุด)',
+    description:
+      'ตัวตั้งของ KPI-6 Uptime · `is_ongoing: true` แปลว่ายังขัดข้องอยู่ ' +
+      'ไม่ใช่ข้อมูลไม่ครบ · `is_planned: true` ไม่นับเข้า Downtime ตาม SLA 5.2',
+  })
+  serviceOutages(@CurrentScope() scope: AccessScope) {
+    scope.require('service.manage', 'sla.read');
+    return this.master.serviceOutages(scope);
+  }
+
+  @Get('maintenance-windows')
+  @ApiOperation({
+    summary: 'หน้าต่างบำรุงรักษาที่วางแผนไว้ (200 รายการล่าสุด)',
+    description:
+      '`is_notified: false` คือหน้าต่างที่ยังไม่ได้แจ้งผู้ใช้ — SLA 3.1 บังคับให้แจ้ง ' +
+      'ล่วงหน้าตาม `notice_lead_business_days` การบำรุงรักษาที่ไม่ได้แจ้ง ' +
+      'นับเป็น downtime เต็มจำนวน',
+  })
+  maintenanceWindows(@CurrentScope() scope: AccessScope) {
+    scope.require('service.manage', 'sla.read');
+    return this.master.maintenanceWindows(scope);
+  }
+
   @Get('checklist-templates')
   @ApiOperation({ summary: 'แม่แบบรายการตรวจ พร้อมรายการย่อย' })
   checklistTemplates(@CurrentScope() scope: AccessScope) {

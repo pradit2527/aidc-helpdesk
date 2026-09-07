@@ -22,18 +22,32 @@ import { JobsModule } from './jobs/jobs.module';
 import { SlaConfigRepository } from './db/repositories/sla-config.repository';
 import { TicketDetailRepository } from './db/repositories/ticket-detail.repository';
 import { TicketRepository } from './db/repositories/ticket.repository';
+import { ApprovalsController } from './modules/approvals/approvals.controller';
+import { ApprovalsService } from './modules/approvals/approvals.service';
+import { AuditController } from './modules/audit/audit.controller';
+import { AuditService } from './modules/audit/audit.service';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
 import { DashboardController } from './modules/dashboard/dashboard.controller';
 import { DashboardService } from './modules/dashboard/dashboard.service';
 import { HealthController } from './modules/health/health.controller';
+import { KbController } from './modules/kb/kb.controller';
+import { KbService } from './modules/kb/kb.service';
 import { MasterDataController } from './modules/master-data/master-data.controller';
 import { MasterDataService } from './modules/master-data/master-data.service';
 import { HealthService } from './modules/health/health.service';
+import { NotificationsController } from './modules/notifications/notifications.controller';
+import { NotificationsService } from './modules/notifications/notifications.service';
+import { ProblemsController } from './modules/problems/problems.controller';
+import { ProblemsService } from './modules/problems/problems.service';
+import { ReportsController } from './modules/reports/reports.controller';
+import { ReportsService } from './modules/reports/reports.service';
 import { SystemController } from './modules/system/system.controller';
 import { SystemService } from './modules/system/system.service';
 import { TicketsController } from './modules/tickets/tickets.controller';
 import { TicketsService } from './modules/tickets/tickets.service';
+import { UsersController } from './modules/users/users.controller';
+import { UsersService } from './modules/users/users.service';
 
 @Module({
   imports: [
@@ -45,19 +59,33 @@ import { TicketsService } from './modules/tickets/tickets.service';
     JobsModule,
   ],
   controllers: [
+    ApprovalsController,
+    AuditController,
     AuthController,
     DashboardController,
     HealthController,
+    KbController,
     MasterDataController,
+    NotificationsController,
+    ProblemsController,
+    ReportsController,
     SystemController,
     TicketsController,
+    UsersController,
   ],
   providers: [
     ScopeService,
     CacheService,
+    ApprovalsService,
+    AuditService,
     AuthService,
     HealthService,
+    KbService,
+    NotificationsService,
+    ProblemsService,
+    ReportsService,
     SystemService,
+    UsersService,
     DashboardService,
     MasterDataService,
     TicketRepository,

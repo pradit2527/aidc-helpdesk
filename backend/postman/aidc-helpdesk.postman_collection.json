@@ -195,6 +195,27 @@
       "name": "Admin",
       "item": [
         {
+          "name": "GET /admin/readiness — ความพร้อมใช้งานจริงของระบบ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/readiness",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "readiness"
+              ]
+            },
+            "description": "ทุกข้อนับจากฐานข้อมูลจริง ไม่มีข้อไหนคืน ok จากค่าคงที่ในโค้ด · `blocked` = ทำให้ระบบทำงานผิดแบบเงียบ ๆ ถ้าเปิดใช้จริง (เช่น ปฏิทินวันหยุดว่างทำให้ SLA นับวันหยุดเป็นวันทำการ) · `ref` ชี้ไปที่ข้อค้างที่ต้องให้องค์กรตอบ"
+          },
+          "response": []
+        },
+        {
           "name": "GET /system/info — ข้อมูลภาพรวมของระบบ",
           "request": {
             "method": "GET",
@@ -212,6 +233,159 @@
               ]
             },
             "description": "นับจากฐานข้อมูลจริงตอนเรียกทุกครั้ง · ต้องมีสิทธิ์ system.manage · ไม่แสดงค่าที่ยังไม่มีจริง เช่น เวลาสำรองข้อมูลล่าสุด — ตัวเลขปลอมในหน้าผู้ดูแลทำให้คนเชื่อว่ามีการสำรองข้อมูลอยู่แล้วไม่ไปตั้งค่าจริง"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Approvals",
+      "item": [
+        {
+          "name": "GET /approvals — คำขออนุมัติ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/approvals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "approvals"
+              ],
+              "query": [
+                {
+                  "key": "assignee",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "`assignee=me` คืนเฉพาะใบที่ถึงคิวของฉันจริง — ขั้นก่อนหน้าต้องอนุมัติครบแล้ว จึงจะปรากฏ ป้องกันการอนุมัติข้ามขั้นตาม SOP-03 · ถ้าไม่ระบุ `assignee` จะเห็นทุกใบในขอบเขต ซึ่งต้องมีสิทธิ์ `approval.read`"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit",
+      "item": [
+        {
+          "name": "GET /audit-logs — ร่องรอยการใช้งาน",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "entity_type",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "entity_id",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "actor_id",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "company_id",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "date_from",
+                  "value": "",
+                  "description": "ISO 8601",
+                  "disabled": true
+                },
+                {
+                  "key": "date_to",
+                  "value": "",
+                  "description": "ISO 8601",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "เรียงจากใหม่ไปเก่า · กรองได้ตามการกระทำ ชนิดข้อมูล ผู้กระทำ และช่วงเวลา · ต้องมีสิทธิ์ `audit.read` ซึ่งไม่ได้แจกให้บทบาททั่วไป"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /audit-logs/facets — ค่าที่มีจริงในข้อมูล สำหรับเติมตัวเลือกในฟอร์มค้นหา",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-logs/facets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs",
+                "facets"
+              ]
+            },
+            "description": ""
           },
           "response": []
         }
@@ -238,6 +412,113 @@
               ]
             },
             "description": "ทุกคิวรีกรองตามขอบเขตบริษัทของผู้เรียกเสมอ — ตัวเลขสรุปที่ไม่กรองขอบเขต บอกได้ว่าบริษัทอื่นมีงานค้างเท่าไร ซึ่งเป็นข้อมูลที่ไม่ควรข้ามบริษัท\n\n`sla_compliance_percent` คืน `null` เมื่อยังไม่มีเรื่องปิดในเดือนนี้ ไม่ใช่ 100 เพราะ 100% จากตัวหารศูนย์ทำให้เข้าใจผิดว่าทีมทำได้ครบทุกเรื่อง"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Knowledge base",
+      "item": [
+        {
+          "name": "GET /kb/categories — หมวดหมู่คลังความรู้ (แบนราบพร้อม parent_id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kb/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "kb",
+                "categories"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "GET /kb/articles — ค้นหาบทความ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kb/articles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "kb",
+                "articles"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "category_id",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "tag",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "มีผลเฉพาะผู้ที่มีสิทธิ์แก้ไขบทความ",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "ผู้ใช้ทั่วไปเห็นเฉพาะบทความที่เผยแพร่แล้วและไม่ใช่ `agent_only` · ค้นด้วย `q` ใช้ ILIKE บนหัวข้อ สรุป และแท็ก เพราะภาษาลาวไม่เว้นวรรค ทำให้ full-text search ของ Postgres ตัดคำไม่ได้"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /kb/articles/{id} — อ่านบทความฉบับเต็ม (Markdown)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kb/articles/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "kb",
+                "articles",
+                "{id}"
+              ]
+            },
+            "description": ""
           },
           "response": []
         }
@@ -447,6 +728,66 @@
           "response": []
         },
         {
+          "name": "GET /escalation-contacts — ผู้รับการยกระดับตามตำแหน่ง",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/escalation-contacts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "escalation-contacts"
+              ]
+            },
+            "description": "เชื่อม `contact_key` ที่กฎยกระดับอ้างถึงเข้ากับคนจริง · แถวที่ `company_id` เป็น null คือผู้รับระดับกลุ่ม ใช้เป็นตัวสำรอง ให้บริษัทที่ยังไม่ได้กำหนดคนของตัวเอง"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /service-outages — เหตุขัดข้องของระบบงาน (200 รายการล่าสุด)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/service-outages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "service-outages"
+              ]
+            },
+            "description": "ตัวตั้งของ KPI-6 Uptime · `is_ongoing: true` แปลว่ายังขัดข้องอยู่ ไม่ใช่ข้อมูลไม่ครบ · `is_planned: true` ไม่นับเข้า Downtime ตาม SLA 5.2"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /maintenance-windows — หน้าต่างบำรุงรักษาที่วางแผนไว้ (200 รายการล่าสุด)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/maintenance-windows",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "maintenance-windows"
+              ]
+            },
+            "description": "`is_notified: false` คือหน้าต่างที่ยังไม่ได้แจ้งผู้ใช้ — SLA 3.1 บังคับให้แจ้ง ล่วงหน้าตาม `notice_lead_business_days` การบำรุงรักษาที่ไม่ได้แจ้ง นับเป็น downtime เต็มจำนวน"
+          },
+          "response": []
+        },
+        {
           "name": "GET /checklist-templates — แม่แบบรายการตรวจ พร้อมรายการย่อย",
           "request": {
             "method": "GET",
@@ -503,6 +844,255 @@
               ]
             },
             "description": ""
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "GET /notifications — การแจ้งเตือนในระบบของฉัน",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "unread_only",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "เฉพาะช่องทาง `in_app` · `meta.unread` นับจากทั้งหมด ไม่ใช่จากหน้าปัจจุบัน จึงใช้เป็นตัวเลขบนกระดิ่งได้ตรง ๆ"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /notifications/channels — ช่องทางรับการแจ้งเตือนของฉัน",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/channels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "channels"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "POST /notifications/read — ทำเครื่องหมายว่าอ่านแล้ว",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    1,\n    2\n  ],\n  \"all\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "read"
+              ]
+            },
+            "description": "ส่ง `ids` เพื่อระบุรายการ หรือ `all: true` เพื่อทำทั้งหมด"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Problems",
+      "item": [
+        {
+          "name": "GET /problems — ปัญหาที่เป็นต้นเหตุร่วม",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/problems",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "problems"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "service_id",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "company_id",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "`is_rca_overdue` คำนวณจากฝั่งเซิร์ฟเวอร์ — เหตุ P1 ต้องส่ง RCA ภายใน 5 วันทำการตาม SLA 7.2 · `linked_ticket_count` นับเฉพาะใบที่ยังไม่ถูกลบ"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /problems/{id} — รายละเอียดปัญหา พร้อม ticket ที่ผูกอยู่ (สูงสุด 50 ใบล่าสุด)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/problems/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "problems",
+                "{id}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "GET /reports/kpi — KPI-1…KPI-7 เทียบเป้าหมาย (SLA 7.1)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/kpi",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "kpi"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "",
+                  "description": "ISO 8601 · ค่าเริ่มต้น = ต้นเดือนปัจจุบัน",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "",
+                  "description": "ISO 8601 · ค่าเริ่มต้น = ตอนนี้",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "`value: null` แปลว่าตัวหารเป็นศูนย์ — ยังไม่มีข้อมูลพอวัด ไม่ใช่ 0% หรือ 100% · KPI-2 อยู่แยกใน `kpi2_first_response` เพราะแยกราย priority เสมอ (P1 นับนาทีปฏิทิน P2–P4 นับนาทีทำการ เฉลี่ยรวมกันไม่ได้) · `sip_required: true` เมื่อมี KPI ตกเป้า ซึ่ง SLA 7.3 บังคับให้ทำ Service Improvement Plan"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /reports/sla-compliance — KPI-1 แยกตามบริษัท × ระดับความสำคัญ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/sla-compliance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "sla-compliance"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "",
+                  "description": "ISO 8601",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "",
+                  "description": "ISO 8601",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "ticket ที่มี `sla_exclusion_code` ถูกตัดออกจากตัวหารแล้ว ไม่ใช่นับเป็นผ่าน (SLA ภาคผนวก ก.2) · `compliance_percent: null` = ไม่มีเรื่องปิดในช่องนั้น"
           },
           "response": []
         }
@@ -773,6 +1363,84 @@
               ]
             },
             "description": "**กำหนดเวลาถูกคำนวณใหม่จากเวลาที่ปรับ ไม่ใช่จากเวลาที่สร้างเรื่อง**\n\nAIDC-IT-SLA-001 ข้อ 5.4 ระบุว่า *\"ให้นับเวลาตามระดับใหม่ตั้งแต่เวลาที่ปรับ\"*\nถ้านับจาก `created_at` เรื่องที่เพิ่งยกระดับเป็น P1 จะกลายเป็นเกินกำหนดทันที\n\nยกระดับเป็น P1 → ตั้งเป็นเหตุขัดข้องร้ายแรงและแจ้ง Head of IT ทันทีแม้นอกเวลาทำการ"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "GET /users — รายชื่อผู้ใช้ในขอบเขต",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "company_id",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "is_active",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "ค้นด้วย `q` ได้ทั้งชื่อ ชื่อผู้ใช้ และรหัสพนักงาน · `company_id` ที่อยู่นอกขอบเขตจะถูกตัดทิ้งเงียบ ๆ ไม่ตอบ 403 เพราะการตอบ 403 ยืนยันว่าบริษัทนั้นมีอยู่จริง"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /users/{id} — รายละเอียดผู้ใช้ พร้อมบทบาทและขอบเขตบริษัท",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{id}"
+              ]
+            },
+            "description": "บทบาทที่หมดอายุแล้วยังคืนมาด้วยแต่ติดธง `is_expired` — ผู้ดูแลต้องเห็นว่าเคยให้สิทธิ์อะไรไว้ ไม่ใช่ให้มันหายไปเฉย ๆ"
           },
           "response": []
         }
