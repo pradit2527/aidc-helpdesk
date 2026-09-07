@@ -24,6 +24,8 @@ import { TicketDetailRepository } from './db/repositories/ticket-detail.reposito
 import { TicketRepository } from './db/repositories/ticket.repository';
 import { TicketWriteRepository } from './db/repositories/ticket-write.repository';
 import { ApprovalsController } from './modules/approvals/approvals.controller';
+import { AttachmentsController } from './modules/attachments/attachments.controller';
+import { AttachmentsService } from './modules/attachments/attachments.service';
 import { ApprovalsService } from './modules/approvals/approvals.service';
 import { AuditController } from './modules/audit/audit.controller';
 import { AuditService } from './modules/audit/audit.service';
@@ -62,6 +64,7 @@ import { UsersService } from './modules/users/users.service';
   ],
   controllers: [
     ApprovalsController,
+    AttachmentsController,
     AuditController,
     ChecklistController,
     AuthController,
@@ -80,6 +83,7 @@ import { UsersService } from './modules/users/users.service';
     ScopeService,
     CacheService,
     ApprovalsService,
+    AttachmentsService,
     AuditService,
     AuthService,
     HealthService,

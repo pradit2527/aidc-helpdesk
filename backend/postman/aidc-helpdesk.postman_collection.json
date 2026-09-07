@@ -321,6 +321,74 @@
       ]
     },
     {
+      "name": "Attachments",
+      "item": [
+        {
+          "name": "POST /attachments — อัปโหลดไฟล์แนบ",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ]
+            },
+            "description": "สูงสุด 5 ไฟล์ · ไฟล์ละ ≤ 20 MB · **ตรวจชนิดจาก magic bytes ไม่ใช่ Content-Type ที่ส่งมา** (NFR-15) — รองรับ รูปภาพ · PDF · zip (รวม docx/xlsx) · ข้อความล้วน · ชื่อไฟล์ของผู้ใช้ไม่ถูกใช้ประกอบ path บนดิสก์เลย · อัปโหลดก่อนสร้าง ticket ได้ แล้วค่อยผูกภายหลัง (B-08) — ไฟล์ที่ไม่ถูกผูกกับอะไรจะถูกล้างโดยงานเบื้องหลัง"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /attachments/{id}/download — ดาวน์โหลดไฟล์แนบ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments/{id}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments",
+                "{id}",
+                "download"
+              ]
+            },
+            "description": "ส่งไฟล์ตรง ๆ ไม่ห่อซองมาตรฐาน · 403 เมื่อ `scan_status = infected` · `Content-Disposition: attachment` เสมอ เพื่อไม่ให้เบราว์เซอร์เปิดไฟล์ ที่ผู้ใช้อัปโหลดในบริบทของโดเมนเรา ซึ่งเป็นช่องทาง XSS แบบเก็บถาวร"
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /attachments/{id} — ลบไฟล์แนบ",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments",
+                "{id}"
+              ]
+            },
+            "description": "ผู้อัปโหลดเอง หรือผู้มีสิทธิ์ `ticket.update` · ลบแบบ soft delete — ไฟล์แนบเป็นหลักฐานประกอบเรื่อง การลบจริงทำให้ ประวัติที่อ้างถึงไฟล์นั้นชี้ไปที่ความว่างเปล่า"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Audit",
       "item": [
         {
