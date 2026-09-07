@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, desc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
-import type { PgColumn } from 'drizzle-orm/pg-core';
+import { asc, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { alias, type PgColumn } from 'drizzle-orm/pg-core';
 
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
@@ -25,7 +25,9 @@ import {
   slaEscalationRule,
   slaPolicy,
   slaTarget,
+  ticket,
   ticketCategory,
+  userRole,
 } from '../../db/schema';
 
 /**
@@ -63,6 +65,23 @@ export class MasterDataService {
     return or(isNull(col), inArray(col, ids));
   }
 
+  /**
+   * ประกอบการอ้างถึงแบบซ้อน ตาม docs/03-api-spec.md
+   *
+   * สเปกกำหนดให้ทุกการอ้างถึงหน่วยงานหรือบุคคลเป็นอ็อบเจกต์ซ้อน
+   * ไม่ใช่คู่ของ `x_id` + `x_code` แบบแบน เหตุผลคือ null ที่มีความหมาย —
+   * `company: null` บอกชัดว่า "แถวนี้เป็นระดับกลุ่ม" ส่วนแบบแบนต้องดู
+   * สองฟิลด์ประกอบกันแล้วเดาเอง ซึ่งหน้าจอแต่ละหน้าเดาไม่เหมือนกัน
+   *
+   * คืน null เมื่อ id เป็น null เพื่อไม่ให้ได้อ็อบเจกต์ที่มีแต่ค่าว่าง
+   */
+  private static ref<T extends Record<string, unknown>>(
+    id: number | null,
+    fields: T,
+  ): ({ id: number } & T) | null {
+    return id === null ? null : { id, ...fields };
+  }
+
   async companies(scope: AccessScope) {
     return this.db
       .select({
@@ -72,6 +91,23 @@ export class MasterDataService {
         name_en: company.nameEn,
         contact_email: company.contactEmail,
         is_active: company.isActive,
+        /*
+         * นับด้วยคิวรีย่อย ไม่ใช่ join + groupBy
+         *
+         * join สองตารางพร้อมกันแล้วนับ จะได้ผลคูณกันของสองความสัมพันธ์
+         * (บริษัทที่มีผู้ใช้ 10 คนและ ticket 5 ใบ จะนับผู้ใช้ได้ 50)
+         * ซึ่งเป็นข้อผิดพลาดที่ตัวเลขยังดูสมเหตุสมผลจนไม่มีใครสังเกต
+         */
+        user_count: sql<number>`(
+          SELECT count(*)::int FROM ${appUser}
+          WHERE ${appUser.companyId} = ${company.id} AND ${appUser.deletedAt} IS NULL
+        )`,
+        open_ticket_count: sql<number>`(
+          SELECT count(*)::int FROM ${ticket}
+          WHERE ${ticket.companyId} = ${company.id}
+            AND ${ticket.deletedAt} IS NULL
+            AND ${ticket.status} IN ('new','assigned','in_progress','pending_user')
+        )`,
       })
       .from(company)
       .where(this.companyScope(scope, company.id))
@@ -79,18 +115,31 @@ export class MasterDataService {
   }
 
   async departments(scope: AccessScope) {
-    return this.db
+    const rows = await this.db
       .select({
         id: department.id,
         name: department.name,
         company_id: department.companyId,
         company_code: company.code,
+        company_name_th: company.nameTh,
         is_active: department.isActive,
+        user_count: sql<number>`(
+          SELECT count(*)::int FROM ${appUser}
+          WHERE ${appUser.departmentId} = ${department.id} AND ${appUser.deletedAt} IS NULL
+        )`,
       })
       .from(department)
       .innerJoin(company, eq(company.id, department.companyId))
       .where(this.companyScope(scope, department.companyId))
       .orderBy(asc(company.code), asc(department.name));
+
+    return rows.map(({ company_id, company_code, company_name_th, ...r }) => ({
+      ...r,
+      company: MasterDataService.ref(company_id, {
+        code: company_code,
+        name_th: company_name_th,
+      }),
+    }));
   }
 
   /**
@@ -101,67 +150,149 @@ export class MasterDataService {
    * การคืนแบนราบทำได้ทั้งสองแบบ ส่วนต้นไม้ทำให้แบนกลับยาก
    */
   async categories(scope: AccessScope) {
-    return this.db
+    const assignee = alias(appUser, 'default_assignee');
+    const rows = await this.db
       .select({
         id: ticketCategory.id,
         code: ticketCategory.code,
         name_th: ticketCategory.nameTh,
         parent_id: ticketCategory.parentId,
+        company_id: ticketCategory.companyId,
+        company_code: company.code,
         default_impact: ticketCategory.defaultImpact,
         default_urgency: ticketCategory.defaultUrgency,
+        assignee_id: ticketCategory.defaultAssigneeId,
+        assignee_name: assignee.fullName,
         sort_order: ticketCategory.sortOrder,
         is_active: ticketCategory.isActive,
       })
       .from(ticketCategory)
+      .leftJoin(company, eq(company.id, ticketCategory.companyId))
+      .leftJoin(assignee, eq(assignee.id, ticketCategory.defaultAssigneeId))
       .where(this.companyScope(scope, ticketCategory.companyId))
       .orderBy(asc(ticketCategory.sortOrder), asc(ticketCategory.nameTh));
+
+    return rows.map(({ company_id, company_code, assignee_id, assignee_name, ...r }) => ({
+      ...r,
+      company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+      default_assignee: MasterDataService.ref(assignee_id, {
+        full_name: assignee_name ?? '',
+      }),
+    }));
   }
 
   async catalogItems(scope: AccessScope) {
-    return this.db
+    const rows = await this.db
       .select({
         id: serviceCatalogItem.id,
         code: serviceCatalogItem.code,
         name_th: serviceCatalogItem.nameTh,
+        company_id: serviceCatalogItem.companyId,
+        company_code: company.code,
         category_id: serviceCatalogItem.categoryId,
-        requires_approval: serviceCatalogItem.requiresApproval,
-        lead_time_days: serviceCatalogItem.leadTimeDays,
+        category_name: ticketCategory.nameTh,
+        default_priority: serviceCatalogItem.defaultPriority,
         target_minutes: serviceCatalogItem.targetMinutes,
+        clock_start_event: serviceCatalogItem.clockStartEvent,
+        lead_time_days: serviceCatalogItem.leadTimeDays,
+        requires_approval: serviceCatalogItem.requiresApproval,
+        approval_chain: serviceCatalogItem.approvalChain,
+        checklist_template_id: serviceCatalogItem.checklistTemplateId,
+        checklist_template_name: checklistTemplate.nameTh,
         is_active: serviceCatalogItem.isActive,
       })
       .from(serviceCatalogItem)
+      .leftJoin(company, eq(company.id, serviceCatalogItem.companyId))
+      .leftJoin(ticketCategory, eq(ticketCategory.id, serviceCatalogItem.categoryId))
+      .leftJoin(
+        checklistTemplate,
+        eq(checklistTemplate.id, serviceCatalogItem.checklistTemplateId),
+      )
       .where(this.companyScope(scope, serviceCatalogItem.companyId))
       .orderBy(asc(serviceCatalogItem.nameTh));
+
+    return rows.map(
+      ({
+        company_id,
+        company_code,
+        category_id,
+        category_name,
+        checklist_template_id,
+        checklist_template_name,
+        ...r
+      }) => ({
+        ...r,
+        company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+        category: MasterDataService.ref(category_id, { name_th: category_name ?? '' }),
+        checklist_template: MasterDataService.ref(checklist_template_id, {
+          name_th: checklist_template_name ?? '',
+        }),
+      }),
+    );
   }
 
   async services(scope: AccessScope) {
-    return this.db
+    const rows = await this.db
       .select({
         id: service.id,
         code: service.code,
         name_th: service.nameTh,
+        company_id: service.companyId,
+        company_code: company.code,
         service_group: service.serviceGroup,
         service_tier: service.serviceTier,
+        owner_id: service.ownerUserId,
+        owner_name: appUser.fullName,
+        is_24x7: service.is24x7,
         is_active: service.isActive,
+        open_outage_count: sql<number>`(
+          SELECT count(*)::int FROM ${serviceOutage}
+          WHERE ${serviceOutage.serviceId} = ${service.id} AND ${serviceOutage.endedAt} IS NULL
+        )`,
       })
       .from(service)
+      .leftJoin(company, eq(company.id, service.companyId))
+      .leftJoin(appUser, eq(appUser.id, service.ownerUserId))
       .where(this.companyScope(scope, service.companyId))
       .orderBy(asc(service.serviceTier), asc(service.nameTh));
+
+    return rows.map(({ company_id, company_code, owner_id, owner_name, ...r }) => ({
+      ...r,
+      company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+      owner: MasterDataService.ref(owner_id, { full_name: owner_name ?? '' }),
+      /*
+       * ยังไม่คำนวณ uptime รายระบบที่นี่ — คืน null แทน 100
+       *
+       * ตัวเลข uptime ที่คำนวณจากตาราง service_outage ที่ยังว่าง จะได้ 100%
+       * ทุกระบบ ซึ่งอ่านแล้วเข้าใจว่าเดือนนี้ไม่มีระบบไหนล่มเลย
+       * ทั้งที่ความจริงคือยังไม่มีใครบันทึกเหตุขัดข้อง
+       * ค่ารวมของทั้งกลุ่มดูได้ที่ GET /reports/kpi (KPI-6)
+       */
+      uptime_percent_month: null,
+    }));
   }
 
   async approvedSoftwareList(scope: AccessScope) {
-    return this.db
+    const rows = await this.db
       .select({
         id: approvedSoftware.id,
         name: approvedSoftware.name,
         version: approvedSoftware.version,
         license_type: approvedSoftware.licenseType,
         note: approvedSoftware.note,
+        company_id: approvedSoftware.companyId,
+        company_code: company.code,
         is_active: approvedSoftware.isActive,
       })
       .from(approvedSoftware)
+      .leftJoin(company, eq(company.id, approvedSoftware.companyId))
       .where(this.companyScope(scope, approvedSoftware.companyId))
       .orderBy(asc(approvedSoftware.name));
+
+    return rows.map(({ company_id, company_code, ...r }) => ({
+      ...r,
+      company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+    }));
   }
 
   /** นโยบาย SLA พร้อมเป้าหมายรายระดับความสำคัญ */
@@ -171,12 +302,16 @@ export class MasterDataService {
         id: slaPolicy.id,
         name: slaPolicy.name,
         company_id: slaPolicy.companyId,
+        company_code: company.code,
         doc_ref: slaPolicy.docRef,
         doc_version: slaPolicy.docVersion,
+        effective_from: slaPolicy.effectiveFrom,
+        effective_to: slaPolicy.effectiveTo,
         is_default: slaPolicy.isDefault,
         is_active: slaPolicy.isActive,
       })
       .from(slaPolicy)
+      .leftJoin(company, eq(company.id, slaPolicy.companyId))
       .where(this.companyScope(scope, slaPolicy.companyId))
       .orderBy(asc(slaPolicy.id));
 
@@ -189,6 +324,8 @@ export class MasterDataService {
         response_minutes: slaTarget.responseMinutes,
         resolution_minutes: slaTarget.resolutionMinutes,
         clock_mode: slaTarget.clockMode,
+        // จำเป็นต่อ P1 ที่ต้องรายงานความคืบหน้าทุก 30 นาที (SLA 5.1)
+        status_report_interval_minutes: slaTarget.statusReportIntervalMinutes,
         escalation_percent: slaTarget.escalationPercent,
       })
       .from(slaTarget)
@@ -197,11 +334,15 @@ export class MasterDataService {
           slaTarget.slaPolicyId,
           policies.map((p) => p.id),
         ),
-      );
+      )
+      .orderBy(asc(slaTarget.priority));
 
-    return policies.map((p) => ({
+    return policies.map(({ company_id, company_code, ...p }) => ({
       ...p,
-      targets: targets.filter((t) => t.policy_id === p.id),
+      company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+      targets: targets
+        .filter((t) => t.policy_id === p.id)
+        .map(({ policy_id: _policy_id, ...t }) => t),
     }));
   }
 
@@ -236,7 +377,7 @@ export class MasterDataService {
       .select({
         id: holiday.id,
         company_id: holiday.companyId,
-        date: holiday.holidayDate,
+        holiday_date: holiday.holidayDate,
         name: holiday.name,
       })
       .from(holiday)
@@ -245,11 +386,12 @@ export class MasterDataService {
   }
 
   async escalationRules(scope: AccessScope) {
-    return this.db
+    const rows = await this.db
       .select({
         id: slaEscalationRule.id,
         code: slaEscalationRule.code,
         company_id: slaEscalationRule.companyId,
+        company_code: company.code,
         trigger_type: slaEscalationRule.triggerType,
         priority: slaEscalationRule.priority,
         threshold_minutes: slaEscalationRule.thresholdMinutes,
@@ -261,8 +403,24 @@ export class MasterDataService {
         is_active: slaEscalationRule.isActive,
       })
       .from(slaEscalationRule)
+      .leftJoin(company, eq(company.id, slaEscalationRule.companyId))
       .where(this.companyScope(scope, slaEscalationRule.companyId))
       .orderBy(asc(slaEscalationRule.priority), asc(slaEscalationRule.thresholdMinutes));
+
+    /*
+     * notify_contact_keys / notify_roles เก็บเป็น jsonb ในฐานข้อมูล
+     * แต่หน้าจอแสดงเป็นข้อความคั่นจุลภาค — แปลงที่นี่ที่เดียว
+     * ไม่ปล่อยให้แต่ละหน้าเดาเองว่าได้อาร์เรย์หรือได้ข้อความ
+     */
+    const asCsv = (v: unknown): string =>
+      Array.isArray(v) ? v.join(',') : typeof v === 'string' ? v : '';
+
+    return rows.map(({ company_id, company_code, ...r }) => ({
+      ...r,
+      company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+      notify_contact_keys: asCsv(r.notify_contact_keys),
+      notify_roles: asCsv(r.notify_roles) || null,
+    }));
   }
 
   /**
@@ -273,7 +431,7 @@ export class MasterDataService {
    * ซึ่งเป็นความล้มเหลวแบบเงียบที่อันตรายที่สุดของระบบยกระดับ
    */
   async escalationContacts(scope: AccessScope) {
-    return this.db
+    const rows = await this.db
       .select({
         id: escalationContact.id,
         company_id: escalationContact.companyId,
@@ -292,6 +450,12 @@ export class MasterDataService {
       .leftJoin(company, eq(company.id, escalationContact.companyId))
       .where(this.companyScope(scope, escalationContact.companyId))
       .orderBy(asc(escalationContact.contactKey), asc(appUser.fullName));
+
+    return rows.map(({ company_id, company_code, user_id, user_name, user_email, ...r }) => ({
+      ...r,
+      company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+      user: { id: user_id, full_name: user_name, email: user_email },
+    }));
   }
 
   /**
@@ -305,19 +469,21 @@ export class MasterDataService {
       .select({
         id: serviceOutage.id,
         service_id: serviceOutage.serviceId,
-        service_code: service.code,
         service_name: service.nameTh,
         service_tier: service.serviceTier,
         ticket_id: serviceOutage.ticketId,
+        ticket_no: ticket.ticketNo,
         started_at: serviceOutage.startedAt,
         ended_at: serviceOutage.endedAt,
         is_planned: serviceOutage.isPlanned,
         maintenance_window_id: serviceOutage.maintenanceWindowId,
         cause: serviceOutage.cause,
+        recorded_by_id: serviceOutage.recordedBy,
         recorded_by_name: appUser.fullName,
       })
       .from(serviceOutage)
       .innerJoin(service, eq(service.id, serviceOutage.serviceId))
+      .leftJoin(ticket, eq(ticket.id, serviceOutage.ticketId))
       .leftJoin(appUser, eq(appUser.id, serviceOutage.recordedBy))
       // ขอบเขตมาจากระบบงานที่ล่ม ไม่ใช่จากตัวเหตุขัดข้องเอง
       // เพราะ service_outage ไม่มีคอลัมน์ company_id
@@ -325,16 +491,32 @@ export class MasterDataService {
       .orderBy(desc(serviceOutage.startedAt))
       .limit(200);
 
-    return rows.map((r) => ({
-      ...r,
-      started_at: r.started_at.toISOString(),
-      ended_at: r.ended_at?.toISOString() ?? null,
-      is_ongoing: r.ended_at === null,
-      duration_minutes:
-        r.ended_at === null
-          ? null
-          : Math.round((r.ended_at.getTime() - r.started_at.getTime()) / 60000),
-    }));
+    return rows.map(
+      ({
+        service_id,
+        service_name,
+        service_tier,
+        ticket_id,
+        ticket_no,
+        recorded_by_id,
+        recorded_by_name,
+        ...r
+      }) => ({
+        ...r,
+        service: { id: service_id, name_th: service_name, service_tier },
+        ticket: MasterDataService.ref(ticket_id, { ticket_no: ticket_no ?? '' }),
+        recorded_by: MasterDataService.ref(recorded_by_id, {
+          full_name: recorded_by_name ?? '',
+        }),
+        started_at: r.started_at.toISOString(),
+        ended_at: r.ended_at?.toISOString() ?? null,
+        is_ongoing: r.ended_at === null,
+        duration_minutes:
+          r.ended_at === null
+            ? null
+            : Math.round((r.ended_at.getTime() - r.started_at.getTime()) / 60000),
+      }),
+    );
   }
 
   /** หน้าต่างบำรุงรักษาที่วางแผนไว้ — downtime ในช่วงนี้ไม่นับเข้า KPI-6 */
@@ -351,6 +533,7 @@ export class MasterDataService {
         notified_at: maintenanceWindow.notifiedAt,
         notice_lead_business_days: maintenanceWindow.noticeLeadBusinessDays,
         description: maintenanceWindow.description,
+        created_by_id: maintenanceWindow.createdBy,
         created_by_name: appUser.fullName,
       })
       .from(maintenanceWindow)
@@ -362,17 +545,29 @@ export class MasterDataService {
       .limit(200);
 
     const now = Date.now();
-    return rows.map((r) => ({
-      ...r,
-      planned_start: r.planned_start.toISOString(),
-      planned_end: r.planned_end.toISOString(),
-      notified_at: r.notified_at?.toISOString() ?? null,
-      is_active_now:
-        r.planned_start.getTime() <= now && r.planned_end.getTime() >= now,
-      // SLA 3.1 บังคับให้แจ้งล่วงหน้าตามจำนวนวันที่กำหนด — หน้าต่างที่ยังไม่แจ้ง
-      // ต้องเห็นชัด เพราะการบำรุงรักษาที่ไม่ได้แจ้งนับเป็น downtime เต็มจำนวน
-      is_notified: r.notified_at !== null,
-    }));
+    return rows.map(
+      ({
+        company_id,
+        company_code,
+        service_id,
+        service_name,
+        created_by_id,
+        created_by_name,
+        ...r
+      }) => ({
+        ...r,
+        company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+        service: MasterDataService.ref(service_id, { name_th: service_name ?? '' }),
+        created_by: MasterDataService.ref(created_by_id, { full_name: created_by_name }),
+        planned_start: r.planned_start.toISOString(),
+        planned_end: r.planned_end.toISOString(),
+        notified_at: r.notified_at?.toISOString() ?? null,
+        is_active_now: r.planned_start.getTime() <= now && r.planned_end.getTime() >= now,
+        // SLA 3.1 บังคับให้แจ้งล่วงหน้าตามจำนวนวันที่กำหนด — หน้าต่างที่ยังไม่แจ้ง
+        // ต้องเห็นชัด เพราะการบำรุงรักษาที่ไม่ได้แจ้งนับเป็น downtime เต็มจำนวน
+        is_notified: r.notified_at !== null,
+      }),
+    );
   }
 
   /** แม่แบบรายการตรวจ พร้อมรายการย่อย */
@@ -382,11 +577,14 @@ export class MasterDataService {
         id: checklistTemplate.id,
         code: checklistTemplate.code,
         name_th: checklistTemplate.nameTh,
+        company_id: checklistTemplate.companyId,
+        company_code: company.code,
         doc_ref: checklistTemplate.docRef,
         version: checklistTemplate.version,
         is_active: checklistTemplate.isActive,
       })
       .from(checklistTemplate)
+      .leftJoin(company, eq(company.id, checklistTemplate.companyId))
       .where(this.companyScope(scope, checklistTemplate.companyId))
       .orderBy(asc(checklistTemplate.nameTh));
 
@@ -400,6 +598,8 @@ export class MasterDataService {
         description: checklistItem.description,
         is_required: checklistItem.isRequired,
         evidence_required: checklistItem.evidenceRequired,
+        // บอกว่าข้อนี้ปกติเป็นหน้าที่ของบทบาทไหน — หน้าจอใช้แสดงป้ายกำกับ
+        default_role_code: checklistItem.defaultRoleCode,
         sort_order: checklistItem.sortOrder,
       })
       .from(checklistItem)
@@ -411,9 +611,12 @@ export class MasterDataService {
       )
       .orderBy(asc(checklistItem.sortOrder));
 
-    return templates.map((t) => ({
+    return templates.map(({ company_id, company_code, ...t }) => ({
       ...t,
-      items: items.filter((i) => i.template_id === t.id),
+      company: MasterDataService.ref(company_id, { code: company_code ?? '' }),
+      items: items
+        .filter((i) => i.template_id === t.id)
+        .map(({ template_id: _template_id, ...i }) => i),
     }));
   }
 
@@ -432,6 +635,14 @@ export class MasterDataService {
         name_th: role.nameTh,
         description: role.description,
         is_system: role.isSystem,
+        // นับเฉพาะการมอบบทบาทที่ยังไม่หมดอายุ — บทบาทที่หมดอายุแล้ว
+        // ยังอยู่ในตารางแต่ไม่มีผลกับสิทธิ์จริง การนับรวมจะทำให้ผู้ดูแล
+        // เข้าใจว่ามีคนถือสิทธิ์นั้นมากกว่าความจริง
+        user_count: sql<number>`(
+          SELECT count(DISTINCT ${userRole.userId})::int FROM ${userRole}
+          WHERE ${userRole.roleId} = ${role.id}
+            AND (${userRole.expiresAt} IS NULL OR ${userRole.expiresAt} > now())
+        )`,
       })
       .from(role)
       .orderBy(asc(role.id));

@@ -8,10 +8,11 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { CLOCK_START_EVENT } from '@/config/admin';
 import { formatMinutes } from '@/lib/format';
-import { CATALOG_ITEMS } from '@/mocks/admin-data';
+import { useCatalogItems } from '@/lib/queries/master-data';
 import type { CatalogItem } from '@/lib/types';
 
 /**
@@ -22,7 +23,9 @@ import type { CatalogItem } from '@/lib/types';
  * เช่นรีเซ็ตรหัสผ่าน 30 นาทีทำการ ส่วน response_due_at ยังใช้ตารางมาตรฐานเสมอ
  */
 export default function CatalogPage(): React.JSX.Element {
-  const needApproval = CATALOG_ITEMS.filter((i) => i.requires_approval);
+  const query = useCatalogItems();
+  const items = query.data ?? [];
+  const needApproval = items.filter((i) => i.requires_approval);
 
   const columns: Column<CatalogItem>[] = [
     {
@@ -125,8 +128,6 @@ export default function CatalogPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /catalog/items" />
-
       <Alert tone="info" title="ຄຳຂໍບໍລິການບໍ່ໃຊ້ຕາຕະລາງ SLA ມາດຕະຖານວັດການແກ້ໄຂ">
         ວັດດ້ວຍເປົ້າໝາຍລາຍລາຍການໃນຕາຕະລາງນີ້ແທນ (SLA 5.3) ແຕ່ເວລາຕອບຮັບ
         ຍັງໃຊ້ຕາຕະລາງມາດຕະຖານສະເໝີ — ຄໍລຳ “ເລີ່ມນັບເມື່ອ” ສຳຄັນເທົ່າກັບຕົວເລກເປົ້າໝາຍ
@@ -135,12 +136,14 @@ export default function CatalogPage(): React.JSX.Element {
 
       <Card>
         <CardBody className="p-0">
-          <DataTable
-            columns={columns}
-            rows={CATALOG_ITEMS}
-            rowKey={(i) => i.id}
-            caption="ລາຍການໃນແຄັດຕາລັອກບໍລິການ"
-          />
+          <QueryBoundary query={query}>
+            <DataTable
+              columns={columns}
+              rows={items}
+              rowKey={(i) => i.id}
+              caption="ລາຍການໃນແຄັດຕາລັອກບໍລິການ"
+            />
+          </QueryBoundary>
         </CardBody>
       </Card>
     </div>

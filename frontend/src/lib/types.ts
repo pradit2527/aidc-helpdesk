@@ -238,6 +238,8 @@ export interface SlaTarget {
 
 export interface SlaPolicy {
   id: number;
+  /** null = นโยบายระดับกลุ่ม ใช้ร่วมทุกบริษัทที่ไม่ได้กำหนดของตัวเอง */
+  company: CompanyRef | null;
   name: string;
   doc_ref: string;
   doc_version: string;

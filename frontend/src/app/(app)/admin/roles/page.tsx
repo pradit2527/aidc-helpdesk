@@ -6,10 +6,12 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { useHasRole } from '@/lib/session';
-import { PERMISSION_GROUPS, ROLES } from '@/mocks/data';
+import { usePermissions, useRoles } from '@/lib/queries/master-data';
+import type { PermissionInfo } from '@/lib/types';
 
 /**
  * บทบาทและสิทธิ์ — company_admin อ่านได้ · super_admin แก้ได้
@@ -18,7 +20,54 @@ import { PERMISSION_GROUPS, ROLES } from '@/mocks/data';
  * เพราะตรวจที่ approval_request.approver_id ของแถวนั้นโดยตรง ไม่ผ่านบทบาท
  * ถ้าไม่แสดงไว้ จะมีคนสงสัยว่าทำไมสิทธิ์นี้หายไปจากตาราง
  */
+
+/**
+ * ป้ายชื่อกลุ่มสิทธิ์
+ *
+ * เก็บไว้ฝั่งหน้าจอเพราะเป็นเรื่องการแสดงผลล้วน ๆ — API คืน `group_name`
+ * ที่เป็นรหัสภาษาอังกฤษ ซึ่งใช้จัดกลุ่มได้แต่ไม่เหมาะให้ผู้ใช้อ่าน
+ *
+ * กลุ่มที่ไม่มีในแมปนี้จะแสดงรหัสดิบแทน ไม่หายไปจากหน้าจอ —
+ * สิทธิ์ที่มองไม่เห็นคือสิทธิ์ที่ไม่มีใครตรวจ
+ */
+const GROUP_LABEL: Record<string, string> = {
+  ticket: 'ເລື່ອງແຈ້ງ',
+  approval: 'ການອະນຸມັດ',
+  user: 'ຜູ້ໃຊ້',
+  org: 'ໂຄງສ້າງອົງກອນ',
+  sla: 'SLA ແລະ ການຍົກລະດັບ',
+  kb: 'ຄັງຄວາມຮູ້',
+  report: 'ລາຍງານ',
+  admin: 'ຜູ້ດູແລລະບົບ',
+  notification: 'ການແຈ້ງເຕືອນ',
+};
+
+function groupPermissions(
+  permissions: PermissionInfo[],
+): { group: string; label: string; permissions: PermissionInfo[] }[] {
+  const byGroup = new Map<string, PermissionInfo[]>();
+  for (const p of permissions) {
+    const key = p.group_name || 'other';
+    const list = byGroup.get(key);
+    if (list) list.push(p);
+    else byGroup.set(key, [p]);
+  }
+  return [...byGroup.entries()].map(([group, list]) => ({
+    group,
+    label: GROUP_LABEL[group] ?? group,
+    permissions: list,
+  }));
+}
+
 export default function RolesPage(): React.JSX.Element {
+  const rolesQuery = useRoles();
+  const permissionsQuery = usePermissions();
+  const ROLES = rolesQuery.data ?? [];
+  const PERMISSION_GROUPS = React.useMemo(
+    () => groupPermissions(permissionsQuery.data ?? []),
+    [permissionsQuery.data],
+  );
+
   const canEdit = useHasRole('super_admin');
 
   /**
@@ -67,8 +116,6 @@ export default function RolesPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /roles · GET /permissions" />
-
       {!canEdit && (
         <Alert tone="info" title="ໂໝດອ່ານຢ່າງດຽວ">
           ຜູ້ດູແລລະດັບບໍລິສັດເບິ່ງເມທຣິກນີ້ໄດ້ ແຕ່ແກ້ບໍ່ໄດ້ — ການແກ້ສິດຂອງບົດບາດ
@@ -81,6 +128,7 @@ export default function RolesPage(): React.JSX.Element {
           <CardTitle>ບົດບາດ</CardTitle>
         </CardHeader>
         <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <QueryBoundary query={rolesQuery}>
           {ROLES.map((role) => (
             <div key={role.id} className="rounded border border-hair p-3">
               <p className="text-body-sm font-semibold">{role.name_th}</p>
@@ -91,6 +139,7 @@ export default function RolesPage(): React.JSX.Element {
               </p>
             </div>
           ))}
+          </QueryBoundary>
         </CardBody>
       </Card>
 

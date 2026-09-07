@@ -8,9 +8,10 @@ import { ROLE_LABEL_KEY } from '@/components/layout/app-shell';
 import { useT } from '@/components/layout/preference-controls';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
-import { CHECKLIST_TEMPLATES } from '@/mocks/admin-data';
+import { useChecklistTemplates } from '@/lib/queries/master-data';
 import type { RoleCode } from '@/lib/types';
 
 /**
@@ -22,6 +23,8 @@ import type { RoleCode } from '@/lib/types';
  */
 export default function ChecklistsPage(): React.JSX.Element {
   const t = useT();
+  const query = useChecklistTemplates();
+  const templates = query.data ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -37,14 +40,13 @@ export default function ChecklistsPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /checklist-templates" />
-
       <Alert tone="info" title="ຂໍ້ທີ່ຕ້ອງແນບຫຼັກຖານ ຕິກສຳເລັດບໍ່ໄດ້ຖ້າຍັງບໍ່ແນບໄຟລ໌">
         ບັງຄັບໄວ້ທີ່ລະດັບຖານຂໍ້ມູນ ບໍ່ແມ່ນແຄ່ໃນໜ້າຈໍ ຈຶ່ງຂ້າມບໍ່ໄດ້ເຖິງແມ່ນຈະແກ້ຜ່ານ API ໂດຍກົງ
       </Alert>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        {CHECKLIST_TEMPLATES.map((template) => {
+      <QueryBoundary query={query}>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {templates.map((template) => {
           const required = template.items.filter((i) => i.is_required).length;
           const evidence = template.items.filter((i) => i.evidence_required).length;
 
@@ -115,8 +117,9 @@ export default function ChecklistsPage(): React.JSX.Element {
               </CardBody>
             </Card>
           );
-        })}
-      </div>
+          })}
+        </div>
+      </QueryBoundary>
     </div>
   );
 }

@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/data-table';
 import { Input } from '@/components/ui/field';
-import { Alert, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { weekdayName } from '@/lib/format';
-import { BUSINESS_HOURS, HOLIDAYS } from '@/mocks/data';
+import { useBusinessHours, useHolidays } from '@/lib/queries/master-data';
 
 /**
  * เวลาทำการและวันหยุด (FR-36)
@@ -21,7 +22,29 @@ import { BUSINESS_HOURS, HOLIDAYS } from '@/mocks/data';
  * จึงเตือนไว้ชัดเจนแทนที่จะปล่อยให้เป็นสวิตช์ธรรมดา
  */
 export default function BusinessHoursPage(): React.JSX.Element {
-  const [rows, setRows] = React.useState(BUSINESS_HOURS);
+  const hoursQuery = useBusinessHours();
+  const holidaysQuery = useHolidays();
+
+  /*
+   * แถวระดับกลุ่ม (company_id = null) คือค่าเริ่มต้นที่ทุกบริษัทใช้ร่วมกัน
+   * หน้านี้แสดงชุดนั้น เพราะการแก้เวลาทำการเป็นสิทธิ์ระดับกลุ่ม
+   * ถ้าไม่มีแถวระดับกลุ่มเลย ค่อยตกมาที่แถวทั้งหมดที่เห็นได้
+   */
+  const allHours = React.useMemo(() => hoursQuery.data ?? [], [hoursQuery.data]);
+  const groupHours = React.useMemo(() => {
+    const shared = allHours.filter((h) => h.company_id === null);
+    return shared.length > 0 ? shared : allHours;
+  }, [allHours]);
+
+  /*
+   * สำเนาไว้ใน state เพื่อให้สลับสวิตช์ในหน้าจอได้ก่อนบันทึก
+   * ต้อง sync เมื่อข้อมูลจากเซิร์ฟเวอร์มาถึง มิฉะนั้นค่าเริ่มต้นที่ว่าง
+   * จะค้างอยู่ตลอดแม้คิวรีจะสำเร็จแล้ว
+   */
+  const [rows, setRows] = React.useState<typeof groupHours>([]);
+  React.useEffect(() => setRows(groupHours), [groupHours]);
+
+  const holidays = holidaysQuery.data ?? [];
   const workingDays = rows.filter((r) => r.is_working_day).length;
 
   return (
@@ -30,8 +53,6 @@ export default function BusinessHoursPage(): React.JSX.Element {
         title="ເວລາເຮັດວຽກ ແລະ ວັນພັກ"
         description="ໃຊ້ຄຳນວນນາທີເຮັດວຽກຂອງທຸກເລື່ອງທີ່ບໍ່ແມ່ນ P1"
       />
-
-      <MockNotice endpoint="GET /business-hours · GET /holidays" />
 
       <Alert tone="warning" title="ການປ່ຽນຄ່າໃນໜ້ານີ້ກະທົບກຳນົດເວລາຂອງທຸກເລື່ອງທັນທີ">
         1 ມື້ເຮັດວຽກຄິດເປັນ 540 ນາທີ ຈາກ 5 ມື້ເຮັດວຽກຕໍ່ອາທິດ
@@ -45,7 +66,8 @@ export default function BusinessHoursPage(): React.JSX.Element {
           <span className="tabular text-body-sm text-ink-2">{workingDays} ມື້ເຮັດວຽກຕໍ່ອາທິດ</span>
         </CardHeader>
         <CardBody className="space-y-2">
-          {rows.map((row) => (
+          <QueryBoundary query={hoursQuery}>
+            {rows.map((row) => (
             <div
               key={row.day_of_week}
               className={cn(
@@ -77,7 +99,7 @@ export default function BusinessHoursPage(): React.JSX.Element {
                 <span className="flex min-w-0 flex-1 items-center gap-2">
                   <Input
                     type="time"
-                    value={row.start_time}
+                    value={row.start_time ?? ''}
                     aria-label={`ເວລາເລີ່ມ ${weekdayName(row.day_of_week)}`}
                     onChange={(e) =>
                       setRows((prev) =>
@@ -95,7 +117,7 @@ export default function BusinessHoursPage(): React.JSX.Element {
                   </span>
                   <Input
                     type="time"
-                    value={row.end_time}
+                    value={row.end_time ?? ''}
                     aria-label={`ເວລາເລີກ ${weekdayName(row.day_of_week)}`}
                     onChange={(e) =>
                       setRows((prev) =>
@@ -111,7 +133,8 @@ export default function BusinessHoursPage(): React.JSX.Element {
                 <span className="text-body-sm text-ink-3">ບໍ່ແມ່ນວັນເຮັດວຽກ</span>
               )}
             </div>
-          ))}
+            ))}
+          </QueryBoundary>
         </CardBody>
         <CardFooter className="justify-end">
           <Button onClick={() => toast.success('ບັນທຶກເວລາເຮັດວຽກແລ້ວ')}>ບັນທຶກ</Button>
@@ -126,7 +149,7 @@ export default function BusinessHoursPage(): React.JSX.Element {
             ເພີ່ມວັນພັກ
           </Button>
         </CardHeader>
-        {HOLIDAYS.length === 0 ? (
+        {holidays.length === 0 ? (
           <>
             <div className="px-4 pt-4 lg:px-5">
               <Alert tone="danger" title="ຍັງບໍ່ໄດ້ຮັບປະຕິທິນວັນພັກສະບັບທາງການ">
@@ -144,7 +167,7 @@ export default function BusinessHoursPage(): React.JSX.Element {
         ) : (
           <CardBody>
             <ul className="divide-y divide-hair">
-              {HOLIDAYS.map((h) => (
+              {holidays.map((h) => (
                 <li key={h.id} className="flex items-center justify-between py-2">
                   <span className="text-body-sm">{h.name}</span>
                   <span className="tabular text-caption text-ink-2">{h.holiday_date}</span>

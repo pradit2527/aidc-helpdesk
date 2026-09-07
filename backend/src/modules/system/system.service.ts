@@ -83,8 +83,16 @@ export class SystemService {
     checks: {
       key: string;
       label: string;
-      status: 'ok' | 'warn' | 'blocked';
+      /*
+       * ชื่อสถานะตรงกับที่หน้าจอใช้ ('warning' ไม่ใช่ 'warn')
+       * การให้ backend กับ frontend ใช้คำต่างกันแล้วแปลงกลางทาง
+       * เป็นจุดที่พลาดง่ายและพังเงียบ — สถานะที่แปลไม่ตรงจะตกไปเป็น
+       * ค่าเริ่มต้นของ switch แล้วแสดงเป็นสีเขียวทั้งที่ควรเป็นสีแดง
+       */
+      status: 'ok' | 'warning' | 'blocking';
       detail: string;
+      /** ลิงก์ไปหน้าที่แก้เรื่องนี้ได้ */
+      href: string;
       /** ข้อค้างที่ต้องให้องค์กรตอบ อ้างอิงตาม docs/02-data-model.md */
       ref: string | null;
     }[];
@@ -126,8 +134,9 @@ export class SystemService {
     const checks: Awaited<ReturnType<SystemService['readiness']>>['checks'] = [
       {
         key: 'business_hours',
+        href: '/admin/business-hours',
         label: 'เวลาทำการ',
-        status: n.businessHours > 0 ? 'ok' : 'blocked',
+        status: n.businessHours > 0 ? 'ok' : 'blocking',
         detail:
           n.businessHours > 0
             ? `กำหนดไว้ ${n.businessHours} รายการ`
@@ -136,8 +145,9 @@ export class SystemService {
       },
       {
         key: 'sla_policy',
+        href: '/admin/sla',
         label: 'นโยบาย SLA',
-        status: n.slaPolicies > 0 ? 'ok' : 'blocked',
+        status: n.slaPolicies > 0 ? 'ok' : 'blocking',
         detail:
           n.slaPolicies > 0
             ? `ใช้งานอยู่ ${n.slaPolicies} นโยบาย`
@@ -146,8 +156,9 @@ export class SystemService {
       },
       {
         key: 'holiday_calendar',
+        href: '/admin/business-hours',
         label: 'ปฏิทินวันหยุด',
-        status: n.holidays > 0 ? 'ok' : 'blocked',
+        status: n.holidays > 0 ? 'ok' : 'blocking',
         detail:
           n.holidays > 0
             ? `มีวันหยุด ${n.holidays} วันในระบบ`
@@ -157,8 +168,9 @@ export class SystemService {
       },
       {
         key: 'escalation_contacts',
+        href: '/admin/escalation',
         label: 'ผู้รับการยกระดับ',
-        status: n.contacts > 0 ? 'ok' : 'blocked',
+        status: n.contacts > 0 ? 'ok' : 'blocking',
         detail:
           n.contacts > 0
             ? `กำหนดไว้ ${n.contacts} รายการ`
@@ -168,8 +180,9 @@ export class SystemService {
       },
       {
         key: 'service_registry',
+        href: '/admin/services',
         label: 'ทะเบียนระบบงานระดับ critical',
-        status: n.criticalServices > 0 ? 'ok' : 'warn',
+        status: n.criticalServices > 0 ? 'ok' : 'warning',
         detail:
           n.criticalServices > 0
             ? `มี ${n.criticalServices} ระบบ`
@@ -179,8 +192,9 @@ export class SystemService {
       },
       {
         key: 'admin_account',
+        href: '/admin/users',
         label: 'บัญชีผู้ดูแล',
-        status: n.admins >= 2 ? 'ok' : n.admins === 1 ? 'warn' : 'blocked',
+        status: n.admins >= 2 ? 'ok' : n.admins === 1 ? 'warning' : 'blocking',
         detail:
           n.admins >= 2
             ? `มี ${n.admins} บัญชี`
@@ -192,8 +206,9 @@ export class SystemService {
       },
       {
         key: 'service_catalog',
+        href: '/admin/catalog',
         label: 'แคตตาล็อกบริการ',
-        status: n.catalogItems > 0 ? 'ok' : 'warn',
+        status: n.catalogItems > 0 ? 'ok' : 'warning',
         detail:
           n.catalogItems > 0
             ? `มี ${n.catalogItems} รายการ`
@@ -202,8 +217,9 @@ export class SystemService {
       },
       {
         key: 'knowledge_base',
+        href: '/kb',
         label: 'คลังความรู้',
-        status: n.publishedKb > 0 ? 'ok' : 'warn',
+        status: n.publishedKb > 0 ? 'ok' : 'warning',
         detail:
           n.publishedKb > 0
             ? `เผยแพร่แล้ว ${n.publishedKb} บทความ`
@@ -212,10 +228,11 @@ export class SystemService {
       },
       {
         key: 'backup',
+        href: '/admin/system',
         label: 'การสำรองข้อมูลนอกสถานที่',
         // อ่านจากตัวแปรสภาพแวดล้อมจริง ไม่ใช่ค่าคงที่ — วันที่ตั้งค่าเสร็จ
         // ข้อนี้ต้องเปลี่ยนเป็น ok เองโดยไม่ต้องแก้โค้ด
-        status: process.env.BACKUP_DESTINATION ? 'ok' : 'blocked',
+        status: process.env.BACKUP_DESTINATION ? 'ok' : 'blocking',
         detail: process.env.BACKUP_DESTINATION
           ? 'ตั้งค่าปลายทางสำรองข้อมูลแล้ว'
           : 'ยังไม่ได้ตั้ง BACKUP_DESTINATION — ข้อมูลทั้งหมดอยู่ที่เดียว',
@@ -223,7 +240,7 @@ export class SystemService {
       },
     ];
 
-    const blocking = checks.filter((c) => c.status === 'blocked');
+    const blocking = checks.filter((c) => c.status === 'blocking');
     return {
       ready: blocking.length === 0,
       blocking_count: blocking.length,

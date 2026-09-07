@@ -8,11 +8,16 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Alert, BackLink, MockNotice, PageHeader, Tabs } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader, Tabs } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { SERVICE_GROUP, SERVICE_TIER, type ServiceGroup, type ServiceTier } from '@/config/admin';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatMinutes, formatPercent } from '@/lib/format';
-import { MAINTENANCE_WINDOWS, SERVICES, SERVICE_OUTAGES } from '@/mocks/admin-data';
+import {
+  useMaintenanceWindows,
+  useServiceOutages,
+  useServices,
+} from '@/lib/queries/master-data';
 import type { MaintenanceWindow, ServiceOutage, ServiceRecord } from '@/lib/types';
 
 /**
@@ -25,8 +30,16 @@ import type { MaintenanceWindow, ServiceOutage, ServiceRecord } from '@/lib/type
 export default function ServicesPage(): React.JSX.Element {
   const [tab, setTab] = React.useState<'registry' | 'outages' | 'maintenance'>('registry');
 
-  const openOutages = SERVICE_OUTAGES.filter((o) => o.ended_at === null);
-  const unnotified = MAINTENANCE_WINDOWS.filter((w) => w.notified_at === null);
+  const servicesQuery = useServices();
+  const outagesQuery = useServiceOutages();
+  const windowsQuery = useMaintenanceWindows();
+
+  const services = servicesQuery.data ?? [];
+  const outages = outagesQuery.data ?? [];
+  const windows = windowsQuery.data ?? [];
+
+  const openOutages = outages.filter((o) => o.ended_at === null);
+  const unnotified = windows.filter((w) => w.notified_at === null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -35,8 +48,6 @@ export default function ServicesPage(): React.JSX.Element {
         title="ທະບຽນລະບົບງານ"
         description="ລະບົບງານ ເປົ້າໝາຍຄວາມພ້ອມໃຊ້ງານ ເຫດຂັດຂ້ອງ ແລະ ໜ້າຕ່າງບຳລຸງຮັກສາ"
       />
-
-      <MockNotice endpoint="GET /services · GET /service-outages · GET /maintenance-windows" />
 
       {openOutages.length > 0 && (
         <Alert tone="danger" title={`ມີເຫດຂັດຂ້ອງທີ່ຍັງບໍ່ຄືນບໍລິການ ${openOutages.length} ລາຍການ`}>
@@ -48,12 +59,12 @@ export default function ServicesPage(): React.JSX.Element {
         <div className="px-4 pt-1 lg:px-5">
           <Tabs
             tabs={[
-              { key: 'registry' as const, label: 'ລະບົບງານ', count: SERVICES.length },
-              { key: 'outages' as const, label: 'ເຫດຂັດຂ້ອງ', count: SERVICE_OUTAGES.length },
+              { key: 'registry' as const, label: 'ລະບົບງານ', count: services.length },
+              { key: 'outages' as const, label: 'ເຫດຂັດຂ້ອງ', count: outages.length },
               {
                 key: 'maintenance' as const,
                 label: 'ບຳລຸງຮັກສາ',
-                count: MAINTENANCE_WINDOWS.length,
+                count: windows.length,
               },
             ]}
             value={tab}
@@ -70,16 +81,28 @@ export default function ServicesPage(): React.JSX.Element {
         </div>
 
         <CardBody className="p-0">
-          {tab === 'registry' && <RegistryTable />}
-          {tab === 'outages' && <OutagesTable />}
-          {tab === 'maintenance' && <MaintenanceTable unnotified={unnotified.length} />}
+          {tab === 'registry' && (
+            <QueryBoundary query={servicesQuery}>
+              <RegistryTable services={services} />
+            </QueryBoundary>
+          )}
+          {tab === 'outages' && (
+            <QueryBoundary query={outagesQuery}>
+              <OutagesTable outages={outages} />
+            </QueryBoundary>
+          )}
+          {tab === 'maintenance' && (
+            <QueryBoundary query={windowsQuery}>
+              <MaintenanceTable unnotified={unnotified.length} windows={windows} />
+            </QueryBoundary>
+          )}
         </CardBody>
       </Card>
     </div>
   );
 }
 
-function RegistryTable(): React.JSX.Element {
+function RegistryTable({ services }: { services: ServiceRecord[] }): React.JSX.Element {
   const columns: Column<ServiceRecord>[] = [
     {
       key: 'name',
@@ -178,14 +201,14 @@ function RegistryTable(): React.JSX.Element {
   return (
     <DataTable
       columns={columns}
-      rows={SERVICES}
+      rows={services}
       rowKey={(s) => s.id}
       caption="ທະບຽນລະບົບງານ"
     />
   );
 }
 
-function OutagesTable(): React.JSX.Element {
+function OutagesTable({ outages }: { outages: ServiceOutage[] }): React.JSX.Element {
   const columns: Column<ServiceOutage>[] = [
     { key: 'service', header: 'ລະບົບງານ', render: (o) => o.service.name_th },
     {
@@ -257,7 +280,7 @@ function OutagesTable(): React.JSX.Element {
   return (
     <DataTable
       columns={columns}
-      rows={SERVICE_OUTAGES}
+      rows={outages}
       rowKey={(o) => o.id}
       caption="ບັນທຶກເຫດຂັດຂ້ອງ"
       emptyTitle="ຍັງບໍ່ມີບັນທຶກເຫດຂັດຂ້ອງ"
@@ -265,7 +288,13 @@ function OutagesTable(): React.JSX.Element {
   );
 }
 
-function MaintenanceTable({ unnotified }: { unnotified: number }): React.JSX.Element {
+function MaintenanceTable({
+  unnotified,
+  windows,
+}: {
+  unnotified: number;
+  windows: MaintenanceWindow[];
+}): React.JSX.Element {
   const columns: Column<MaintenanceWindow>[] = [
     { key: 'service', header: 'ລະບົບງານ', render: (w) => w.service?.name_th ?? 'ທຸກລະບົບ' },
     {
@@ -328,7 +357,7 @@ function MaintenanceTable({ unnotified }: { unnotified: number }): React.JSX.Ele
       )}
       <DataTable
         columns={columns}
-        rows={MAINTENANCE_WINDOWS}
+        rows={windows}
         rowKey={(w) => w.id}
         caption="ໜ້າຕ່າງບຳລຸງຮັກສາທີ່ວາງແຜນໄວ້"
         emptyTitle="ຍັງບໍ່ມີແຜນບຳລຸງຮັກສາ"

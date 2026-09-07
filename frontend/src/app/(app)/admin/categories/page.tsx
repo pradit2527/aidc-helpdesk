@@ -8,9 +8,10 @@ import { PriorityBadge } from '@/components/common/badges';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Alert, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { IMPACT_OPTIONS, URGENCY_OPTIONS, previewPriority } from '@/config/enums';
-import { TICKET_CATEGORIES } from '@/mocks/data';
+import { useCategories } from '@/lib/queries/master-data';
 import type { TicketCategory } from '@/lib/types';
 
 const IMPACT_LABEL = Object.fromEntries(IMPACT_OPTIONS.map((o) => [o.value, o.label]));
@@ -24,6 +25,9 @@ const URGENCY_LABEL = Object.fromEntries(URGENCY_OPTIONS.map((o) => [o.value, o.
  * เช่นหมวดที่ตั้งไว้ว่า P1 แต่ผลกระทบเป็นรายบุคคล — เมทริกซ์บอกว่าเป็น P3
  */
 export default function CategoriesPage(): React.JSX.Element {
+  const query = useCategories();
+  const categories = query.data ?? [];
+
   const columns: Column<TicketCategory>[] = [
     {
       key: 'name',
@@ -100,8 +104,6 @@ export default function CategoriesPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /categories" />
-
       <Alert tone="info" title="ບໍ່ມີຊ່ອງ “ລະດັບຄວາມສຳຄັນຕັ້ງຕົ້ນ” ໂດຍຕັ້ງໃຈ">
         ລະບົບຄຳນວນລະດັບຈາກ ຜົນກະທົບ × ຄວາມຮີບດ່ວນ ສະເໝີ (SLA ຂໍ້ 4)
         ຄໍລຳ “ລະດັບທີ່ໄດ້” ຄືຜົນຂອງສອງຄ່າຊ້າຍມື ບໍ່ແມ່ນຄ່າທີ່ຕັ້ງເອງໄດ້
@@ -109,12 +111,14 @@ export default function CategoriesPage(): React.JSX.Element {
 
       <Card>
         <CardBody className="p-0">
-          <DataTable
-            columns={columns}
-            rows={TICKET_CATEGORIES}
-            rowKey={(c) => c.id}
-            caption="ລາຍການໝວດໝູ່ບັນຫາ"
-          />
+          <QueryBoundary query={query}>
+            <DataTable
+              columns={columns}
+              rows={categories}
+              rowKey={(c) => c.id}
+              caption="ລາຍການໝວດໝູ່ບັນຫາ"
+            />
+          </QueryBoundary>
         </CardBody>
       </Card>
     </div>

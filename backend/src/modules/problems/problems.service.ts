@@ -94,8 +94,11 @@ export class ProblemsService {
 
     const now = Date.now();
     return paged(
-      rows.map((r) => ({
+      rows.map(({ company_id, company_code, service_id, service_name, owner_id, owner_name, ...r }) => ({
         ...r,
+        company: company_id === null ? null : { id: company_id, code: company_code },
+        service: service_id === null ? null : { id: service_id, name_th: service_name ?? '' },
+        owner: owner_id === null ? null : { id: owner_id, full_name: owner_name ?? '' },
         opened_at: r.opened_at.toISOString(),
         rca_due_at: r.rca_due_at?.toISOString() ?? null,
         rca_submitted_at: r.rca_submitted_at?.toISOString() ?? null,
@@ -157,8 +160,12 @@ export class ProblemsService {
       .limit(50);
 
     const now = Date.now();
+    const { company_id, company_code, service_id, service_name, owner_id, owner_name, ...rest } = row;
     return {
-      ...row,
+      ...rest,
+      company: company_id === null ? null : { id: company_id, code: company_code },
+      service: service_id === null ? null : { id: service_id, name_th: service_name ?? '' },
+      owner: owner_id === null ? null : { id: owner_id, full_name: owner_name ?? '' },
       opened_at: row.opened_at.toISOString(),
       rca_due_at: row.rca_due_at?.toISOString() ?? null,
       rca_submitted_at: row.rca_submitted_at?.toISOString() ?? null,

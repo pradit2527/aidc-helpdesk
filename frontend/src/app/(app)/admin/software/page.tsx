@@ -7,9 +7,10 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
-import { APPROVED_SOFTWARE } from '@/mocks/admin-data';
+import { useApprovedSoftware } from '@/lib/queries/master-data';
 import type { ApprovedSoftware } from '@/lib/types';
 
 /**
@@ -20,8 +21,10 @@ import type { ApprovedSoftware } from '@/lib/types';
  * ซึ่งมีค่าพอ ๆ กับรายการที่อนุญาต — เจ้าหน้าที่ต้องตอบได้ทันทีว่าลงได้ไหม
  */
 export default function SoftwarePage(): React.JSX.Element {
-  const allowed = APPROVED_SOFTWARE.filter((s) => s.is_active);
-  const blocked = APPROVED_SOFTWARE.filter((s) => !s.is_active);
+  const query = useApprovedSoftware();
+  const software = query.data ?? [];
+  const allowed = software.filter((s) => s.is_active);
+  const blocked = software.filter((s) => !s.is_active);
 
   const columns: Column<ApprovedSoftware>[] = [
     {
@@ -99,8 +102,6 @@ export default function SoftwarePage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /approved-software" />
-
       <Alert tone="info" title="ໃຊ້ຄູ່ກັບຄຳຂໍ “ຕິດຕັ້ງຊອບແວ” ໃນແຄັດຕາລັອກ">
         ເມື່ອຜູ້ໃຊ້ຂໍຕິດຕັ້ງຊອບແວທີ່ບໍ່ຢູ່ໃນບັນຊີນີ້ ເຈົ້າໜ້າທີ່ຕ້ອງສົ່ງເລື່ອງໃຫ້ພິຈາລະນາເພີ່ມເຂົ້າບັນຊີກ່ອນ
         ບໍ່ແມ່ນຕິດຕັ້ງໃຫ້ເລີຍ
@@ -108,12 +109,14 @@ export default function SoftwarePage(): React.JSX.Element {
 
       <Card>
         <CardBody className="p-0">
-          <DataTable
-            columns={columns}
-            rows={APPROVED_SOFTWARE}
-            rowKey={(s) => s.id}
-            caption="ບັນຊີຊອບແວທີ່ອະນຸມັດ"
-          />
+          <QueryBoundary query={query}>
+            <DataTable
+              columns={columns}
+              rows={software}
+              rowKey={(s) => s.id}
+              caption="ບັນຊີຊອບແວທີ່ອະນຸມັດ"
+            />
+          </QueryBoundary>
         </CardBody>
       </Card>
     </div>

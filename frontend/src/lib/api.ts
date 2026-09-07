@@ -68,6 +68,13 @@ export interface PageMeta {
   page_size?: number;
   total?: number;
   total_pages?: number;
+  /**
+   * จำนวนที่ยังไม่อ่าน — มีเฉพาะ GET /notifications
+   *
+   * นับจากทั้งหมด ไม่ใช่จากหน้าปัจจุบัน จึงใช้เป็นตัวเลขบนกระดิ่งได้ตรง ๆ
+   * โดยไม่ต้องดึงทุกหน้ามานับเอง
+   */
+  unread?: number;
 }
 
 /** ผลลัพธ์ของ endpoint ที่แบ่งหน้า — รายการกับตัวเลขแยกกันคนละที่ในซอง */
@@ -77,6 +84,7 @@ export interface Page<T> {
   page_size: number;
   total: number;
   total_pages: number;
+  unread?: number;
 }
 
 /** ข้อความที่ผู้ใช้อ่านแล้วรู้ว่าต้องทำอะไรต่อ ไม่ใช่ชื่อรหัสดิบ */
@@ -225,6 +233,7 @@ export async function apiRequestPage<T>(
     page_size: meta.page_size ?? items.length,
     total: meta.total ?? items.length,
     total_pages: meta.total_pages ?? 1,
+    ...(meta.unread !== undefined ? { unread: meta.unread } : {}),
   };
 }
 

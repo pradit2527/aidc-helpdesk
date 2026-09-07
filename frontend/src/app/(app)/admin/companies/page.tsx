@@ -1,19 +1,20 @@
 'use client';
 
-import { Pencil, Plus } from 'lucide-react';
 import * as React from 'react';
-import { toast } from 'sonner';
 
-import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { MockNotice, PageHeader } from '@/components/ui/misc';
+import { PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { formatNumber } from '@/lib/format';
-import { COMPANIES } from '@/mocks/data';
+import { useCompanies } from '@/lib/queries/master-data';
 import type { Company } from '@/lib/types';
 
-/** จัดการบริษัท — 7 บริษัทในกลุ่ม + โลโก้หัวรายงาน */
+/** จัดการบริษัท — 7 บริษัทในกลุ่ม */
 export default function CompaniesPage(): React.JSX.Element {
+  const query = useCompanies();
+  const rows = query.data ?? [];
+
   const columns: Column<Company>[] = [
     {
       key: 'code',
@@ -44,20 +45,9 @@ export default function CompaniesPage(): React.JSX.Element {
       align: 'right',
       render: (c) => <span className="tabular">{formatNumber(c.open_ticket_count)}</span>,
     },
-    {
-      key: 'actions',
-      header: '',
-      align: 'right',
-      render: (c) => (
-        <Button variant="ghost" size="sm" onClick={() => toast.info(`ແກ້ໄຂ ${c.code}`)}>
-          <Pencil className="h-4 w-4" aria-hidden="true" />
-          <span className="sr-only">ແກ້ໄຂ {c.code}</span>
-        </Button>
-      ),
-    },
   ];
 
-  const totals = COMPANIES.reduce(
+  const totals = rows.reduce(
     (acc, c) => ({ users: acc.users + c.user_count, open: acc.open + c.open_ticket_count }),
     { users: 0, open: 0 },
   );
@@ -66,32 +56,28 @@ export default function CompaniesPage(): React.JSX.Element {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="ຈັດການບໍລິສັດ"
-        description="ຂໍ້ມູນບໍລິສັດໃນກຸ່ມ ແລະ ໂລໂກ້ທີ່ໃຊ້ເທິງຫົວລາຍງານ"
-        actions={
-          <Button onClick={() => toast.info('ຟອມເພີ່ມບໍລິສັດ')}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            ເພີ່ມບໍລິສັດ
-          </Button>
-        }
+        description="ຂໍ້ມູນບໍລິສັດໃນກຸ່ມ ແລະ ຈຳນວນຜູ້ໃຊ້ຂອງແຕ່ລະບໍລິສັດ"
       />
-
-      <MockNotice endpoint="GET /companies" />
 
       <Card>
         <CardBody className="p-0">
-          <DataTable
-            columns={columns}
-            rows={COMPANIES}
-            rowKey={(c) => c.id}
-            caption="ລາຍການບໍລິສັດໃນກຸ່ມ"
-          />
+          <QueryBoundary query={query}>
+            <DataTable
+              columns={columns}
+              rows={rows}
+              rowKey={(c) => c.id}
+              caption="ລາຍການບໍລິສັດໃນກຸ່ມ"
+            />
+          </QueryBoundary>
         </CardBody>
       </Card>
 
-      <p className="tabular text-caption text-ink-3">
-        ລວມ {COMPANIES.length} ບໍລິສັດ · ຜູ້ໃຊ້ {formatNumber(totals.users)} ຄົນ ·
-        ເລື່ອງທີ່ເປີດຢູ່ {formatNumber(totals.open)} ລາຍການ
-      </p>
+      {query.isSuccess && (
+        <p className="tabular text-caption text-ink-3">
+          ລວມ {rows.length} ບໍລິສັດ · ຜູ້ໃຊ້ {formatNumber(totals.users)} ຄົນ · ເລື່ອງທີ່ເປີດຢູ່{' '}
+          {formatNumber(totals.open)} ລາຍການ
+        </p>
+      )}
     </div>
   );
 }

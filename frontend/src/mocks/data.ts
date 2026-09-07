@@ -475,6 +475,7 @@ export const TICKET_CATEGORIES: TicketCategory[] = [
 // ── SLA และเวลาทำการ ───────────────────────────────────────────────────
 export const SLA_POLICY: SlaPolicy = {
   id: 1,
+  company: null,
   name: 'AIDC ມາດຕະຖານກຸ່ມ',
   doc_ref: 'AIDC-IT-SLA-001',
   doc_version: '1.1',

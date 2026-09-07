@@ -8,11 +8,12 @@ import { PriorityBadge } from '@/components/common/badges';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, EmptyState, type Column } from '@/components/ui/data-table';
-import { Alert, BackLink, MockNotice, PageHeader, Tabs } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader, Tabs } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { BLOCKING_CONTACT_KEYS, CONTACT_KEY, TRIGGER_TYPE, type ContactKey } from '@/config/admin';
 import { cn } from '@/lib/cn';
 import { formatMinutes } from '@/lib/format';
-import { ESCALATION_CONTACTS, ESCALATION_RULES } from '@/mocks/admin-data';
+import { useEscalationContacts, useEscalationRules } from '@/lib/queries/master-data';
 import type { EscalationContact, EscalationRule } from '@/lib/types';
 
 /**
@@ -26,17 +27,30 @@ import type { EscalationContact, EscalationRule } from '@/lib/types';
  */
 export default function EscalationPage(): React.JSX.Element {
   const [tab, setTab] = React.useState<'rules' | 'contacts'>('rules');
+  const rulesQuery = useEscalationRules();
+  const contactsQuery = useEscalationContacts();
 
-  const activeKeys = new Set(
-    ESCALATION_CONTACTS.filter((c) => c.is_active).map((c) => c.contact_key),
+  const rules = React.useMemo(() => rulesQuery.data ?? [], [rulesQuery.data]);
+  const contacts = React.useMemo(() => contactsQuery.data ?? [], [contactsQuery.data]);
+
+  const activeKeys = React.useMemo(
+    () => new Set(contacts.filter((c) => c.is_active).map((c) => c.contact_key)),
+    [contacts],
   );
   const missingKeys = BLOCKING_CONTACT_KEYS.filter((k) => !activeKeys.has(k));
 
-  /** กฎที่อ้างผู้รับแจ้งที่ยังไม่มีตัวตน — ส่งแจ้งเตือนไม่ถึงใครเลย */
-  const mutedRules = ESCALATION_RULES.filter((rule) => {
-    const keys = rule.notify_contact_keys.split(',').filter(Boolean);
-    return keys.length > 0 && keys.every((k) => !activeKeys.has(k));
-  });
+  /*
+   * กฎที่อ้างผู้รับแจ้งที่ยังไม่มีตัวตน — ส่งแจ้งเตือนไม่ถึงใครเลย
+   *
+   * คำนวณได้ก็ต่อเมื่อโหลดผู้รับแจ้งสำเร็จแล้ว มิฉะนั้นรายการว่างระหว่างโหลด
+   * จะทำให้ทุกกฎถูกตีเป็น "เงียบ" แล้วขึ้นคำเตือนผิด ๆ ชั่วขณะ
+   */
+  const mutedRules = contactsQuery.isSuccess
+    ? rules.filter((rule) => {
+        const keys = rule.notify_contact_keys.split(',').filter(Boolean);
+        return keys.length > 0 && keys.every((k) => !activeKeys.has(k));
+      })
+    : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -45,8 +59,6 @@ export default function EscalationPage(): React.JSX.Element {
         title="ກົດຍົກລະດັບ ແລະ ຜູ້ຮັບແຈ້ງ"
         description="ES-01…ES-12 ຕາມ AIDC-IT-SLA-001 — ແກ້ໄດ້ໂດຍບໍ່ຕ້ອງ deploy ໃໝ່"
       />
-
-      <MockNotice endpoint="GET /escalation/rules · GET /escalation/contacts" />
 
       {missingKeys.length > 0 && (
         <Alert tone="danger" title="ຍັງກຳນົດຜູ້ຮັບແຈ້ງບໍ່ຄົບ — ບລັອກການເປີດໃຊ້ງານຈິງ (Q-07)">
@@ -66,8 +78,8 @@ export default function EscalationPage(): React.JSX.Element {
         <div className="px-4 pt-1 lg:px-5">
           <Tabs
             tabs={[
-              { key: 'rules' as const, label: 'ກົດຍົກລະດັບ', count: ESCALATION_RULES.length },
-              { key: 'contacts' as const, label: 'ຜູ້ຮັບແຈ້ງ', count: ESCALATION_CONTACTS.length },
+              { key: 'rules' as const, label: 'ກົດຍົກລະດັບ', count: rules.length },
+              { key: 'contacts' as const, label: 'ຜູ້ຮັບແຈ້ງ', count: contacts.length },
             ]}
             value={tab}
             onChange={setTab}
@@ -76,9 +88,13 @@ export default function EscalationPage(): React.JSX.Element {
         </div>
         <CardBody className="p-0">
           {tab === 'rules' ? (
-            <RulesTable activeKeys={activeKeys} />
+            <QueryBoundary query={rulesQuery}>
+              <RulesTable activeKeys={activeKeys} rules={rules} />
+            </QueryBoundary>
           ) : (
-            <ContactsTable activeKeys={activeKeys} />
+            <QueryBoundary query={contactsQuery}>
+              <ContactsTable activeKeys={activeKeys} contacts={contacts} />
+            </QueryBoundary>
           )}
         </CardBody>
       </Card>
@@ -106,7 +122,13 @@ export default function EscalationPage(): React.JSX.Element {
   );
 }
 
-function RulesTable({ activeKeys }: { activeKeys: Set<string> }): React.JSX.Element {
+function RulesTable({
+  activeKeys,
+  rules,
+}: {
+  activeKeys: Set<string>;
+  rules: EscalationRule[];
+}): React.JSX.Element {
   const columns: Column<EscalationRule>[] = [
     {
       key: 'code',
@@ -225,14 +247,20 @@ function RulesTable({ activeKeys }: { activeKeys: Set<string> }): React.JSX.Elem
   return (
     <DataTable
       columns={columns}
-      rows={ESCALATION_RULES}
+      rows={rules}
       rowKey={(r) => r.id}
       caption="ກົດຍົກລະດັບ ES-01 ເຖິງ ES-12"
     />
   );
 }
 
-function ContactsTable({ activeKeys }: { activeKeys: Set<string> }): React.JSX.Element {
+function ContactsTable({
+  activeKeys,
+  contacts,
+}: {
+  activeKeys: Set<string>;
+  contacts: EscalationContact[];
+}): React.JSX.Element {
   const missing = BLOCKING_CONTACT_KEYS.filter((k) => !activeKeys.has(k));
 
   const columns: Column<EscalationContact>[] = [
@@ -309,7 +337,7 @@ function ContactsTable({ activeKeys }: { activeKeys: Set<string> }): React.JSX.E
         </Button>
       </div>
 
-      {ESCALATION_CONTACTS.length === 0 ? (
+      {contacts.length === 0 ? (
         <EmptyState
           icon={AlertOctagon}
           title="ຍັງບໍ່ມີຜູ້ຮັບແຈ້ງໃນລະບົບ"
@@ -318,7 +346,7 @@ function ContactsTable({ activeKeys }: { activeKeys: Set<string> }): React.JSX.E
       ) : (
         <DataTable
           columns={columns}
-          rows={ESCALATION_CONTACTS}
+          rows={contacts}
           rowKey={(c) => c.id}
           caption="ຜູ້ຮັບແຈ້ງຂອງກົດຍົກລະດັບ"
         />

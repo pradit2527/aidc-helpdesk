@@ -8,15 +8,23 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Select } from '@/components/ui/field';
-import { Alert, MockNotice, PageHeader } from '@/components/ui/misc';
+import { PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { formatNumber } from '@/lib/format';
-import { COMPANIES, DEPARTMENTS } from '@/mocks/data';
+import { useCompanies, useDepartments } from '@/lib/queries/master-data';
 import type { Department } from '@/lib/types';
 
 /** จัดการแผนก (FR-27) */
 export default function DepartmentsPage(): React.JSX.Element {
   const [company, setCompany] = React.useState('');
-  const rows = DEPARTMENTS.filter((d) => !company || String(d.company.id) === company);
+  const departments = useDepartments();
+  const companies = useCompanies();
+
+  // กรองฝั่งหน้าจอได้เพราะรายการแผนกทั้งกลุ่มมีไม่ถึงร้อยรายการ
+  // ถ้าโตกว่านี้ต้องย้ายไปเป็นพารามิเตอร์ของ API แทน
+  const rows = (departments.data ?? []).filter(
+    (d) => !company || String(d.company.id) === company,
+  );
 
   const columns: Column<Department>[] = [
     { key: 'name', header: 'ຊື່ພະແນກ', render: (d) => <span className="text-body-sm font-semibold">{d.name}</span> },
@@ -77,12 +85,6 @@ export default function DepartmentsPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /departments" />
-
-      <Alert tone="warning" title="ໂຄງສ້າງພະແນກຈິງຂອງ 7 ບໍລິສັດຍັງບໍ່ໄດ້ຮັບ">
-        ຂໍ້ມູນທີ່ເຫັນເປັນຊຸດຕົວຢ່າງ ຕ້ອງປ່ຽນເປັນໂຄງສ້າງຈິງກ່ອນເປີດໃຊ້ງານ
-      </Alert>
-
       <Card>
         <CardBody className="border-b border-hair">
           <Select
@@ -92,20 +94,22 @@ export default function DepartmentsPage(): React.JSX.Element {
             className="sm:max-w-xs"
           >
             <option value="">ທຸກບໍລິສັດໃນຂອບເຂດ</option>
-            {COMPANIES.map((c) => (
+            {(companies.data ?? []).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.code}
               </option>
             ))}
           </Select>
         </CardBody>
-        <DataTable
-          columns={columns}
-          rows={rows}
-          rowKey={(d) => d.id}
-          caption="ລາຍການພະແນກ"
-          emptyTitle="ຍັງບໍ່ມີພະແນກໃນບໍລິສັດນີ້"
-        />
+        <QueryBoundary query={departments}>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(d) => d.id}
+            caption="ລາຍການພະແນກ"
+            emptyTitle="ຍັງບໍ່ມີພະແນກໃນບໍລິສັດນີ້"
+          />
+        </QueryBoundary>
       </Card>
     </div>
   );

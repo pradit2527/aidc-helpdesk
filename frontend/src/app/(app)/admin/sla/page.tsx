@@ -6,9 +6,10 @@ import * as React from 'react';
 import { PriorityBadge } from '@/components/common/badges';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Alert, DefRow, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, DefRow, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { formatDate, formatMinutes } from '@/lib/format';
-import { SLA_POLICY } from '@/mocks/data';
+import { useSlaPolicies } from '@/lib/queries/master-data';
 import type { SlaTarget } from '@/lib/types';
 
 /**
@@ -19,6 +20,17 @@ import type { SlaTarget } from '@/lib/types';
  * เปิดทางให้เลี่ยงกระบวนการเอกสารทั้งหมด
  */
 export default function SlaSettingsPage(): React.JSX.Element {
+  const query = useSlaPolicies();
+
+  /*
+   * แสดงนโยบายที่เป็นค่าเริ่มต้นของทั้งกลุ่ม
+   *
+   * เลือก is_default ก่อน แล้วค่อยตกมาที่ตัวแรก — ไม่หยิบ [0] ตรง ๆ
+   * เพราะลำดับที่ API คืนมาเรียงตาม id ซึ่งไม่ได้แปลว่าตัวแรกคือตัวที่ใช้จริง
+   */
+  const policies = query.data ?? [];
+  const policy = policies.find((p) => p.is_default) ?? policies[0] ?? null;
+
   const columns: Column<SlaTarget>[] = [
     {
       key: 'priority',
@@ -95,8 +107,6 @@ export default function SlaSettingsPage(): React.JSX.Element {
         description="ຄ່າມາດຕະຖານທີ່ໃຊ້ຄຳນວນກຳນົດເວລາຂອງທຸກເລື່ອງແຈ້ງ"
       />
 
-      <MockNotice endpoint="GET /sla/policies" />
-
       <Alert tone="warning" title="ຄ່າເຫຼົ່ານີ້ຜູກກັບເອກະສານຄວບຄຸມ">
         ການແກ້ຄ່າໃນໜ້ານີ້ຕ້ອງມີການແກ້ໄຂເອກະສານ AIDC-IT-SLA-001 ແລະ ຜ່ານການອະນຸມັດກ່ອນ
         (SLA ຂໍ້ 10) — ຜູ້ດູແລລະດັບບໍລິສັດແກ້ບໍ່ໄດ້ ເຫັນໄດ້ຢ່າງດຽວ
@@ -111,20 +121,24 @@ export default function SlaSettingsPage(): React.JSX.Element {
           </span>
         </CardHeader>
         <CardBody>
+          <QueryBoundary query={query}>
           <dl className="divide-y divide-hair">
-            <DefRow label="ຊື່ນະໂຍບາຍ">{SLA_POLICY.name}</DefRow>
+            <DefRow label="ຊື່ນະໂຍບາຍ">{policy?.name ?? '—'}</DefRow>
             <DefRow label="ເອກະສານອ້າງອີງ">
               <span className="inline-flex items-center gap-1.5">
                 <FileText className="h-3.5 w-3.5 text-ink-3" aria-hidden="true" />
-                {SLA_POLICY.doc_ref} v{SLA_POLICY.doc_version}
+                {policy?.doc_ref ?? '—'} v{policy?.doc_version ?? '—'}
               </span>
             </DefRow>
-            <DefRow label="ບັງຄັບໃຊ້ຕັ້ງແຕ່">{formatDate(SLA_POLICY.effective_from)}</DefRow>
+            <DefRow label="ບັງຄັບໃຊ້ຕັ້ງແຕ່">{policy?.effective_from ? formatDate(policy.effective_from) : '—'}</DefRow>
             <DefRow label="ສິ້ນສຸດ">
-              {SLA_POLICY.effective_to ? formatDate(SLA_POLICY.effective_to) : 'ຍັງບັງຄັບໃຊ້ຢູ່'}
+              {policy?.effective_to ? formatDate(policy.effective_to) : 'ຍັງບັງຄັບໃຊ້ຢູ່'}
             </DefRow>
-            <DefRow label="ຂອບເຂດ">ໃຊ້ຮ່ວມທັງ 7 ບໍລິສັດ</DefRow>
+            <DefRow label="ຂອບເຂດ">
+              {policy?.company ? policy.company.code : 'ໃຊ້ຮ່ວມທຸກບໍລິສັດໃນກຸ່ມ'}
+            </DefRow>
           </dl>
+          </QueryBoundary>
         </CardBody>
       </Card>
 
@@ -133,12 +147,15 @@ export default function SlaSettingsPage(): React.JSX.Element {
           <CardTitle>ເປົ້າໝາຍຕາມລະດັບຄວາມສຳຄັນ</CardTitle>
         </CardHeader>
         <CardBody className="p-0">
-          <DataTable
-            columns={columns}
-            rows={SLA_POLICY.targets}
-            rowKey={(t) => t.priority}
-            caption="ເປົ້າໝາຍ SLA ຕາມລະດັບຄວາມສຳຄັນ"
-          />
+          <QueryBoundary query={query}>
+            <DataTable
+              columns={columns}
+              rows={policy?.targets ?? []}
+              rowKey={(t) => t.priority}
+              caption="ເປົ້າໝາຍ SLA ຕາມລະດັບຄວາມສຳຄັນ"
+              emptyTitle="ຍັງບໍ່ມີນະໂຍບາຍ SLA ທີ່ເປີດໃຊ້"
+            />
+          </QueryBoundary>
         </CardBody>
       </Card>
 
