@@ -14,7 +14,18 @@ import * as schema from './schema';
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
-    throw new Error(`ไม่ได้ตั้งค่า ${name} — คัดลอก .env.example เป็น .env ก่อน`);
+    /*
+     * ข้อความต้องบอกทางแก้ที่ตรงกับที่ที่โปรเซสกำลังรันอยู่
+     *
+     * เดิมบอกให้ "คัดลอก .env.example เป็น .env" ซึ่งถูกเฉพาะบนเครื่องพัฒนา
+     * บนโฮสต์อย่าง Render หรือ Railway ไม่มีไฟล์ .env เลย ต้องตั้งค่าในหน้าเว็บ
+     * คนที่เจอ error นี้ตอน deploy จะไปหาไฟล์ที่ไม่มีวันมี แล้วเสียเวลาเปล่า
+     */
+    const inContainer = process.env.NODE_ENV === 'production';
+    const hint = inContainer
+      ? 'ตั้งค่าตัวแปรนี้ในหน้า Environment ของผู้ให้บริการโฮสต์ (Render / Railway) แล้ว deploy ใหม่'
+      : 'คัดลอก .env.example เป็น .env แล้วเติมค่าให้ครบ';
+    throw new Error(`ไม่ได้ตั้งค่า ${name} — ${hint}`);
   }
   return value;
 }
