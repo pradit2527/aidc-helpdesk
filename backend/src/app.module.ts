@@ -23,8 +23,12 @@ import { SlaConfigRepository } from './db/repositories/sla-config.repository';
 import { TicketRepository } from './db/repositories/ticket.repository';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
+import { DashboardController } from './modules/dashboard/dashboard.controller';
+import { DashboardService } from './modules/dashboard/dashboard.service';
 import { HealthController } from './modules/health/health.controller';
 import { HealthService } from './modules/health/health.service';
+import { SystemController } from './modules/system/system.controller';
+import { SystemService } from './modules/system/system.service';
 import { TicketsController } from './modules/tickets/tickets.controller';
 import { TicketsService } from './modules/tickets/tickets.service';
 
@@ -37,12 +41,20 @@ import { TicketsService } from './modules/tickets/tickets.service';
     RedisModule,
     JobsModule,
   ],
-  controllers: [AuthController, HealthController, TicketsController],
+  controllers: [
+    AuthController,
+    DashboardController,
+    HealthController,
+    SystemController,
+    TicketsController,
+  ],
   providers: [
     ScopeService,
     CacheService,
     AuthService,
     HealthService,
+    SystemService,
+    DashboardService,
     TicketRepository,
     SlaConfigRepository,
     TicketsService,
