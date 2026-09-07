@@ -23,8 +23,12 @@ export interface TicketListParams {
   status?: string;
   priority?: string;
   ticket_type?: string;
+  /** 'me' = เฉพาะงานที่มอบหมายให้ผู้เรียก — backend แปลงเป็น id ให้เอง */
+  assignee_id?: string;
   company_id?: string;
   category_id?: string;
+  /** กรองด้วยสถานะ SLA ที่คำนวณตอนอ่าน — on_track / at_risk / breached / paused */
+  sla_status?: string;
   /** true = เฉพาะเรื่องที่ตนแจ้ง · ใช้ในหน้า "Ticket ของฉัน" */
   mine?: boolean;
   /** true = เฉพาะเรื่องที่ยังไม่มีผู้รับผิดชอบ · ใช้ในหน้าคิวทีม */

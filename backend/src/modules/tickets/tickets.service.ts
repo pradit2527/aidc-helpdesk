@@ -32,6 +32,16 @@ import {
  * สถานะ SLA ยังคำนวณตอนอ่านทุกครั้ง ไม่เก็บลงฐานข้อมูล
  * เพราะมันเปลี่ยนตามเวลาที่ผ่านไปโดยที่ไม่มีใครแตะ ticket เลย
  */
+/**
+ * จำนวนแถวสูงสุดที่ดึงมาคำนวณเมื่อกรองด้วยสถานะ SLA
+ *
+ * ตั้งไว้เพื่อไม่ให้คำขอเดียวดึงทั้งตารางขึ้นมาในหน่วยความจำ
+ * ค่านี้กว้างพอสำหรับจำนวนเรื่องที่ยังเปิดอยู่ของทั้งกลุ่มบริษัท
+ * แต่ถ้าวันหนึ่งเกิน ผลลัพธ์จะไม่ครบโดยไม่มีอะไรฟ้อง — จุดนั้นคือเวลาที่ต้อง
+ * ย้ายไปเก็บสถานะ SLA ลงคอลัมน์แล้วกรองใน SQL แทน
+ */
+const SLA_FILTER_SCAN_CAP = 500;
+
 @Injectable()
 export class TicketsService {
   constructor(
@@ -46,7 +56,7 @@ export class TicketsService {
     const page = Math.max(1, Number(query.page ?? 1));
     const pageSize = Math.min(Math.max(1, Number(query.page_size ?? 20)), 100);
 
-    const { rows, total } = await this.tickets.list(scope, {
+    const baseFilter = {
       companyIds: query.company_id ? query.company_id.split(',').map(Number) : null,
       status: query.status?.split(',') ?? [],
       priority: query.priority?.split(',') ?? [],
@@ -55,19 +65,49 @@ export class TicketsService {
       requesterId: query.requester_id === 'me' ? scope.userId : undefined,
       unassigned: query.unassigned === 'true',
       q: query.q,
-      page,
-      pageSize,
-    });
+    };
 
+    const wanted = query.sla_status?.split(',').filter(Boolean);
+
+    /*
+     * สถานะ SLA คำนวณตอนอ่าน ไม่ได้เก็บในฐานข้อมูล จึงเขียนเป็น WHERE ไม่ได้
+     *
+     * เดิมกรอง "หลัง" แบ่งหน้าแล้ว ซึ่งผิดสองทาง
+     *   1. total เป็นจำนวนก่อนกรอง ตัวเลขบนหน้าจอจึงไม่ตรงกับที่เห็น
+     *   2. แต่ละหน้าคืนน้อยกว่า page_size ทั้งที่ยังมีรายการที่ตรงเงื่อนไข
+     *      อยู่ในหน้าถัดไป ผู้ใช้จึงเห็นเหมือนข้อมูลหาย
+     *
+     * แก้ด้วยการดึงมาให้ครบก่อนแล้วค่อยกรองและแบ่งหน้าเอง
+     *
+     * ⚠️ มีเพดานที่ SLA_FILTER_SCAN_CAP เพื่อไม่ให้ดึงทั้งตารางขึ้นมา
+     *    ทางแก้ที่ถูกต้องระยะยาวคือให้งานกวาด SLA เขียนสถานะลงคอลัมน์
+     *    แล้วกรองใน SQL ตรง ๆ ซึ่งทำได้เมื่อ JOBS_ENABLED=true และมี Redis
+     */
+    if (wanted?.length) {
+      const { rows } = await this.tickets.list(scope, {
+        ...baseFilter,
+        page: 1,
+        pageSize: SLA_FILTER_SCAN_CAP,
+      });
+
+      const all = await Promise.all(rows.map((row) => this.toListItem(row)));
+      const matched = all.filter((i) => wanted.includes(i.sla.status));
+      const start = (page - 1) * pageSize;
+
+      return {
+        items: matched.slice(start, start + pageSize),
+        page,
+        page_size: pageSize,
+        total: matched.length,
+        total_pages: Math.max(1, Math.ceil(matched.length / pageSize)),
+      };
+    }
+
+    const { rows, total } = await this.tickets.list(scope, { ...baseFilter, page, pageSize });
     const items = await Promise.all(rows.map((row) => this.toListItem(row)));
 
-    // กรองสถานะ SLA หลังคำนวณ เพราะเป็นค่าที่ไม่ได้เก็บในฐานข้อมูล
-    // จึงเขียนเป็นเงื่อนไข WHERE ไม่ได้ — total จึงยังเป็นจำนวนก่อนกรอง
-    const wanted = query.sla_status?.split(',');
-    const filtered = wanted ? items.filter((i) => wanted.includes(i.sla.status)) : items;
-
     return {
-      items: filtered,
+      items,
       page,
       page_size: pageSize,
       total,
