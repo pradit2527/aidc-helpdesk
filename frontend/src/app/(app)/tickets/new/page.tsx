@@ -11,9 +11,11 @@ import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/
 import { Field, Input, Select, Textarea } from '@/components/ui/field';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
 import { CHANNEL, IMPACT_OPTIONS, TICKET_TYPE, URGENCY_OPTIONS, previewPriority } from '@/config/enums';
+import { ApiError } from '@/lib/api';
 import { formatFileSize } from '@/lib/format';
 import { useSession } from '@/lib/session';
-import { TICKET_CATEGORIES } from '@/mocks/data';
+import { useCategories } from '@/lib/queries/master-data';
+import { useCreateTicket, useUploadAttachments } from '@/lib/queries/tickets';
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -43,7 +45,11 @@ export default function NewTicketPage(): React.JSX.Element {
   });
   const [files, setFiles] = React.useState<File[]>([]);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = React.useState(false);
+
+  const categories = useCategories();
+  const createTicket = useCreateTicket();
+  const uploadFiles = useUploadAttachments();
+  const submitting = createTicket.isPending || uploadFiles.isPending;
 
   const preview = previewPriority(form.impact, form.urgency);
 
@@ -82,12 +88,42 @@ export default function NewTicketPage(): React.JSX.Element {
       document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
       return;
     }
-    setSubmitting(true);
-    // ของจริง: POST /tickets แล้วพาไปหน้ารายละเอียดของเลขที่ที่ backend คืนมา
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    toast.success('ສົ່ງເລື່ອງແຈ້ງແລ້ວ ທີມງານຈະຕິດຕໍ່ກັບໄປ');
-    setSubmitting(false);
-    router.push('/tickets/my');
+    try {
+      /*
+       * อัปโหลดไฟล์ก่อน แล้วค่อยสร้างเรื่องพร้อม id ที่ได้ (B-08)
+       *
+       * ทำตามลำดับนี้เพราะถ้าสร้างเรื่องก่อนแล้วอัปโหลดล้มเหลว จะได้เรื่อง
+       * ที่ไม่มีหลักฐานแนบโดยผู้แจ้งไม่รู้ตัว ส่วนลำดับนี้ถ้าอัปโหลดล้มเหลว
+       * ผู้ใช้ยังอยู่ที่ฟอร์มพร้อมข้อมูลครบ กดใหม่ได้ทันที
+       * ไฟล์ที่อัปแล้วแต่ไม่ได้ผูกกับเรื่องใด ถูกล้างด้วยงานเบื้องหลัง
+       */
+      const uploaded = files.length > 0 ? await uploadFiles.mutateAsync(files) : [];
+
+      const ticket = await createTicket.mutateAsync({
+        ticket_type: form.ticket_type,
+        subject: form.subject.trim(),
+        description: form.description.trim(),
+        category_id: Number(form.category_id),
+        impact: form.impact,
+        urgency: form.urgency,
+        channel: form.channel,
+        ...(form.asset_tag.trim() ? { asset_tag: form.asset_tag.trim() } : {}),
+        ...(uploaded.length > 0 ? { attachment_ids: uploaded.map((a) => a.id) } : {}),
+      });
+
+      // แสดงเลขที่จริงที่ backend ออกให้ ไม่ใช่ข้อความสำเร็จลอย ๆ
+      // ผู้แจ้งใช้เลขนี้อ้างอิงตอนโทรตาม
+      toast.success(`ສົ່ງເລື່ອງແຈ້ງແລ້ວ — ເລກທີ ${ticket.ticket_no}`);
+      router.push(`/tickets/${ticket.id}`);
+    } catch (err) {
+      /*
+       * แสดงข้อความจากเซิร์ฟเวอร์ตรง ๆ และผูกกลับเข้าช่องที่ผิดถ้ามี
+       * ข้อความรวม ๆ อย่าง "บันทึกไม่สำเร็จ" ทำให้ผู้ใช้ต้องเดาว่าช่องไหนผิด
+       */
+      const apiError = err instanceof ApiError ? err : null;
+      if (apiError?.fields) setErrors(apiError.fields);
+      toast.error(apiError?.message ?? 'ສົ່ງເລື່ອງບໍ່ສຳເລັດ ກະລຸນາລອງໃໝ່');
+    }
   }
 
   return (
@@ -148,7 +184,9 @@ export default function NewTicketPage(): React.JSX.Element {
               <Select
                 value={form.category_id}
                 onChange={(e) => {
-                  const category = TICKET_CATEGORIES.find((c) => String(c.id) === e.target.value);
+                  const category = (categories.data ?? []).find(
+                    (c) => String(c.id) === e.target.value,
+                  );
                   set('category_id', e.target.value);
                   // เติมค่าตั้งต้นของหมวดหมู่ให้ แต่ผู้แจ้งแก้ได้เสมอ
                   if (category) {
@@ -162,7 +200,7 @@ export default function NewTicketPage(): React.JSX.Element {
                 }}
               >
                 <option value="">— ເລືອກໝວດໝູ່ —</option>
-                {TICKET_CATEGORIES.map((c) => (
+                {(categories.data ?? []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name_th}
                   </option>

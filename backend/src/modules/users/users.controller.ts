@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -141,6 +142,48 @@ export class UsersController {
   unlock(@CurrentScope() scope: AccessScope, @Param('id', ParseIntPipe) id: number) {
     scope.require('user.reset_password', 'user.update');
     return this.users.unlock(scope, id);
+  }
+
+  @Put(':id/roles')
+  @ApiOperation({
+    summary: 'มอบบทบาทให้ผู้ใช้',
+    description:
+      'แทนที่ชุดบทบาททั้งหมด ไม่ใช่เพิ่มทีละอัน · ' +
+      '**เฉพาะ super_admin เท่านั้นที่มอบบทบาท super_admin ได้** — ' +
+      'ถ้าไม่กัน company_admin จะตั้งตัวเองเป็น super_admin ได้ในคลิกเดียว · ' +
+      '`company_ids` ที่อยู่นอกขอบเขตของผู้เรียกถูกตัดทิ้งเงียบ ๆ ' +
+      'มิฉะนั้นผู้ดูแลบริษัทหนึ่งจะขยายขอบเขตของตัวเองผ่านคนอื่นได้',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['roles'],
+      properties: {
+        roles: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['code'],
+            properties: {
+              code: {
+                type: 'string',
+                enum: ['end_user', 'agent', 'company_admin', 'manager_viewer', 'super_admin'],
+              },
+              company_ids: { type: 'array', items: { type: 'number' } },
+              expires_at: { type: 'string', nullable: true, description: 'ISO 8601' },
+            },
+          },
+        },
+      },
+    },
+  })
+  setRoles(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: { roles?: { code: string; company_ids?: number[]; expires_at?: string | null }[] },
+  ) {
+    return this.users.setRoles(scope, id, { roles: body.roles ?? [] });
   }
 
 }

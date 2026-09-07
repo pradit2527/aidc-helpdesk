@@ -1,4 +1,9 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 
 import { api, type Page } from '@/lib/api';
 import type { TicketDetail, TicketListItem } from '@/lib/types';
@@ -76,5 +81,75 @@ export function useTicket(id: number): UseQueryResult<TicketDetail, Error> {
     queryKey: ticketKeys.detail(id),
     queryFn: () => api.get<TicketDetail>(`/tickets/${id}`),
     enabled: Number.isFinite(id) && id > 0,
+  });
+}
+
+export interface CreateTicketInput {
+  ticket_type: string;
+  subject: string;
+  description: string;
+  category_id: number;
+  /**
+   * ⚠️ ไม่มี priority ในนี้ และจะไม่มีตลอดไป
+   *
+   * ระดับความสำคัญเป็นผลของ impact × urgency ตามเมทริกซ์ (SLA ข้อ 4)
+   * backend ตอบ 422 ถ้าส่งมาตรง ๆ — และควรตอบแบบนั้น
+   */
+  impact: string;
+  urgency: string;
+  channel?: string | undefined;
+  asset_tag?: string | undefined;
+  attachment_ids?: number[] | undefined;
+}
+
+export function useCreateTicket(): ReturnType<
+  typeof useMutation<TicketDetail, Error, CreateTicketInput>
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTicketInput) => api.post<TicketDetail>('/tickets', input),
+    onSuccess: () => {
+      // ล้างทั้งกลุ่ม ticket — เรื่องใหม่โผล่ได้ทั้งในคิวงานและในรายการของฉัน
+      void qc.invalidateQueries({ queryKey: ticketKeys.all });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+/** อัปโหลดไฟล์แนบก่อนสร้างเรื่อง แล้วค่อยผูก id ที่ได้เข้ากับเรื่อง (B-08) */
+export function useUploadAttachments(): ReturnType<
+  typeof useMutation<{ id: number; file_name: string }[], Error, File[]>
+> {
+  return useMutation({
+    mutationFn: async (files: File[]) => {
+      const fd = new FormData();
+      for (const f of files) fd.append('files', f);
+      /*
+       * ส่ง FormData ตรง ๆ ไม่ผ่าน api.post
+       *
+       * api.post ตั้ง Content-Type: application/json เสมอ ซึ่งทำให้
+       * multipart พังทั้งก้อน — ต้องปล่อยให้เบราว์เซอร์ตั้งเองเพื่อให้
+       * boundary ถูกต้อง
+       */
+      const csrf = document.cookie
+        .split('; ')
+        .find((c) => c.startsWith('aidc_csrf='))
+        ?.split('=')[1];
+
+      const res = await fetch('/api/v1/attachments', {
+        method: 'POST',
+        credentials: 'include',
+        headers: csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {},
+        body: fd,
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success: boolean; data: { id: number; file_name: string }[]; error?: { message: string } }
+        | null;
+
+      if (!res.ok || !payload?.success) {
+        throw new Error(payload?.error?.message ?? 'ອັບໂຫຼດໄຟລ໌ບໍ່ສຳເລັດ');
+      }
+      return payload.data;
+    },
   });
 }

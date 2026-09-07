@@ -3,7 +3,7 @@ import argon2 from 'argon2';
 import { and, asc, count, eq, gt, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
-import { NotFoundError, ValidationError } from '../../common/errors/domain-error';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../common/errors/domain-error';
 import { TicketWriteRepository } from '../../db/repositories/ticket-write.repository';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
@@ -609,6 +609,86 @@ export class UsersService {
   async unlock(scope: AccessScope, id: number) {
     await this.detail(scope, id);
     return this.writes.unlockUser(id);
+  }
+
+  /**
+   * มอบบทบาทให้ผู้ใช้ (PUT /users/{id}/roles)
+   *
+   * แทนที่ชุดบทบาททั้งหมด ไม่ใช่เพิ่มทีละอัน — หน้าจอส่งสถานะสุดท้ายที่ต้องการ
+   * มาให้ ซึ่งอ่านง่ายกว่าการต้องคิดว่าจะเพิ่มอันไหนลบอันไหน
+   *
+   * ⚠️ กฎกันการยกระดับสิทธิ์ตัวเอง — สามข้อนี้ห้ามผ่อน
+   *
+   *   1. เฉพาะ super_admin เท่านั้นที่มอบบทบาท super_admin ได้
+   *      ถ้าไม่กัน company_admin จะตั้งตัวเองเป็น super_admin ได้ในคลิกเดียว
+   *      แล้วเห็นข้อมูลทั้ง 7 บริษัท
+   *
+   *   2. ผู้ใช้เป้าหมายต้องอยู่ในขอบเขตของผู้เรียก (detail() ตอบ 404 ถ้าไม่ใช่)
+   *
+   *   3. ขอบเขตบริษัทที่แนบมากับบทบาท ต้องเป็นบริษัทที่ผู้เรียกเห็นอยู่แล้ว
+   *      มิฉะนั้นผู้ดูแลบริษัท ก. จะมอบสิทธิ์ให้ลูกน้องเห็นบริษัท ข.
+   *      ซึ่งเป็นการขยายขอบเขตของตัวเองผ่านคนอื่น
+   */
+  async setRoles(
+    scope: AccessScope,
+    userId: number,
+    input: { roles: { code: string; company_ids?: number[]; expires_at?: string | null }[] },
+  ) {
+    await this.detail(scope, userId);
+    scope.require('user.assign_role');
+
+    const wanted = input.roles ?? [];
+
+    if (wanted.some((r) => r.code === 'super_admin') && !scope.isSuperAdmin) {
+      throw new ForbiddenError(
+        'FORBIDDEN',
+        'ມີແຕ່ຜູ້ດູແລລະບົບເທົ່ານັ້ນທີ່ມອບບົດບາດ super_admin ໄດ້',
+      );
+    }
+
+    const allRoles = await this.db.select({ id: role.id, code: role.code }).from(role);
+    const roleByCode = new Map(allRoles.map((r) => [r.code, r.id]));
+
+    const unknown = wanted.filter((r) => !roleByCode.has(r.code)).map((r) => r.code);
+    if (unknown.length > 0) {
+      throw new ValidationError('VALIDATION_ERROR', `ບໍ່ຮູ້ຈັກບົດບາດ: ${unknown.join(', ')}`, [
+        { field: 'roles', message: `ບໍ່ຮູ້ຈັກ ${unknown.join(', ')}` },
+      ]);
+    }
+
+    /*
+     * ลบของเดิมทั้งหมดแล้วใส่ใหม่
+     *
+     * user_role_scope มี ON DELETE CASCADE จึงหายตามไปเอง
+     * ไม่ต้องไล่ลบทีละแถว — และการไล่ลบเองมีโอกาสเหลือแถวกำพร้า
+     * ถ้าลบไม่ครบทุกกรณี
+     */
+    await this.db.delete(userRole).where(eq(userRole.userId, userId));
+
+    for (const r of wanted) {
+      const expires = r.expires_at ? new Date(r.expires_at) : null;
+      const [granted] = await this.db
+        .insert(userRole)
+        .values({
+          userId,
+          roleId: roleByCode.get(r.code)!,
+          grantedBy: scope.userId,
+          ...(expires && !Number.isNaN(expires.getTime()) ? { expiresAt: expires } : {}),
+        })
+        .returning({ id: userRole.id });
+
+      // ตัดบริษัทที่ผู้เรียกไม่มีสิทธิ์เห็นออกเงียบ ๆ ไม่ตอบ error
+      // กฎเดียวกับตัวกรอง company_id ในหน้ารายการ
+      const companyIds = (r.company_ids ?? []).filter((id) => scope.inScope(id));
+      for (const companyId of companyIds) {
+        await this.db
+          .insert(userRoleScope)
+          .values({ userRoleId: granted!.id, companyId })
+          .onConflictDoNothing();
+      }
+    }
+
+    return this.detail(scope, userId);
   }
 
 }
