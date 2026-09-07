@@ -262,6 +262,69 @@ export class TicketListResponseDto {
   @ApiProperty({ example: 1 }) total_pages!: number;
 }
 
+
+export class TicketCommentDto {
+  @ApiProperty({ example: 501 }) id!: number;
+  @ApiProperty({ example: 'ກວດແລ້ວພົບວ່າສາຍແລນຫຼຸດ' }) body!: string;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'true = เห็นเฉพาะเจ้าหน้าที่ · ผู้แจ้งจะไม่ได้รับคอมเมนต์ประเภทนี้เลย ' +
+      'เพราะถูกกรองที่ชั้น query ไม่ใช่ซ่อนใน UI (US-02 AC-3)',
+  })
+  is_internal!: boolean;
+
+  @ApiProperty({ example: false, description: 'true = ระบบสร้างให้อัตโนมัติ ไม่ใช่คนพิมพ์' })
+  is_system!: boolean;
+
+  @ApiProperty({ example: '2026-09-07T02:30:00.000Z' }) created_at!: string;
+  @ApiPropertyOptional({ type: RefUserDto, nullable: true }) author!: RefUserDto | null;
+}
+
+export class TicketHistoryDto {
+  @ApiProperty({ example: 901 }) id!: number;
+  @ApiPropertyOptional({ example: 'new', nullable: true }) from_status!: string | null;
+  @ApiProperty({ example: 'assigned' }) to_status!: string;
+  @ApiPropertyOptional({ example: 'P3', nullable: true }) from_priority!: string | null;
+  @ApiPropertyOptional({ example: 'P2', nullable: true }) to_priority!: string | null;
+  @ApiPropertyOptional({ example: 'กระทบทั้งแผนก', nullable: true }) reason!: string | null;
+  @ApiProperty({ example: '2026-09-07T02:31:00.000Z' }) changed_at!: string;
+  @ApiPropertyOptional({ type: RefUserDto, nullable: true }) changed_by!: RefUserDto | null;
+}
+
+export class TicketChecklistItemDto {
+  @ApiProperty({ example: 1201 }) id!: number;
+
+  @ApiProperty({
+    example: 'ຢືນຢັນກັບຜູ້ແຈ້ງວ່າໃຊ້ງານໄດ້ແລ້ວ',
+    description:
+      'ข้อความ ณ เวลาที่สร้าง ไม่ได้อ่านจากแม่แบบตอนนี้ — แม่แบบแก้ได้ภายหลัง ' +
+      'ถ้าอ่านสด รายการตรวจของเรื่องเก่าจะเปลี่ยนตาม ทำให้ตรวจสอบย้อนหลังไม่ได้',
+  })
+  title!: string;
+
+  @ApiProperty({ example: true }) is_required!: boolean;
+  @ApiProperty({ example: false }) evidence_required!: boolean;
+  @ApiProperty({ example: false }) is_done!: boolean;
+  @ApiPropertyOptional({ example: null, nullable: true }) done_at!: string | null;
+  @ApiPropertyOptional({ example: null, nullable: true }) done_by_name!: string | null;
+  @ApiPropertyOptional({ example: null, nullable: true }) note!: string | null;
+}
+
+export class TicketApprovalDto {
+  @ApiProperty({ example: 301 }) id!: number;
+  @ApiProperty({ example: 1, description: 'ลำดับขั้นการอนุมัติ' }) seq!: number;
+  @ApiProperty({ example: 'line_manager' }) approver_type!: string;
+  @ApiPropertyOptional({ example: 'ສົມຈິດ ພົມມະຈັນ', nullable: true }) approver_name!: string | null;
+  @ApiProperty({ example: 'pending' }) status!: string;
+  @ApiPropertyOptional({ example: null, nullable: true }) comment!: string | null;
+  @ApiPropertyOptional({ example: null, nullable: true }) requested_at!: string | null;
+  @ApiPropertyOptional({ example: null, nullable: true }) decided_at!: string | null;
+  @ApiPropertyOptional({ example: null, nullable: true }) decided_by_name!: string | null;
+  @ApiPropertyOptional({ example: null, nullable: true }) due_at!: string | null;
+}
+
 export class TicketDetailDto extends TicketListItemDto {
   @ApiProperty({ example: 'ເຄື່ອງສະແກນ 3 ໜ່ວຍທີ່ໂຊນຮັບສິນຄ້າສາງ 2 ອ່ານບໍ່ຕິດ...' })
   description!: string;
@@ -302,6 +365,24 @@ export class TicketDetailDto extends TicketListItemDto {
       'สิทธิ์ระดับ ticket ที่ backend คำนวณให้แล้ว — frontend ใช้ซ่อน/แสดงปุ่มโดยไม่ต้องเขียนกฎ RBAC ซ้ำ (FE-02)',
   })
   can!: TicketCanDto;
+
+  @ApiProperty({
+    type: [TicketCommentDto],
+    description: 'คอมเมนต์ภายในถูกตัดออกก่อนส่งเมื่อผู้เรียกไม่มีสิทธิ์เห็น',
+  })
+  comments!: TicketCommentDto[];
+
+  @ApiProperty({
+    type: [TicketHistoryDto],
+    description: 'ว่างเปล่าเมื่อผู้เรียกไม่มีสิทธิ์ ticket.view_history',
+  })
+  history!: TicketHistoryDto[];
+
+  @ApiProperty({ type: [TicketChecklistItemDto] })
+  checklist!: TicketChecklistItemDto[];
+
+  @ApiProperty({ type: [TicketApprovalDto] })
+  approvals!: TicketApprovalDto[];
 }
 
 // ══════════════════════ เปลี่ยนสถานะ ══════════════════════

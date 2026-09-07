@@ -7,6 +7,7 @@ import { CreateTicketUseCase } from '../../application/use-cases/create-ticket.u
 import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
 import { ReassessTicketPriorityUseCase } from '../../application/use-cases/reassess-ticket-priority.use-case';
 import { SlaConfigRepository } from '../../db/repositories/sla-config.repository';
+import { TicketDetailRepository } from '../../db/repositories/ticket-detail.repository';
 import { TicketRepository, type TicketRow } from '../../db/repositories/ticket.repository';
 import {
   ChangePriorityDto,
@@ -46,6 +47,7 @@ const SLA_FILTER_SCAN_CAP = 500;
 export class TicketsService {
   constructor(
     private readonly tickets: TicketRepository,
+    private readonly details: TicketDetailRepository,
     private readonly slaConfig: SlaConfigRepository,
     private readonly createTicket: CreateTicketUseCase,
     private readonly changeTicketStatus: ChangeTicketStatusUseCase,
@@ -116,7 +118,70 @@ export class TicketsService {
   }
 
   async detail(scope: AccessScope, id: number): Promise<TicketDetailDto> {
-    return this.toDetail(await this.tickets.findById(scope, id), scope);
+    // ต้องผ่าน findById ก่อนเสมอ เพราะเป็นที่เดียวที่บังคับขอบเขตสิทธิ์
+    // เรื่องนอกขอบเขตจะได้ 404 ตั้งแต่บรรทัดนี้ ก่อนแตะข้อมูลลูกใด ๆ
+    const row = await this.tickets.findById(scope, id);
+    const base = await this.toDetail(row, scope);
+
+    /*
+     * ผู้แจ้งเห็นคอมเมนต์ภายในไม่ได้ (US-02 AC-3)
+     *
+     * ตัดสินจากสิทธิ์ ไม่ใช่จากบทบาท — เจ้าหน้าที่ที่เข้ามาดูเรื่องของตัวเอง
+     * ในฐานะผู้แจ้งก็ยังควรเห็น เพราะเขามีสิทธิ์อ่านคอมเมนต์ภายในอยู่แล้ว
+     * การตัดสินจาก "เป็นผู้แจ้งหรือไม่" จะซ่อนข้อมูลจากคนที่มีสิทธิ์เห็น
+     */
+    const canSeeInternal = scope.has('ticket.comment_internal', 'ticket.assign');
+
+    const [comments, history, checklist, approvals] = await Promise.all([
+      this.details.comments(row.id, canSeeInternal),
+      base.can.view_history ? this.details.history(row.id) : Promise.resolve([]),
+      this.details.checklist(row.id),
+      this.details.approvals(row.id),
+    ]);
+
+    return {
+      ...base,
+      comments: comments.map((c) => ({
+        id: c.id,
+        body: c.body,
+        is_internal: c.isInternal,
+        is_system: c.isSystem,
+        created_at: c.createdAt.toISOString(),
+        author: c.authorId ? { id: c.authorId, full_name: c.authorName ?? '' } : null,
+      })),
+      history: history.map((h) => ({
+        id: h.id,
+        from_status: h.fromStatus,
+        to_status: h.toStatus,
+        from_priority: h.fromPriority,
+        to_priority: h.toPriority,
+        reason: h.reason,
+        changed_at: h.changedAt.toISOString(),
+        changed_by: h.changedBy ? { id: h.changedBy, full_name: h.actorName ?? '' } : null,
+      })),
+      checklist: checklist.map((c) => ({
+        id: c.id,
+        title: c.title,
+        is_required: c.isRequired,
+        evidence_required: c.evidenceRequired,
+        is_done: c.isDone,
+        done_at: c.doneAt?.toISOString() ?? null,
+        done_by_name: c.doneByName,
+        note: c.note,
+      })),
+      approvals: approvals.map((a) => ({
+        id: a.id,
+        seq: a.seq,
+        approver_type: a.approverType,
+        approver_name: a.approverName,
+        status: a.status,
+        comment: a.comment,
+        requested_at: a.requestedAt?.toISOString() ?? null,
+        decided_at: a.decidedAt?.toISOString() ?? null,
+        decided_by_name: a.deciderName,
+        due_at: a.dueAt?.toISOString() ?? null,
+      })),
+    };
   }
 
   async create(scope: AccessScope, dto: CreateTicketDto): Promise<TicketDetailDto> {
@@ -254,7 +319,17 @@ export class TicketsService {
     };
   }
 
-  private async toDetail(row: TicketRow, scope: AccessScope): Promise<TicketDetailDto> {
+  /**
+   * แปลงแถวเป็นรายละเอียด "ไม่รวมข้อมูลลูก"
+   *
+   * คอมเมนต์ ประวัติ รายการตรวจ และการอนุมัติถูกประกอบที่ detail()
+   * เพราะแต่ละอย่างมีกฎการมองเห็นของตัวเอง เช่น คอมเมนต์ภายในต้องกรอง
+   * ตามสิทธิ์ผู้เรียก การรวมไว้ที่นี่จะทำให้ต้องส่ง scope ลงไปทุกชั้น
+   */
+  private async toDetail(
+    row: TicketRow,
+    scope: AccessScope,
+  ): Promise<Omit<TicketDetailDto, 'comments' | 'history' | 'checklist' | 'approvals'>> {
     const base = await this.toListItem(row);
     const closed = ['resolved', 'closed', 'cancelled'].includes(row.status);
     const isOwner = row.requesterId === scope.userId;

@@ -20,6 +20,7 @@ import { throttleConfig, UserAwareThrottlerGuard } from './common/throttle/throt
 import { DbModule } from './db/db.module';
 import { JobsModule } from './jobs/jobs.module';
 import { SlaConfigRepository } from './db/repositories/sla-config.repository';
+import { TicketDetailRepository } from './db/repositories/ticket-detail.repository';
 import { TicketRepository } from './db/repositories/ticket.repository';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
@@ -56,6 +57,7 @@ import { TicketsService } from './modules/tickets/tickets.service';
     SystemService,
     DashboardService,
     TicketRepository,
+    TicketDetailRepository,
     SlaConfigRepository,
     TicketsService,
 
