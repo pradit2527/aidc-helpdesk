@@ -7,9 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/field';
-import { Alert, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { formatDateTime } from '@/lib/format';
-import { AUDIT_LOGS } from '@/mocks/data';
+import { useAuditFacets, useAuditLogs } from '@/lib/queries/operations';
+import { useDebounced } from '@/lib/use-debounced';
 import type { AuditEntry } from '@/lib/types';
 
 const ACTION_LABEL: Record<string, string> = {
@@ -42,13 +44,25 @@ export default function AuditLogsPage(): React.JSX.Element {
   const [q, setQ] = React.useState('');
   const [action, setAction] = React.useState('');
 
-  const rows = AUDIT_LOGS.filter((e) => {
-    if (action && e.action !== action) return false;
-    if (q) {
-      const haystack = `${e.actor?.full_name ?? ''} ${e.entity_type} ${e.entity_id ?? ''} ${e.ip_address ?? ''}`;
-      if (!haystack.toLowerCase().includes(q.toLowerCase())) return false;
-    }
-    return true;
+  const facets = useAuditFacets();
+
+  /*
+   * ตัวกรอง action ส่งไปที่เซิร์ฟเวอร์ ส่วนคำค้นกรองในหน้าจอ
+   *
+   * ร่องรอยการใช้งานโตเร็วมาก (ทุกการกระทำสร้างหนึ่งแถว) การดึงทั้งหมด
+   * มากรองที่เบราว์เซอร์จึงเป็นไปไม่ได้ตั้งแต่เดือนแรก — action เป็นตัวกรอง
+   * ที่ตัดข้อมูลได้มากที่สุดจึงส่งไปเซิร์ฟเวอร์
+   *
+   * ⚠️ คำค้นกรองเฉพาะหน้าปัจจุบัน ไม่ใช่ทั้งชุด — ระบุไว้ในหน้าจอ
+   *    เพื่อไม่ให้ผู้ตรวจสอบเข้าใจว่าค้นแล้วไม่เจอแปลว่าไม่มี
+   */
+  const debouncedQ = useDebounced(q, 300);
+  const query = useAuditLogs({ action: action || undefined });
+
+  const rows = (query.data?.items ?? []).filter((e) => {
+    if (!debouncedQ) return true;
+    const haystack = `${e.actor?.full_name ?? ''} ${e.entity_type} ${e.entity_id ?? ''} ${e.ip_address ?? ''}`;
+    return haystack.toLowerCase().includes(debouncedQ.toLowerCase());
   });
 
   const columns: Column<AuditEntry>[] = [
@@ -131,8 +145,6 @@ export default function AuditLogsPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /audit-logs" />
-
       <Alert tone="info" title="ຕາຕະລາງນີ້ເພີ່ມໄດ້ຢ່າງດຽວ ແກ້ ຫຼື ລຶບບໍ່ໄດ້">
         ບັງຄັບໄວ້ທີ່ລະດັບຖານຂໍ້ມູນ ບໍ່ແມ່ນແຄ່ໃນໂຄ້ດ ເກັບຢ່າງໜ້ອຍ 1 ປີ
         ແລະ ຫ້າມລຶບກ່ອນ 90 ມື້ (NFR-18)
@@ -160,21 +172,34 @@ export default function AuditLogsPage(): React.JSX.Element {
             aria-label="ກັ່ນຕອງຕາມການກະທຳ"
           >
             <option value="">ທຸກການກະທຳ</option>
-            {Object.entries(ACTION_LABEL).map(([code, label]) => (
+            {/*
+              ตัวเลือกมาจากค่าที่มีจริงในข้อมูล (GET /audit-logs/facets)
+              ไม่ใช่จากรายการตายตัว — การกระทำใหม่ที่ระบบเพิ่มภายหลัง
+              จะปรากฏเองโดยไม่ต้องแก้หน้านี้ ส่วน ACTION_LABEL ใช้แค่แปลชื่อ
+            */}
+            {(facets.data?.actions ?? []).map((code) => (
               <option key={code} value={code}>
-                {label}
+                {ACTION_LABEL[code] ?? code}
               </option>
             ))}
           </Select>
         </CardBody>
-        <DataTable
-          columns={columns}
-          rows={rows}
-          rowKey={(e) => e.id}
-          caption="ບັນທຶກການໃຊ້ງານ"
-          emptyTitle="ບໍ່ພົບບັນທຶກທີ່ຕົງກັບເງື່ອນໄຂ"
-        />
+        <QueryBoundary query={query}>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(e) => e.id}
+            caption="ບັນທຶກການໃຊ້ງານ"
+            emptyTitle="ບໍ່ພົບບັນທຶກທີ່ຕົງກັບເງື່ອນໄຂ"
+          />
+        </QueryBoundary>
       </Card>
+
+      {query.isSuccess && (
+        <p className="tabular text-caption text-ink-3">
+          ສະແດງ {rows.length} ຈາກ {query.data.total} ລາຍການ · ຄຳຄົ້ນຫາກັ່ນຕອງສະເພາະໜ້ານີ້
+        </p>
+      )}
     </div>
   );
 }

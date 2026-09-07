@@ -387,7 +387,7 @@ export const KB_ARTICLES: KbArticle[] = [
     body_markdown:
       '## ຫ້າມເຮັດ\n\n- ຫ້າມກົດລິ້ງ ຫຼື ເປີດໄຟລ໌ແນບ\n- ຫ້າມລຶບອີເມວນັ້ນ (ເປັນຫຼັກຖານ)\n\n## ຕ້ອງເຮັດທັນທີ\n\n1. ຖ່າຍພາບໜ້າຈໍໄວ້\n2. ແຈ້ງເລື່ອງໝວດ **ຄວາມປອດໄພຂໍ້ມູນ** ທັນທີ\n3. ຖ້າກົດລິ້ງໄປແລ້ວ ໃຫ້ຕັດເຄືອຂ່າຍຂອງເຄື່ອງທັນທີ ແລ້ວໂທແຈ້ງ',
     category: { id: 6, name_th: 'ຄວາມປອດໄພຂໍ້ມູນ' },
-    visibility: 'internal',
+    visibility: 'company',
     status: 'published',
     tags: ['ຄວາມປອດໄພ', 'phishing'],
     author: { id: 88, full_name: 'ພູວົງ ສີສຸກ' },
@@ -659,6 +659,7 @@ export const SYSTEM_INFO: SystemInfo = {
 
 // ── แดชบอร์ดและรายงาน ──────────────────────────────────────────────────
 export const DASHBOARD: DashboardSummary = {
+  scope: { company_codes: [] },
   open_tickets: 104,
   breached: 7,
   at_risk: 12,

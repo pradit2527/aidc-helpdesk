@@ -17,11 +17,13 @@ import {
 } from 'recharts';
 
 import { Card, CardBody, CardHeader, CardTitle, StatCard } from '@/components/ui/card';
-import { Alert, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { PRIORITY, TICKET_STATUS } from '@/config/enums';
 import { formatNumber, formatPercent } from '@/lib/format';
 import { useSession } from '@/lib/session';
-import { DASHBOARD } from '@/mocks/data';
+import { useDashboardSummary } from '@/lib/queries/master-data';
+import type { DashboardSummary } from '@/lib/types';
 
 /**
  * แดชบอร์ด (FR-60, FR-61, US-09)
@@ -31,16 +33,17 @@ import { DASHBOARD } from '@/mocks/data';
  */
 export default function DashboardPage(): React.JSX.Element {
   const { user } = useSession();
-  const d = DASHBOARD;
+  const query = useDashboardSummary();
+  const d = query.data;
 
-  const priorityColors: Record<string, string> = {
-    P1: 'var(--p1-solid)',
-    P2: 'var(--p2-solid)',
-    P3: 'var(--p3-solid)',
-    P4: 'var(--p4-solid)',
-  };
-
-  const belowTarget = d.sla_compliance_percent < 95;
+  /*
+   * sla_compliance_percent เป็น null ได้เมื่อยังไม่มีเรื่องปิดในเดือนนี้
+   * null < 95 ใน JavaScript เป็น true (null ถูกแปลงเป็น 0) ซึ่งจะทำให้
+   * ขึ้นคำเตือน "ต่ำกว่าเป้า" ตั้งแต่เดือนที่ยังไม่มีใครปิดงานเลย
+   * จึงต้องเช็ค null แยกก่อนเสมอ
+   */
+  const compliance = d?.sla_compliance_percent ?? null;
+  const belowTarget = compliance !== null && compliance < 95;
 
   return (
     <div className="flex flex-col gap-4">
@@ -49,10 +52,40 @@ export default function DashboardPage(): React.JSX.Element {
         description={`ພາບລວມຂອງ ${user.scoped_companies.map((c) => c.code).join(' · ') || 'ທຸກບໍລິສັດ'}`}
       />
 
-      <MockNotice endpoint="GET /dashboard/summary" />
+      <QueryBoundary query={query}>
+        {d && <DashboardContent d={d} compliance={compliance} belowTarget={belowTarget} />}
+      </QueryBoundary>
+    </div>
+  );
+}
 
+/**
+ * เนื้อหาแดชบอร์ด — แยกออกมาเพื่อให้ `d` เป็นค่าที่มีแน่นอน
+ *
+ * ถ้าปล่อยไว้ในคอมโพเนนต์เดียวกัน ทุกจุดที่อ่าน d ต้องเขียน `d?.` ซึ่ง
+ * ทำให้ตัวเลขที่ยังโหลดไม่เสร็จกลายเป็น undefined แล้วแสดงเป็นช่องว่าง
+ * ปนกับตัวเลขจริง — แยกออกมาแล้ว QueryBoundary รับประกันว่ามีข้อมูลแล้ว
+ */
+function DashboardContent({
+  d,
+  compliance,
+  belowTarget,
+}: {
+  d: DashboardSummary;
+  compliance: number | null;
+  belowTarget: boolean;
+}): React.JSX.Element {
+  const priorityColors: Record<string, string> = {
+    P1: 'var(--p1-solid)',
+    P2: 'var(--p2-solid)',
+    P3: 'var(--p3-solid)',
+    P4: 'var(--p4-solid)',
+  };
+
+  return (
+    <>
       {belowTarget && (
-        <Alert tone="warning" title={`SLA Compliance ເດືອນນີ້ ${formatPercent(d.sla_compliance_percent)} ຕ່ຳກວ່າເປົ້າ 95%`}>
+        <Alert tone="warning" title={`SLA Compliance ເດືອນນີ້ ${formatPercent(compliance ?? 0)} ຕ່ຳກວ່າເປົ້າ 95%`}>
           ຖ້າຕ່ຳກວ່າເປົ້າສອງເດືອນຕິດ ຫົວໜ້າໄອທີຕ້ອງສະເໜີແຜນປັບປຸງບໍລິການ (SIP) ຕໍ່ຜູ້ບໍລິຫານສູງສຸດໂດຍກົງ
         </Alert>
       )}
@@ -78,7 +111,14 @@ export default function DashboardPage(): React.JSX.Element {
           value={formatNumber(d.resolved_this_month)}
           tone="ok"
           icon={CheckCircle2}
-          hint={`SLA ${formatPercent(d.sla_compliance_percent)} · ຕອບຮັບສະເລ່ຍ ${d.avg_first_response_minutes} ນທ.`}
+          hint={
+            compliance === null
+              ? 'ຍັງບໍ່ມີເລື່ອງທີ່ປິດໃນເດືອນນີ້'
+              : `SLA ${formatPercent(compliance)}` +
+                (d.avg_first_response_minutes === null
+                  ? ''
+                  : ` · ຕອບຮັບສະເລ່ຍ ${d.avg_first_response_minutes} ນທ.`)
+          }
         />
       </div>
 
@@ -226,6 +266,6 @@ export default function DashboardPage(): React.JSX.Element {
           </CardBody>
         </Card>
       </div>
-    </div>
+    </>
   );
 }

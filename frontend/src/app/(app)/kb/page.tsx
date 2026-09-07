@@ -8,15 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/field';
-import { MockNotice, PageHeader } from '@/components/ui/misc';
+import { PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { formatDateShort, formatNumber } from '@/lib/format';
 import { useHasRole } from '@/lib/session';
-import { KB_ARTICLES, KB_CATEGORIES } from '@/mocks/data';
+import { useKbArticles, useKbCategories } from '@/lib/queries/operations';
+import { useDebounced } from '@/lib/use-debounced';
 
 const VISIBILITY_LABEL = {
   public: 'ທຸກຄົນເຫັນ',
-  internal: 'ພາຍໃນອົງກອນ',
+  company: 'ສະເພາະບໍລິສັດ',
   agent_only: 'ສະເພາະເຈົ້າໜ້າທີ່',
 } as const;
 
@@ -31,16 +33,22 @@ export default function KbPage(): React.JSX.Element {
   const [q, setQ] = React.useState('');
   const [category, setCategory] = React.useState('');
 
-  const articles = KB_ARTICLES.filter((a) => {
-    // ผู้ใช้ทั่วไปเห็นเฉพาะบทความที่เผยแพร่แล้ว — ของจริงกรองที่ backend
-    if (!canWrite && a.status !== 'published') return false;
-    if (category && String(a.category.id) !== category) return false;
-    if (q) {
-      const haystack = `${a.title} ${a.summary ?? ''} ${a.tags.join(' ')}`.toLowerCase();
-      if (!haystack.includes(q.toLowerCase())) return false;
-    }
-    return true;
+  /*
+   * ค้นหาที่ฝั่งเซิร์ฟเวอร์ ไม่ใช่กรองในหน้าจอ
+   *
+   * คลังความรู้โตได้เรื่อย ๆ การดึงทุกบทความมากรองที่เบราว์เซอร์
+   * จะช้าลงเรื่อย ๆ โดยไม่มีใครสังเกตจนกว่าจะสาย และการกรองฝั่งนี้
+   * ยังไม่รู้กฎการมองเห็น (ฉบับร่าง / agent_only) ซึ่งอยู่ที่เซิร์ฟเวอร์
+   *
+   * หน่วงคำค้น 300ms เพื่อไม่ให้ยิงทุกตัวอักษรที่พิมพ์
+   */
+  const debouncedQ = useDebounced(q, 300);
+  const categoriesQuery = useKbCategories();
+  const query = useKbArticles({
+    q: debouncedQ || undefined,
+    category_id: category ? Number(category) : undefined,
   });
+  const articles = query.data?.items ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -58,8 +66,6 @@ export default function KbPage(): React.JSX.Element {
           )
         }
       />
-
-      <MockNotice endpoint="GET /kb/articles" />
 
       <Card>
         <CardBody className="space-y-3">
@@ -83,7 +89,7 @@ export default function KbPage(): React.JSX.Element {
             aria-label="ກັ່ນຕອງຕາມໝວດໝູ່"
           >
             <option value="">ທຸກໝວດໝູ່</option>
-            {KB_CATEGORIES.map((c) => (
+            {(categoriesQuery.data ?? []).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name_th}
               </option>
@@ -92,6 +98,7 @@ export default function KbPage(): React.JSX.Element {
         </CardBody>
       </Card>
 
+      <QueryBoundary query={query}>
       {articles.length === 0 ? (
         <Card>
           <EmptyState
@@ -149,6 +156,7 @@ export default function KbPage(): React.JSX.Element {
           ))}
         </div>
       )}
+      </QueryBoundary>
     </div>
   );
 }

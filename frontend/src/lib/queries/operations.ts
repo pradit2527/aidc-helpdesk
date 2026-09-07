@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 
 import { api, type Page } from '@/lib/api';
-import type { AdminUser, KbArticle, NotificationItem, ProblemRecord } from '@/lib/types';
+import type {
+  AdminUser,
+  AuditEntry,
+  KbArticle,
+  NotificationItem,
+  ProblemRecord,
+} from '@/lib/types';
 
 /**
  * หนึ่งแถวในคิวอนุมัติ
@@ -78,23 +84,6 @@ export function useUser(id: number): UseQueryResult<AdminUser, Error> {
 
 // ── ร่องรอยการใช้งาน ─────────────────────────────────────────────────
 
-export interface AuditLogRow {
-  id: number;
-  action: string;
-  entity_type: string;
-  entity_id: number | null;
-  actor_id: number | null;
-  actor_name: string | null;
-  actor_username: string | null;
-  company_id: number | null;
-  company_code: string | null;
-  old_value: unknown;
-  new_value: unknown;
-  ip_address: string | null;
-  user_agent: string | null;
-  created_at: string;
-}
-
 export interface AuditListParams {
   action?: string | undefined;
   entity_type?: string | undefined;
@@ -106,11 +95,11 @@ export interface AuditListParams {
 
 export function useAuditLogs(
   params: AuditListParams = {},
-): UseQueryResult<Paged<AuditLogRow>, Error> {
+): UseQueryResult<Paged<AuditEntry>, Error> {
   return useQuery({
     queryKey: ['audit-logs', params],
     queryFn: () =>
-      api.page<AuditLogRow>(
+      api.page<AuditEntry>(
         `/audit-logs${query({ ...params, page: params.page ?? 1, page_size: 25 })}`,
       ),
   });
@@ -219,6 +208,35 @@ export function useApprovals(
     queryFn: () =>
       api.page<ApprovalItem>(`/approvals${query({ assignee, status, page_size: 50 })}`),
     staleTime: 30_000,
+  });
+}
+
+export interface DecideInput {
+  id: number;
+  decision: 'approved' | 'rejected';
+  comment?: string | undefined;
+}
+
+export function useDecideApproval(): ReturnType<
+  typeof useMutation<
+    { id: number; status: string; ticket_status: string; next_seq: number | null },
+    Error,
+    DecideInput
+  >
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: DecideInput) =>
+      api.post<{ id: number; status: string; ticket_status: string; next_seq: number | null }>(
+        `/approvals/${id}/decide`,
+        body,
+      ),
+    onSuccess: () => {
+      // ทั้งคิวอนุมัติและรายการ ticket เปลี่ยนพร้อมกัน — ticket ที่อนุมัติครบแล้ว
+      // ออกจากสถานะพัก ส่วนที่ถูกปฏิเสธกลายเป็นยกเลิก
+      void qc.invalidateQueries({ queryKey: ['approvals'] });
+      void qc.invalidateQueries({ queryKey: ['tickets'] });
+    },
   });
 }
 

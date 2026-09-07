@@ -1,5 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBody, ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import { clampPage, clampPageSize } from '../../common/http/pagination';
 import type { AccessScope } from '../../common/scope';
@@ -49,5 +49,37 @@ export class ApprovalsController {
       page: clampPage(page),
       page_size: clampPageSize(pageSize),
     });
+  }
+
+  @Post(':id/decide')
+  @ApiOperation({
+    summary: 'บันทึกผลการพิจารณา',
+    description:
+      'เฉพาะผู้ที่ถูกระบุเป็นผู้อนุมัติของแถวนั้นเท่านั้น — ไม่มี permission ตัวไหน ' +
+      'ให้ข้ามข้อนี้ได้ · ห้ามอนุมัติคำขอของตนเอง (422 SELF_APPROVAL_FORBIDDEN) · ' +
+      'ปฏิเสธต้องมี `comment` · ปฏิเสธขั้นใดขั้นหนึ่งทำให้ ticket ไป `cancelled` · ' +
+      'อนุมัติครบทุกขั้นแล้ว ticket ออกจากสถานะพักและนาฬิกา SLA เดินต่อ ' +
+      'พร้อมบวกเวลาที่หยุดรออนุมัติคืนให้ตามกำหนดเวลา (SLA ข้อ 9)',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['decision'],
+      properties: {
+        decision: { type: 'string', enum: ['approved', 'rejected'] },
+        comment: { type: 'string', description: 'บังคับเมื่อ decision = rejected' },
+        access_expires_at: {
+          type: 'string',
+          description: 'ISO 8601 · กำหนดสิ้นสุดสิทธิ์ชั่วคราว (SOP-03 ข้อ 6)',
+        },
+      },
+    },
+  })
+  decide(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { decision: 'approved' | 'rejected'; comment?: string; access_expires_at?: string },
+  ) {
+    return this.approvals.decide(scope, id, body);
   }
 }

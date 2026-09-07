@@ -24,11 +24,10 @@ export interface AuditRow {
   action: string;
   entity_type: string;
   entity_id: number | null;
-  actor_id: number | null;
-  actor_name: string | null;
-  actor_username: string | null;
-  company_id: number | null;
-  company_code: string | null;
+  /** null = การกระทำของระบบเอง ไม่ใช่ของคน (เช่น งานยกระดับอัตโนมัติ) */
+  actor: { id: number; full_name: string; username: string } | null;
+  /** null = เหตุการณ์ระดับกลุ่ม ไม่ผูกกับบริษัทใดบริษัทหนึ่ง */
+  company: { id: number; code: string } | null;
   old_value: unknown;
   new_value: unknown;
   ip_address: string | null;
@@ -129,7 +128,17 @@ export class AuditService {
     ]);
 
     return paged(
-      rows.map((r) => ({ ...r, created_at: r.created_at.toISOString() })),
+      rows.map(
+        ({ actor_id, actor_name, actor_username, company_id, company_code, ...r }) => ({
+          ...r,
+          actor:
+            actor_id === null
+              ? null
+              : { id: actor_id, full_name: actor_name ?? '', username: actor_username ?? '' },
+          company: company_id === null ? null : { id: company_id, code: company_code ?? '' },
+          created_at: r.created_at.toISOString(),
+        }),
+      ),
       params.page,
       params.page_size,
       totalRow[0]?.n ?? 0,

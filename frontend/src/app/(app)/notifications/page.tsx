@@ -16,10 +16,11 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/data-table';
-import { MockNotice, PageHeader, Tabs } from '@/components/ui/misc';
+import { PageHeader, Tabs } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatRelative } from '@/lib/format';
-import { NOTIFICATIONS } from '@/mocks/data';
+import { useMarkNotificationsRead, useNotifications } from '@/lib/queries/operations';
 
 /** ไอคอนต่อชนิดเหตุการณ์ — ต่างกันจริง ไม่ใช่กระดิ่งอันเดียวทุกแถว */
 const EVENT_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -39,12 +40,15 @@ const EVENT_TONE: Record<string, string> = {
 
 export default function NotificationsPage(): React.JSX.Element {
   const [tab, setTab] = React.useState<'unread' | 'all'>('unread');
-  const [readIds, setReadIds] = React.useState<number[]>([]);
+  const query = useNotifications();
+  const markRead = useMarkNotificationsRead();
 
-  const items = NOTIFICATIONS.map((n) => ({
-    ...n,
-    read_at: readIds.includes(n.id) ? new Date().toISOString() : n.read_at,
-  }));
+  /*
+   * ดึงรายการทั้งหมดครั้งเดียวแล้วกรองในหน้าจอ ไม่ยิงซ้ำตอนสลับแท็บ
+   * เพราะสองแท็บนี้ใช้ชุดข้อมูลเดียวกัน การยิงใหม่ทำให้แท็บกะพริบ
+   * โดยไม่ได้ข้อมูลใหม่จริง
+   */
+  const items = query.data?.items ?? [];
   const unread = items.filter((n) => n.read_at === null);
   const shown = tab === 'unread' ? unread : items;
 
@@ -57,9 +61,16 @@ export default function NotificationsPage(): React.JSX.Element {
           unread.length > 0 && (
             <Button
               variant="secondary"
+              disabled={markRead.isPending}
               onClick={() => {
-                setReadIds(NOTIFICATIONS.map((n) => n.id));
-                toast.success('ໝາຍວ່າອ່ານແລ້ວທັງໝົດ');
+                markRead.mutate(
+                  { all: true },
+                  {
+                    onSuccess: (r) => toast.success(`ໝາຍວ່າອ່ານແລ້ວ ${r.updated} ລາຍການ`),
+                    // บอกให้ชัดว่าล้มเหลว — การเงียบทำให้ผู้ใช้กดซ้ำแล้วคิดว่าค้าง
+                    onError: () => toast.error('ໝາຍວ່າອ່ານແລ້ວບໍ່ສຳເລັດ ລອງໃໝ່ອີກຄັ້ງ'),
+                  },
+                );
               }}
             >
               <CheckCheck className="h-4 w-4" aria-hidden="true" />
@@ -68,8 +79,6 @@ export default function NotificationsPage(): React.JSX.Element {
           )
         }
       />
-
-      <MockNotice endpoint="GET /notifications" />
 
       <Card>
         <div className="px-4 pt-1 lg:px-5">
@@ -84,6 +93,7 @@ export default function NotificationsPage(): React.JSX.Element {
           />
         </div>
 
+        <QueryBoundary query={query}>
         {shown.length === 0 ? (
           <EmptyState
             icon={Bell}
@@ -142,7 +152,16 @@ export default function NotificationsPage(): React.JSX.Element {
                   {item.ticket ? (
                     <Link
                       href={`/tickets/${item.ticket.id}`}
-                      onClick={() => setReadIds((prev) => [...prev, item.id])}
+                      /*
+                       * ทำเครื่องหมายอ่านแล้วตอนกดเข้าไปดูเรื่อง
+                       *
+                       * ไม่รอผลลัพธ์ก่อนเปลี่ยนหน้า — ถ้าคำขอนี้ล้มเหลว
+                       * ผลเสียคือกระดิ่งยังนับรายการนี้อยู่ ซึ่งแก้เองได้
+                       * ด้วยการกด "อ่านแล้วทั้งหมด" ไม่คุ้มที่จะหน่วงการเปิดเรื่อง
+                       */
+                      onClick={() => {
+                        if (isUnread) markRead.mutate({ ids: [item.id] });
+                      }}
                       className="block hover:bg-subtle"
                     >
                       {body}
@@ -155,6 +174,7 @@ export default function NotificationsPage(): React.JSX.Element {
             })}
           </ul>
         )}
+        </QueryBoundary>
       </Card>
     </div>
   );

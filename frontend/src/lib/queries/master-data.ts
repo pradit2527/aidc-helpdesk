@@ -6,6 +6,7 @@ import type {
   CatalogItem,
   ChecklistTemplate,
   Company,
+  DashboardSummary,
   Department,
   EscalationContact,
   EscalationRule,
@@ -89,22 +90,10 @@ export interface BusinessHoursRow {
 export const useBusinessHours = () =>
   useMaster<BusinessHoursRow>('business-hours', '/business-hours');
 
-export interface DashboardSummaryResponse {
-  scope: { company_codes: string[] };
-  open_tickets: number;
-  breached: number;
-  due_soon: number;
-  resolved_this_month: number;
-  /** null = ยังไม่มีเรื่องปิดในเดือนนี้ — ห้ามแสดงเป็น 100% */
-  sla_compliance_percent: number | null;
-  by_priority: { priority: string; count: number }[];
-  by_status: { status: string; count: number }[];
-}
-
-export function useDashboardSummary(): UseQueryResult<DashboardSummaryResponse, Error> {
+export function useDashboardSummary(): UseQueryResult<DashboardSummary, Error> {
   return useQuery({
     queryKey: ['dashboard', 'summary'],
-    queryFn: () => api.get<DashboardSummaryResponse>('/dashboard/summary'),
+    queryFn: () => api.get<DashboardSummary>('/dashboard/summary'),
   });
 }
 

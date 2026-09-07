@@ -166,7 +166,8 @@ export interface KbArticle {
   summary: string | null;
   body_markdown: string;
   category: { id: number; name_th: string };
-  visibility: 'public' | 'internal' | 'agent_only';
+  /** ตรงกับ CHECK ck_kb_visibility_valid ในฐานข้อมูล — 'company' ไม่ใช่ 'internal' */
+  visibility: 'public' | 'company' | 'agent_only';
   status: 'draft' | 'published' | 'archived';
   tags: string[];
   author: UserRef;
@@ -310,12 +311,21 @@ export interface SystemInfo {
 }
 
 export interface DashboardSummary {
+  /** บริษัทที่ตัวเลขชุดนี้ครอบคลุม — รายการว่างแปลว่าไม่จำกัดขอบเขต */
+  scope: { company_codes: string[] };
   open_tickets: number;
   breached: number;
   at_risk: number;
   resolved_this_month: number;
-  sla_compliance_percent: number;
-  avg_first_response_minutes: number;
+  /**
+   * null = ยังไม่มีเรื่องปิดในเดือนนี้ ไม่ใช่ทำได้ครบ 100%
+   *
+   * ⚠️ เทียบกับ 95 ตรง ๆ ไม่ได้ — null < 95 เป็น true ใน JavaScript
+   *    เพราะ null ถูกแปลงเป็น 0 ต้องเช็ค null แยกก่อนเสมอ
+   */
+  sla_compliance_percent: number | null;
+  /** null = ยังไม่มีเรื่องไหนได้รับการตอบรับในเดือนนี้ */
+  avg_first_response_minutes: number | null;
   by_priority: { priority: Priority; count: number }[];
   by_status: { status: TicketStatus; count: number }[];
   trend: { date: string; created: number; resolved: number }[];

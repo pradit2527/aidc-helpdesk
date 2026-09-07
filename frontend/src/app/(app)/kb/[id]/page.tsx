@@ -11,10 +11,13 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
-import { Alert, BackLink, DefRow, MockNotice } from '@/components/ui/misc';
+import { Alert, BackLink, DefRow } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { useHasRole } from '@/lib/session';
-import { KB_ARTICLES } from '@/mocks/data';
+import { ApiError } from '@/lib/api';
+import { useKbArticle } from '@/lib/queries/operations';
+import type { KbArticle } from '@/lib/types';
 
 /**
  * อ่านบทความ + ให้คะแนน + ทางออกถ้ายังไม่หาย
@@ -29,18 +32,34 @@ export default function KbArticlePage({
   params: Promise<{ id: string }>;
 }): React.JSX.Element {
   const { id } = React.use(params);
-  const article = KB_ARTICLES.find((a) => a.id === Number(id));
-  if (!article) notFound();
+  const query = useKbArticle(Number(id));
 
-  const canEdit = useHasRole('agent', 'company_admin', 'super_admin');
-  const [voted, setVoted] = React.useState<'up' | 'down' | null>(null);
+  /*
+   * บทความที่ไม่มีสิทธิ์เห็นได้ 404 จากเซิร์ฟเวอร์ ไม่ใช่ 403
+   * แปลงเป็นหน้า not-found ของ Next เพื่อให้ผู้ใช้เห็นหน้าเดียวกับ
+   * บทความที่ไม่มีจริง — ถ้าแยกสองหน้า ผู้เรียกจะไล่เดา id
+   * เพื่อดูว่าบทความไหนมีอยู่จริงได้
+   */
+  if (query.isError && query.error instanceof ApiError && query.error.status === 404) {
+    notFound();
+  }
 
   return (
     <div className="mx-auto max-w-3xl">
       <BackLink href="/kb" label="ກັບໄປຄັງຄວາມຮູ້" />
+      <QueryBoundary query={query}>
+        {query.data && <ArticleView article={query.data} />}
+      </QueryBoundary>
+    </div>
+  );
+}
 
-      <MockNotice endpoint={`GET /kb/articles/${id}`} />
+function ArticleView({ article }: { article: KbArticle }): React.JSX.Element {
+  const canEdit = useHasRole('agent', 'company_admin', 'super_admin');
+  const [voted, setVoted] = React.useState<'up' | 'down' | null>(null);
 
+  return (
+    <>
       {article.status === 'draft' && (
         <div className="mb-4">
           <Alert tone="warning" title="ບົດຄວາມນີ້ຍັງເປັນຮ່າງ">
@@ -151,6 +170,6 @@ export default function KbArticlePage({
           </dl>
         </CardBody>
       </Card>
-    </div>
+    </>
   );
 }

@@ -7,11 +7,12 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle, StatCard } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { PROBLEM_STATUS, type ProblemStatus } from '@/config/admin';
 import { cn } from '@/lib/cn';
 import { formatDate, formatNumber } from '@/lib/format';
-import { PROBLEMS } from '@/mocks/admin-data';
+import { useProblems } from '@/lib/queries/operations';
 import type { ProblemRecord } from '@/lib/types';
 
 /**
@@ -23,6 +24,9 @@ import type { ProblemRecord } from '@/lib/types';
  * มิฉะนั้นสาเหตุจริงจะไม่มีใครตามต่อ (SLA 5.4)
  */
 export default function ProblemsPage(): React.JSX.Element {
+  const query = useProblems();
+  const PROBLEMS = React.useMemo(() => query.data?.items ?? [], [query.data]);
+
   const rcaPending = PROBLEMS.filter((p) => p.status === 'rca_pending');
   const repeatRisk = PROBLEMS.filter((p) => p.linked_incident_count >= 3 && p.status !== 'closed');
   const open = PROBLEMS.filter((p) => p.status !== 'closed');
@@ -120,8 +124,6 @@ export default function ProblemsPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /problems" />
-
       {rcaPending.length > 0 && (
         <Alert tone="warning" title={`RCA ຄ້າງ ${rcaPending.length} ລາຍການ`}>
           ເອກະສານກຳນົດໃຫ້ສົ່ງ RCA ພາຍໃນ 5 ມື້ເຮັດວຽກຫຼັງເຫດ P1 (SLA 7.2)
@@ -142,13 +144,15 @@ export default function ProblemsPage(): React.JSX.Element {
 
       <Card>
         <CardBody className="p-0">
-          <DataTable
-            columns={columns}
-            rows={PROBLEMS}
-            rowKey={(p) => p.id}
-            caption="ລາຍການ Problem"
-            emptyTitle="ຍັງບໍ່ມີ Problem ໃນລະບົບ"
-          />
+          <QueryBoundary query={query}>
+            <DataTable
+              columns={columns}
+              rows={PROBLEMS}
+              rowKey={(p) => p.id}
+              caption="ລາຍການ Problem"
+              emptyTitle="ຍັງບໍ່ມີ Problem ໃນລະບົບ"
+            />
+          </QueryBoundary>
         </CardBody>
       </Card>
 
