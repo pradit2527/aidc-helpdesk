@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import { clampPage, clampPageSize } from '../../common/http/pagination';
@@ -73,5 +73,38 @@ export class NotificationsController {
      */
     const ids = (body.ids ?? []).filter((n) => Number.isInteger(n) && n > 0);
     return this.notifications.markRead(scope, ids);
+  }
+
+  @Put('channels')
+  @ApiOperation({
+    summary: 'ตั้งค่าช่องทางรับการแจ้งเตือนของฉัน',
+    description:
+      '`is_verified` ตั้งจาก endpoint นี้ไม่ได้ — LINE ต้องผ่านการผูกบัญชีจริงก่อน ' +
+      'มิฉะนั้นงานส่งแจ้งเตือนจะส่งไปยังปลายทางที่ไม่มีอยู่แล้วล้มเหลวเงียบ ๆ',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['channels'],
+      properties: {
+        channels: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              channel: { type: 'string', enum: ['in_app', 'email', 'teams', 'line', 'webpush'] },
+              is_enabled: { type: 'boolean' },
+              destination: { type: 'string', nullable: true },
+            },
+          },
+        },
+      },
+    },
+  })
+  setChannels(
+    @CurrentScope() scope: AccessScope,
+    @Body() body: { channels?: { channel: string; is_enabled: boolean; destination?: string | null }[] },
+  ) {
+    return this.notifications.setChannels(scope, body.channels ?? []);
   }
 }

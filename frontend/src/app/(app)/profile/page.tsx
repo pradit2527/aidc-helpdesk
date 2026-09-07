@@ -8,7 +8,12 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Input } from '@/components/ui/field';
-import { Alert, Avatar, DefRow, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, Avatar, DefRow, PageHeader } from '@/components/ui/misc';
+import {
+  useNotificationChannels,
+  useSetNotificationChannels,
+  useUpdateMe,
+} from '@/lib/queries/operations';
 import { ROLE_LABEL_KEY } from '@/components/layout/app-shell';
 import { useT } from '@/components/layout/preference-controls';
 import { useSession } from '@/lib/session';
@@ -23,17 +28,46 @@ export default function ProfilePage(): React.JSX.Element {
   const { user } = useSession();
   const t = useT();
 
-  const [channels, setChannels] = React.useState({
-    in_app: true,
-    email: true,
-    line: false,
+  const channelsQuery = useNotificationChannels();
+  const saveChannels = useSetNotificationChannels();
+  const updateMe = useUpdateMe();
+
+  /*
+   * ค่าเริ่มต้นของช่องทางที่ยังไม่มีแถวในฐานข้อมูล
+   *
+   * in_app เปิดไว้เพราะเป็นช่องทางเดียวที่ไม่ต้องตั้งค่าอะไรเพิ่ม
+   * ส่วน email เปิดต่อเมื่อผู้ใช้มีอีเมล — เปิดไว้ทั้งที่ไม่มีปลายทาง
+   * จะทำให้งานส่งล้มเหลวทุกครั้งโดยที่ผู้ใช้ไม่รู้
+   */
+  const channels = React.useMemo(() => {
+    const rows = channelsQuery.data ?? [];
+    const find = (c: string) => rows.find((r) => r.channel === c);
+    return {
+      in_app: find('in_app')?.is_enabled ?? true,
+      email: find('email')?.is_enabled ?? Boolean(user.email),
+      line: find('line')?.is_enabled ?? false,
+    };
+  }, [channelsQuery.data, user.email]);
+
+  function toggleChannel(channel: 'in_app' | 'email' | 'line', enabled: boolean): void {
+    saveChannels.mutate(
+      [{ channel, is_enabled: enabled }],
+      {
+        onSuccess: () => toast.success('ບັນທຶກຊ່ອງທາງແຈ້ງເຕືອນແລ້ວ'),
+        onError: () => toast.error('ບັນທຶກບໍ່ສຳເລັດ ລອງໃໝ່ອີກຄັ້ງ'),
+      },
+    );
+  }
+
+  const [form, setForm] = React.useState({
+    full_name: user.full_name,
+    email: user.email ?? '',
+    phone: '',
   });
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <PageHeader title="ໂປຣໄຟລ໌ ແລະ ການຕັ້ງຄ່າ" />
-
-      <MockNotice endpoint="GET /auth/me · PATCH /users/me" />
 
       <Card>
         <CardBody>
@@ -68,21 +102,57 @@ export default function ProfilePage(): React.JSX.Element {
         </CardHeader>
         <CardBody className="space-y-4">
           <Field label="ຊື່ ແລະ ນາມສະກຸນ" htmlFor="full_name">
-            <Input defaultValue={user.full_name} />
+            <Input
+              id="full_name"
+              value={form.full_name}
+              onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+            />
           </Field>
           <Field label="ອີເມວ" htmlFor="email">
-            <Input type="email" defaultValue={user.email ?? ''} />
+            <Input
+              id="email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
           </Field>
           <Field
             label="ເບີໂທລະສັບ"
             htmlFor="phone"
             hint="ໃຊ້ຕິດຕໍ່ກັບເມື່ອຕ້ອງການຂໍ້ມູນເພີ່ມ ຫຼື ຢືນຢັນຕົວຕົນ"
           >
-            <Input type="tel" inputMode="tel" placeholder="020 xxxx xxxx" />
+            <Input
+              id="phone"
+              type="tel"
+              inputMode="tel"
+              placeholder="020 xxxx xxxx"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            />
           </Field>
         </CardBody>
         <CardFooter className="justify-end">
-          <Button onClick={() => toast.success('ບັນທຶກຂໍ້ມູນແລ້ວ')}>ບັນທຶກ</Button>
+          <Button
+            disabled={updateMe.isPending}
+            onClick={() =>
+              updateMe.mutate(
+                {
+                  full_name: form.full_name,
+                  // ช่องว่างหมายถึง "ไม่มีอีเมล" ไม่ใช่ "ไม่เปลี่ยน" — ส่ง null ไปให้ชัด
+                  email: form.email.trim() || null,
+                  phone: form.phone.trim() || null,
+                },
+                {
+                  onSuccess: () => toast.success('ບັນທຶກຂໍ້ມູນແລ້ວ'),
+                  // แสดงข้อความจากเซิร์ฟเวอร์ตรง ๆ เพราะเป็นข้อความที่บอก
+                  // ได้ว่าช่องไหนผิด ต่างจากข้อความรวม ๆ ที่ไม่ช่วยแก้
+                  onError: (e) => toast.error(e.message),
+                },
+              )
+            }
+          >
+            {updateMe.isPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກ'}
+          </Button>
         </CardFooter>
       </Card>
 
@@ -96,7 +166,7 @@ export default function ProfilePage(): React.JSX.Element {
             title="ໃນລະບົບ"
             description="ກະດິ່ງແຈ້ງເຕືອນເທິງແຖບດ້ານເທິງ"
             checked={channels.in_app}
-            onChange={(v) => setChannels((c) => ({ ...c, in_app: v }))}
+            onChange={(v) => toggleChannel('in_app', v)}
           />
           <ChannelRow
             icon={Mail}
@@ -104,14 +174,14 @@ export default function ProfilePage(): React.JSX.Element {
             description={user.email ?? 'ຍັງບໍ່ໄດ້ຕັ້ງອີເມວ'}
             checked={channels.email}
             disabled={!user.email}
-            onChange={(v) => setChannels((c) => ({ ...c, email: v }))}
+            onChange={(v) => toggleChannel('email', v)}
           />
           <ChannelRow
             icon={MessageCircle}
             title="LINE"
             description="ຕ້ອງຜູກບັນຊີກ່ອນຈຶ່ງສົ່ງໄດ້ — ໃຊ້ແຈ້ງເຕືອນອອກເທົ່ານັ້ນ ແຈ້ງເລື່ອງເຂົ້າມາທາງ LINE ບໍ່ໄດ້"
             checked={channels.line}
-            onChange={(v) => setChannels((c) => ({ ...c, line: v }))}
+            onChange={(v) => toggleChannel('line', v)}
           />
         </CardBody>
         <CardFooter className="justify-between">

@@ -15,7 +15,10 @@ import {
 import * as React from 'react';
 
 import { Card, CardBody } from '@/components/ui/card';
-import { MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
+import { cn } from '@/lib/cn';
+import { useKpiReport, type KpiItem } from '@/lib/queries/operations';
 
 /**
  * ศูนย์รายงาน — รวมรายงานตาม docs/04-rbac-sla.md §5.2
@@ -101,12 +104,71 @@ const TEAM_REPORTS = [
   },
 ];
 
+/** ค่าที่วัดได้จริงของ KPI หนึ่งตัว พร้อมสถานะเทียบเป้า */
+function KpiTile({ kpi }: { kpi: KpiItem }): React.JSX.Element {
+  const unit = kpi.unit === 'percent' ? '%' : kpi.unit === 'minutes' ? ' ນທ.' : '';
+
+  return (
+    <div className="rounded border border-hair p-3">
+      <p className="text-caption text-ink-3">
+        {kpi.code} · {kpi.name}
+      </p>
+      <p
+        className={cn(
+          'tabular mt-1 text-h3',
+          kpi.meets_target === true && 'text-sla-ok',
+          kpi.meets_target === false && 'text-sla-breach',
+        )}
+      >
+        {/*
+          value เป็น null เมื่อตัวหารเป็นศูนย์ — แสดงว่า "ยังไม่มีข้อมูล"
+          ไม่ใช่ 0 หรือ 100 เพราะทั้งสองค่านั้นอ่านแล้วเข้าใจผิดคนละทาง
+        */}
+        {kpi.value === null ? <span className="text-body text-ink-3">ຍັງບໍ່ມີຂໍ້ມູນ</span> : `${kpi.value}${unit}`}
+      </p>
+      <p className="mt-0.5 text-caption text-ink-3">
+        ເປົ້າ {kpi.direction === 'higher' ? '≥' : '≤'} {kpi.target}
+        {unit} · ຖານ {kpi.denominator} ລາຍການ
+      </p>
+      {kpi.note && <p className="mt-1 text-caption text-ink-3">{kpi.note}</p>}
+    </div>
+  );
+}
+
 export default function ReportsPage(): React.JSX.Element {
+  const kpi = useKpiReport();
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="ສູນລາຍງານ" description="ລາຍງານທັງໝົດທີ່ລະບົບອອກໃຫ້ໄດ້" />
 
-      <MockNotice endpoint="GET /reports/*" />
+      <section>
+        <h2 className="mb-2 text-h3">KPI ເດືອນນີ້</h2>
+        <QueryBoundary query={kpi}>
+          {kpi.data && (
+            <>
+              {kpi.data.sip_required && (
+                <div className="mb-3">
+                  <Alert tone="warning" title="ຕ້ອງຈັດທຳແຜນປັບປຸງບໍລິການ (SIP)">
+                    {kpi.data.sip_reason}
+                  </Alert>
+                </div>
+              )}
+              <Card>
+                <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {kpi.data.items.map((item) => (
+                    <KpiTile key={item.code} kpi={item} />
+                  ))}
+                </CardBody>
+              </Card>
+              <p className="mt-2 text-caption text-ink-3">
+                ຊ່ວງ {kpi.data.period.label} · KPI-2 ແຍກຕາມລະດັບຄວາມສຳຄັນ ຈຶ່ງບໍ່ຢູ່ໃນຕາຕະລາງນີ້
+                — P1 ນັບນາທີປະຕິທິນ ສ່ວນ P2–P4 ນັບນາທີເຮັດວຽກ ສະເລ່ຍລວມກັນບໍ່ໄດ້
+              </p>
+            </>
+          )}
+        </QueryBoundary>
+      </section>
 
       <section>
         <h2 className="mb-2 text-h3">ລາຍງານຕາມເອກະສານຄວບຄຸມ</h2>

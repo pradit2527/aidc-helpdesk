@@ -286,6 +286,37 @@
             "description": "`assignee=me` คืนเฉพาะใบที่ถึงคิวของฉันจริง — ขั้นก่อนหน้าต้องอนุมัติครบแล้ว จึงจะปรากฏ ป้องกันการอนุมัติข้ามขั้นตาม SOP-03 · ถ้าไม่ระบุ `assignee` จะเห็นทุกใบในขอบเขต ซึ่งต้องมีสิทธิ์ `approval.read`"
           },
           "response": []
+        },
+        {
+          "name": "POST /approvals/{id}/decide — บันทึกผลการพิจารณา",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"approved\",\n  \"comment\": \"\",\n  \"access_expires_at\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/approvals/{id}/decide",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{id}",
+                "decide"
+              ]
+            },
+            "description": "เฉพาะผู้ที่ถูกระบุเป็นผู้อนุมัติของแถวนั้นเท่านั้น — ไม่มี permission ตัวไหน ให้ข้ามข้อนี้ได้ · ห้ามอนุมัติคำขอของตนเอง (422 SELF_APPROVAL_FORBIDDEN) · ปฏิเสธต้องมี `comment` · ปฏิเสธขั้นใดขั้นหนึ่งทำให้ ticket ไป `cancelled` · อนุมัติครบทุกขั้นแล้ว ticket ออกจากสถานะพักและนาฬิกา SLA เดินต่อ พร้อมบวกเวลาที่หยุดรออนุมัติคืนให้ตามกำหนดเวลา (SLA ข้อ 9)"
+          },
+          "response": []
         }
       ]
     },
@@ -914,6 +945,36 @@
           "response": []
         },
         {
+          "name": "PUT /notifications/channels — ตั้งค่าช่องทางรับการแจ้งเตือนของฉัน",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channels\": [\n    {\n      \"channel\": \"in_app\",\n      \"is_enabled\": false,\n      \"destination\": \"\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/channels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "channels"
+              ]
+            },
+            "description": "`is_verified` ตั้งจาก endpoint นี้ไม่ได้ — LINE ต้องผ่านการผูกบัญชีจริงก่อน มิฉะนั้นงานส่งแจ้งเตือนจะส่งไปยังปลายทางที่ไม่มีอยู่แล้วล้มเหลวเงียบ ๆ"
+          },
+          "response": []
+        },
+        {
           "name": "POST /notifications/read — ทำเครื่องหมายว่าอ่านแล้ว",
           "request": {
             "method": "POST",
@@ -1420,6 +1481,66 @@
               ]
             },
             "description": "ค้นด้วย `q` ได้ทั้งชื่อ ชื่อผู้ใช้ และรหัสพนักงาน · `company_id` ที่อยู่นอกขอบเขตจะถูกตัดทิ้งเงียบ ๆ ไม่ตอบ 403 เพราะการตอบ 403 ยืนยันว่าบริษัทนั้นมีอยู่จริง"
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /users/me — แก้ไขข้อมูลติดต่อของตนเอง",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"\",\n  \"email\": \"\",\n  \"phone\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            },
+            "description": "แก้ได้เฉพาะ `full_name` `email` `phone` — ฟิลด์ที่ตัดสินสิทธิ์ (บริษัท แผนก สถานะใช้งาน) ต้องแก้ผ่านผู้ดูแลเท่านั้น มิฉะนั้นผู้ใช้จะย้ายตัวเองเข้าบริษัทอื่นแล้วเห็นข้อมูลของบริษัทนั้นได้"
+          },
+          "response": []
+        },
+        {
+          "name": "POST /users/import — นำเข้าผู้ใช้จากไฟล์ CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"csv\": \"\",\n  \"default_password\": \"\",\n  \"dry_run\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "import"
+              ]
+            },
+            "description": "คืนผลรายแถว ไม่ใช่แค่ยอดรวม — ไฟล์รายชื่อพนักงานมีหลักร้อยแถว ถ้าบอกแค่ยอดรวม ผู้ดูแลต้องไล่หาเองว่าแถวไหนตก · `dry_run: true` ตรวจไฟล์อย่างเดียว ไม่เขียนอะไรลงฐานข้อมูล · คอลัมน์บังคับ: `username` `full_name` `company_code` · ทุกบัญชีที่สร้างถูกบังคับ `must_change_password` และไม่ได้รับบทบาทใดจากไฟล์"
           },
           "response": []
         },

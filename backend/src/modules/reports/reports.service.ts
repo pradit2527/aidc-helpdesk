@@ -135,31 +135,52 @@ export class ReportsService {
   async slaCompliance(scope: AccessScope, period: ReportPeriod) {
     const rows = (await this.db.execute(sql`
       SELECT
+        c.id                                       AS company_id,
         c.code                                     AS company_code,
         t.priority                                 AS priority,
-        count(*)::int                              AS closed,
+        /*
+         * ตัวหารนับเฉพาะใบที่ไม่มีเหตุยกเว้น ส่วน excluded นับแยกไว้แสดง
+         *
+         * แยกสองตัวเลขนี้ให้เห็นทั้งคู่โดยตั้งใจ — ถ้ารายงานแสดงแต่ค่า
+         * ที่คำนวณได้ ผู้อ่านจะไม่มีทางรู้ว่ามีกี่ใบถูกตัดออกไป
+         * แล้วเหตุยกเว้นที่ถูกใช้มากเกินควรจะซ่อนตัวอยู่ได้ตลอด
+         */
+        count(*) FILTER (WHERE t.sla_exclusion_code IS NULL)::int  AS closed,
         count(*) FILTER (
-          WHERE t.resolved_at IS NOT NULL
+          WHERE t.sla_exclusion_code IS NULL
+            AND t.resolved_at IS NOT NULL
             AND t.resolution_due_at IS NOT NULL
             AND t.resolved_at <= t.resolution_due_at
-        )::int                                     AS met
+        )::int                                     AS met,
+        count(*) FILTER (WHERE t.sla_exclusion_code IS NOT NULL)::int AS excluded
       FROM ticket t
       JOIN company c ON c.id = t.company_id
       WHERE t.deleted_at IS NULL
         AND t.closed_at >= ${period.fromIso}::timestamptz
         AND t.closed_at <= ${period.toIso}::timestamptz
-        -- ตัดออกจากตัวหาร ไม่ใช่นับเป็นผ่าน (SLA ภาคผนวก ก.2)
-        AND t.sla_exclusion_code IS NULL
         AND ${this.scopeSql(scope)}
-      GROUP BY c.code, t.priority
+      GROUP BY c.id, c.code, t.priority
       ORDER BY c.code, t.priority
-    `)) as unknown as { company_code: string; priority: string; closed: number; met: number }[];
+    `)) as unknown as {
+      company_id: number;
+      company_code: string;
+      priority: string;
+      closed: number;
+      met: number;
+      excluded: number;
+    }[];
 
-    const byCompany = new Map<string, { closed: number; met: number }>();
+    const byCompany = new Map<string, { id: number; closed: number; met: number; excluded: number }>();
     for (const r of rows) {
-      const acc = byCompany.get(r.company_code) ?? { closed: 0, met: 0 };
+      const acc = byCompany.get(r.company_code) ?? {
+        id: r.company_id,
+        closed: 0,
+        met: 0,
+        excluded: 0,
+      };
       acc.closed += r.closed;
       acc.met += r.met;
+      acc.excluded += r.excluded;
       byCompany.set(r.company_code, acc);
     }
 
@@ -168,32 +189,37 @@ export class ReportsService {
 
     const totalClosed = rows.reduce((s, r) => s + r.closed, 0);
     const totalMet = rows.reduce((s, r) => s + r.met, 0);
+    const totalExcluded = rows.reduce((s, r) => s + r.excluded, 0);
 
     return {
       period: { from: period.from.toISOString(), to: period.to.toISOString(), label: period.label },
       target_percent: 95,
       overall: {
-        closed: totalClosed,
+        total: totalClosed,
         met: totalMet,
+        excluded: totalExcluded,
         compliance_percent: pct(totalMet, totalClosed),
       },
       by_company: [...byCompany.entries()].map(([code, v]) => ({
-        company_code: code,
-        closed: v.closed,
+        company: { id: v.id, code },
+        total: v.closed,
         met: v.met,
+        excluded: v.excluded,
         compliance_percent: pct(v.met, v.closed),
       })),
       by_priority: PRIORITY.map((p) => {
         const matching = rows.filter((r) => r.priority === p);
-        const closed = matching.reduce((s, r) => s + r.closed, 0);
+        const total = matching.reduce((s, r) => s + r.closed, 0);
         const met = matching.reduce((s, r) => s + r.met, 0);
-        return { priority: p, closed, met, compliance_percent: pct(met, closed) };
+        const excluded = matching.reduce((s, r) => s + r.excluded, 0);
+        return { priority: p, total, met, excluded, compliance_percent: pct(met, total) };
       }),
       matrix: rows.map((r) => ({
-        company_code: r.company_code,
+        company: { id: r.company_id, code: r.company_code },
         priority: r.priority,
-        closed: r.closed,
+        total: r.closed,
         met: r.met,
+        excluded: r.excluded,
         compliance_percent: pct(r.met, r.closed),
       })),
     };

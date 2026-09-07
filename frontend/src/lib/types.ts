@@ -335,10 +335,18 @@ export interface DashboardSummary {
 export interface SlaComplianceRow {
   company: CompanyRef;
   priority: Priority;
+  /** ปิดในช่วงเวลา และอยู่ในตัวหาร — ไม่รวมใบที่มีเหตุยกเว้น */
   total: number;
   met: number;
+  /**
+   * ถูกตัดออกจากตัวหารเพราะมี sla_exclusion_code (SLA ภาคผนวก ก.2)
+   *
+   * แสดงคู่กับ total เสมอ — รายงานที่โชว์แต่ค่าที่คำนวณได้ ทำให้เหตุยกเว้น
+   * ที่ถูกใช้มากเกินควรซ่อนตัวอยู่ได้ตลอด
+   */
   excluded: number;
-  compliance_percent: number;
+  /** null = ไม่มีใบที่อยู่ในตัวหารเลย ไม่ใช่ 0% */
+  compliance_percent: number | null;
 }
 
 // ── โมดูลผู้ดูแลระบบ ─────────────────────────────────────────────────

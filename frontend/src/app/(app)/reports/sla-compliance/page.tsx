@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle, StatCard } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Select } from '@/components/ui/field';
-import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { formatNumber, formatPercent } from '@/lib/format';
-import { COMPANIES, SLA_COMPLIANCE } from '@/mocks/data';
+import { useCompanies } from '@/lib/queries/master-data';
+import { useSlaComplianceReport } from '@/lib/queries/operations';
 import type { SlaComplianceRow } from '@/lib/types';
 
 const TARGET_PERCENT = 95;
@@ -27,7 +29,24 @@ export default function SlaCompliancePage(): React.JSX.Element {
   const [month, setMonth] = React.useState('2026-08');
   const [company, setCompany] = React.useState('');
 
-  const rows = SLA_COMPLIANCE.filter((r) => !company || String(r.company.id) === company);
+  const companies = useCompanies();
+
+  /*
+   * แปลงเดือนที่เลือกเป็นช่วงเวลาเต็มเดือน
+   *
+   * ใช้วันที่ 1 ของเดือนถัดไปเป็นขอบบน แทนการเดาว่าเดือนนี้มีกี่วัน
+   * — Date จัดการเดือนที่มี 28/30/31 วันและปีอธิกสุรทินให้เอง
+   */
+  const [year, mon] = month.split('-').map(Number);
+  const from = new Date(Date.UTC(year ?? 2026, (mon ?? 1) - 1, 1)).toISOString();
+  const to = new Date(Date.UTC(year ?? 2026, mon ?? 1, 1)).toISOString();
+
+  const query = useSlaComplianceReport(from, to);
+  const report = query.data;
+
+  const rows = (report?.matrix ?? []).filter(
+    (r) => !company || String(r.company.id) === company,
+  );
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -37,7 +56,14 @@ export default function SlaCompliancePage(): React.JSX.Element {
     }),
     { total: 0, met: 0, excluded: 0 },
   );
-  const overall = totals.total > 0 ? (totals.met / totals.total) * 100 : 0;
+
+  /*
+   * null เมื่อไม่มีใบไหนอยู่ในตัวหาร ไม่ใช่ 0%
+   *
+   * 0% แปลว่า "ทำไม่ทันสักใบ" ซึ่งเป็นข้อความคนละเรื่องกับ "ยังไม่มีใบให้วัด"
+   * และเป็นข้อความที่ทำให้คนตกใจโดยไม่มีเหตุ
+   */
+  const overall = totals.total > 0 ? (totals.met / totals.total) * 100 : null;
 
   const columns: Column<SlaComplianceRow>[] = [
     { key: 'company', header: 'ບໍລິສັດ', render: (r) => r.company.code },
@@ -59,16 +85,20 @@ export default function SlaCompliancePage(): React.JSX.Element {
       key: 'percent',
       header: '% ຕາມ SLA',
       align: 'right',
-      render: (r) => (
-        <span
-          className={cn(
-            'tabular font-semibold',
-            r.compliance_percent >= TARGET_PERCENT ? 'text-sla-ok' : 'text-sla-breach',
-          )}
-        >
-          {formatPercent(r.compliance_percent)}
-        </span>
-      ),
+      render: (r) =>
+        // null = ไม่มีใบไหนอยู่ในตัวหารของช่องนี้ ไม่ใช่ 0%
+        r.compliance_percent === null ? (
+          <span className="text-caption text-ink-3">ບໍ່ມີຂໍ້ມູນ</span>
+        ) : (
+          <span
+            className={cn(
+              'tabular font-semibold',
+              r.compliance_percent >= TARGET_PERCENT ? 'text-sla-ok' : 'text-sla-breach',
+            )}
+          >
+            {formatPercent(r.compliance_percent)}
+          </span>
+        ),
     },
   ];
 
@@ -86,14 +116,16 @@ export default function SlaCompliancePage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /reports/sla-compliance" />
-
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="SLA Compliance ລວມ"
-          value={formatPercent(overall)}
-          tone={overall >= TARGET_PERCENT ? 'ok' : 'breach'}
-          hint={`ເປົ້າໝາຍ ≥ ${TARGET_PERCENT}%`}
+          value={overall === null ? '—' : formatPercent(overall)}
+          {...(overall === null ? {} : { tone: overall >= TARGET_PERCENT ? 'ok' : 'breach' })}
+          hint={
+            overall === null
+              ? 'ຍັງບໍ່ມີເລື່ອງທີ່ປິດໃນຊ່ວງນີ້'
+              : `ເປົ້າໝາຍ ≥ ${TARGET_PERCENT}%`
+          }
         />
         <StatCard label="ເລື່ອງທີ່ປິດ" value={formatNumber(totals.total)} />
         <StatCard label="ທັນເວລາ" value={formatNumber(totals.met)} tone="ok" />
@@ -133,7 +165,7 @@ export default function SlaCompliancePage(): React.JSX.Element {
               className="w-auto"
             >
               <option value="">ທຸກບໍລິສັດ</option>
-              {COMPANIES.map((c) => (
+              {(companies.data ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.code}
                 </option>
@@ -142,13 +174,15 @@ export default function SlaCompliancePage(): React.JSX.Element {
           </div>
         </CardHeader>
         <CardBody className="p-0">
-          <DataTable
-            columns={columns}
-            rows={rows}
-            rowKey={(r) => `${r.company.id}-${r.priority}`}
-            caption="ຜົນ SLA ແຍກຕາມບໍລິສັດ ແລະ ລະດັບຄວາມສຳຄັນ"
-            emptyTitle="ບໍ່ມີຂໍ້ມູນໃນເດືອນທີ່ເລືອກ"
-          />
+          <QueryBoundary query={query}>
+            <DataTable
+              columns={columns}
+              rows={rows}
+              rowKey={(r) => `${r.company.id}-${r.priority}`}
+              caption="ຜົນ SLA ແຍກຕາມບໍລິສັດ ແລະ ລະດັບຄວາມສຳຄັນ"
+              emptyTitle="ບໍ່ມີຂໍ້ມູນໃນເດືອນທີ່ເລືອກ"
+            />
+          </QueryBoundary>
         </CardBody>
       </Card>
     </div>

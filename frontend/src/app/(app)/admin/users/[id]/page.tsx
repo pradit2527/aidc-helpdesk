@@ -10,10 +10,14 @@ import { useT } from '@/components/layout/preference-controls';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/field';
-import { Alert, Avatar, BackLink, DefRow, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, Avatar, BackLink, DefRow, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { formatDateTime } from '@/lib/format';
 import { useHasRole } from '@/lib/session';
-import { COMPANIES, DEPARTMENTS, USERS } from '@/mocks/data';
+import { ApiError } from '@/lib/api';
+import { useCompanies, useDepartments } from '@/lib/queries/master-data';
+import { useUser } from '@/lib/queries/operations';
+import type { AdminUser } from '@/lib/types';
 import type { RoleCode } from '@/lib/types';
 
 const ASSIGNABLE_ROLES: RoleCode[] = ['end_user', 'agent', 'company_admin', 'manager_viewer'];
@@ -30,9 +34,23 @@ export default function UserDetailPage({
   params: Promise<{ id: string }>;
 }): React.JSX.Element {
   const { id } = React.use(params);
-  const target = USERS.find((u) => u.id === Number(id));
-  if (!target) notFound();
+  const query = useUser(Number(id));
 
+  // ผู้ใช้นอกขอบเขตได้ 404 จากเซิร์ฟเวอร์ ไม่ใช่ 403 — ถ้าตอบ 403
+  // ผู้เรียกจะไล่เดาเลขเพื่อนับจำนวนพนักงานของบริษัทอื่นได้
+  if (query.isError && query.error instanceof ApiError && query.error.status === 404) {
+    notFound();
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <BackLink href="/admin/users" label="ກັບໄປລາຍຊື່ຜູ້ໃຊ້" />
+      <QueryBoundary query={query}>{query.data && <UserDetailView target={query.data} />}</QueryBoundary>
+    </div>
+  );
+}
+
+function UserDetailView({ target }: { target: AdminUser }): React.JSX.Element {
   const isSuperAdmin = useHasRole('super_admin');
   const t = useT();
   const roleOptions = isSuperAdmin ? [...ASSIGNABLE_ROLES, 'super_admin' as const] : ASSIGNABLE_ROLES;
@@ -40,14 +58,17 @@ export default function UserDetailPage({
   const [roles, setRoles] = React.useState<RoleCode[]>(target.roles);
   const [scoped, setScoped] = React.useState<number[]>(target.scoped_companies.map((c) => c.id));
 
-  const departments = DEPARTMENTS.filter((d) => d.company.id === target.company.id);
+  const companies = useCompanies();
+  const departmentsQuery = useDepartments();
+
+  // แผนกของบริษัทที่ผู้ใช้คนนี้สังกัด — ไม่ใช่ทุกแผนกในกลุ่ม
+  const departments = (departmentsQuery.data ?? []).filter(
+    (d) => d.company.id === target.company.id,
+  );
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <BackLink href="/admin/users" label="ກັບໄປລາຍຊື່ຜູ້ໃຊ້" />
       <PageHeader title={target.full_name} description={target.username} />
-
-      <MockNotice endpoint={`GET /users/${id}`} />
 
       {target.is_locked && (
         <Alert
@@ -95,7 +116,7 @@ export default function UserDetailPage({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="ບໍລິສັດ" htmlFor="company">
               <Select defaultValue={target.company.id}>
-                {COMPANIES.map((c) => (
+                {(companies.data ?? []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.code}
                   </option>
@@ -169,7 +190,7 @@ export default function UserDetailPage({
             ລະບົບຈະໃຊ້ບໍລິສັດຕົ້ນສັງກັດຂອງຜູ້ໃຊ້
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {COMPANIES.map((c) => (
+            {(companies.data ?? []).map((c) => (
               <label
                 key={c.id}
                 className="flex min-h-tap cursor-pointer items-center gap-3 rounded border border-hair px-3 hover:bg-subtle"

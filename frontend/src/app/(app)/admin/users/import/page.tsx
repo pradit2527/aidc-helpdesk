@@ -7,18 +7,14 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Alert, BackLink, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
+import { Input } from '@/components/ui/field';
+import { useImportUsers, type ImportRowResult } from '@/lib/queries/operations';
 import { cn } from '@/lib/cn';
 import { formatFileSize } from '@/lib/format';
 
-interface ImportRow {
-  line: number;
-  username: string;
-  full_name: string;
-  company: string;
-  status: 'ok' | 'error' | 'skipped';
-  message: string;
-}
+/** ชนิดเดียวกับที่ API คืน — ไม่ประกาศซ้ำ */
+type ImportRow = ImportRowResult;
 
 /**
  * นำเข้าผู้ใช้จากไฟล์ (FR-06)
@@ -26,18 +22,48 @@ interface ImportRow {
  * ผลลัพธ์ต้องรายงาน "รายแถว" ไม่ใช่บอกแค่ว่าสำเร็จกี่คน
  * ไฟล์รายชื่อพนักงานมีหลักร้อยแถว ถ้าบอกแค่ยอดรวม ผู้ดูแลต้องไล่หาเองว่าแถวไหนตก
  */
-const SAMPLE_RESULT: ImportRow[] = [
-  { line: 2, username: 'somsak.p', full_name: 'ສົມສັກ ພັນທະວົງ', company: 'AIDC-LOG', status: 'ok', message: 'ສ້າງບັນຊີແລ້ວ' },
-  { line: 3, username: 'khamla.s', full_name: 'ຄຳລ້າ ສີວິໄລ', company: 'AIDC-LOG', status: 'ok', message: 'ສ້າງບັນຊີແລ້ວ' },
-  { line: 4, username: 'phouvong.s', full_name: 'ພູວົງ ສີສຸກ', company: 'AIDC-LOG', status: 'skipped', message: 'ມີຊື່ຜູ້ໃຊ້ນີ້ຢູ່ແລ້ວ ຂ້າມແຖວນີ້' },
-  { line: 5, username: 'bounmy.k', full_name: 'ບຸນມີ ແກ້ວມະນີ', company: 'AIDC-XYZ', status: 'error', message: 'ບໍ່ພົບລະຫັດບໍລິສັດ AIDC-XYZ' },
-  { line: 6, username: '', full_name: 'ວິໄລ ສຸວັນນະ', company: 'AIDC-CON', status: 'error', message: 'ຊ່ອງ username ວ່າງ' },
-];
-
 export default function ImportUsersPage(): React.JSX.Element {
   const [file, setFile] = React.useState<File | null>(null);
   const [result, setResult] = React.useState<ImportRow[] | null>(null);
-  const [running, setRunning] = React.useState(false);
+  const [defaultPassword, setDefaultPassword] = React.useState('');
+  const importUsers = useImportUsers();
+  const running = importUsers.isPending;
+
+  /**
+   * อ่านไฟล์เป็นข้อความแล้วส่งไปที่เซิร์ฟเวอร์
+   *
+   * ⚠️ รองรับเฉพาะ .csv จริง ๆ — .xlsx เป็นไฟล์บีบอัดแบบไบนารี
+   *    การอ่านด้วย text() จะได้ข้อมูลขยะที่ไม่มีทางแยกคอลัมน์ได้
+   *    จึงต้องปฏิเสธตั้งแต่ต้นแทนที่จะปล่อยให้ล้มเหลวแบบงง ๆ ที่เซิร์ฟเวอร์
+   */
+  async function run(dryRun: boolean): Promise<void> {
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      toast.error('ຮອງຮັບສະເພາະໄຟລ໌ .csv ໃນຕອນນີ້ — ກະລຸນາບັນທຶກ .xlsx ເປັນ .csv ກ່ອນ');
+      return;
+    }
+
+    const csv = await file.text();
+    importUsers.mutate(
+      {
+        csv,
+        dry_run: dryRun,
+        ...(dryRun ? {} : { default_password: defaultPassword }),
+      },
+      {
+        onSuccess: (r) => {
+          setResult(r.rows);
+          toast.success(
+            r.dry_run
+              ? `ກວດແລ້ວ ${r.summary.total} ແຖວ — ພ້ອມນຳເຂົ້າ ${r.summary.ok} ແຖວ`
+              : `ນຳເຂົ້າສຳເລັດ ${r.summary.ok} ບັນຊີ`,
+          );
+        },
+        onError: (e) => toast.error(e.message),
+      },
+    );
+  }
 
   const counts = result
     ? {
@@ -87,13 +113,15 @@ export default function ImportUsersPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="POST /users/import" />
-
       <Alert tone="info" title="ໂຄງສ້າງໄຟລ໌ທີ່ຕ້ອງການ">
         ແຖວທຳອິດເປັນຫົວຕາຕະລາງ ແລະ ຕ້ອງມີຄໍລຳ{' '}
-        <code className="font-mono">username, full_name, email, employee_code, company_code, department</code>
+        <code className="font-mono">username, full_name, company_code</code> (ບັງຄັບ) ແລະ{' '}
+        <code className="font-mono">email, employee_code, job_title</code> (ເລືອກໃສ່ໄດ້)
         <br />
-        ບັນຊີທີ່ນຳເຂົ້າຈະຖືກຕັ້ງໃຫ້ຕ້ອງປ່ຽນລະຫັດຜ່ານເມື່ອເຂົ້າໃຊ້ຄັ້ງທຳອິດສະເໝີ
+        ບັນຊີທີ່ນຳເຂົ້າຖືກຕັ້ງໃຫ້ຕ້ອງປ່ຽນລະຫັດຜ່ານເມື່ອເຂົ້າໃຊ້ຄັ້ງທຳອິດສະເໝີ ແລະ
+        ບໍ່ໄດ້ຮັບບົດບາດໃດຈາກໄຟລ໌ — ຕ້ອງມອບບົດບາດແຍກຕ່າງຫາກ
+        <br />
+        ນຳເຂົ້າໄດ້ສະເພາະບໍລິສັດທີ່ຢູ່ໃນຂອບເຂດຂອງທ່ານ
       </Alert>
 
       <Card>
@@ -108,7 +136,7 @@ export default function ImportUsersPage(): React.JSX.Element {
             )}
             <input
               type="file"
-              accept=".xlsx,.csv"
+              accept=".csv"
               onChange={(e) => {
                 setFile(e.target.files?.[0] ?? null);
                 setResult(null);
@@ -117,16 +145,35 @@ export default function ImportUsersPage(): React.JSX.Element {
             />
           </label>
 
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3">
+            <label htmlFor="default_password" className="field-label">
+              ລະຫັດຜ່ານຕັ້ງຕົ້ນ
+              <span className="ml-1 font-normal text-ink-3">
+                (ຢ່າງໜ້ອຍ 12 ຕົວ · ທຸກບັນຊີຕ້ອງປ່ຽນເມື່ອເຂົ້າຄັ້ງທຳອິດ)
+              </span>
+            </label>
+            <Input
+              id="default_password"
+              type="password"
+              value={defaultPassword}
+              onChange={(e) => setDefaultPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            {/*
+              ตรวจก่อนนำเข้าเป็นขั้นตอนแยก ไม่ใช่ทางเลือก
+              ไฟล์รายชื่อพนักงานผิดพลาดได้ง่าย (รหัสบริษัทพิมพ์ผิด คอลัมน์เลื่อน)
+              และการสร้างบัญชีย้อนกลับยากกว่าการตรวจก่อนมาก
+            */}
+            <Button variant="secondary" disabled={!file || running} onClick={() => void run(true)}>
+              ກວດໄຟລ໌ກ່ອນ
+            </Button>
             <Button
-              disabled={!file}
+              disabled={!file || defaultPassword.length < 12}
               loading={running}
-              onClick={async () => {
-                setRunning(true);
-                await new Promise((r) => setTimeout(r, 500));
-                setResult(SAMPLE_RESULT);
-                setRunning(false);
-              }}
+              onClick={() => void run(false)}
             >
               <Upload className="h-4 w-4" aria-hidden="true" />
               ນຳເຂົ້າ

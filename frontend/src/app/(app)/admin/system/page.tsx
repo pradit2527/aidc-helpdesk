@@ -4,9 +4,10 @@ import { Database, HardDriveDownload, Server } from 'lucide-react';
 import * as React from 'react';
 
 import { Card, CardBody, CardHeader, CardTitle, StatCard } from '@/components/ui/card';
-import { Alert, DefRow, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Alert, DefRow, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { formatDateTime, formatMinutes, formatNumber } from '@/lib/format';
-import { SYSTEM_INFO } from '@/mocks/data';
+import { useSystemInfo, type SystemInfoResponse } from '@/lib/queries/master-data';
 
 /**
  * ข้อมูลระบบ — super_admin เท่านั้น
@@ -15,15 +16,21 @@ import { SYSTEM_INFO } from '@/mocks/data';
  * ถ้าซ่อนไว้ในรายงานรายเดือน จะรู้ว่าสำรองไม่สำเร็จก็ต่อเมื่อต้องกู้คืนจริง
  */
 export default function SystemPage(): React.JSX.Element {
-  const info = SYSTEM_INFO;
+  const query = useSystemInfo();
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="ຂໍ້ມູນລະບົບ" description="ເວີຊັນ ຈຳນວນຂໍ້ມູນ ແລະ ສະຖານະການສຳຮອງຂໍ້ມູນ" />
 
-      <MockNotice endpoint="GET /system/info" />
+      <QueryBoundary query={query}>{query.data && <SystemInfoView info={query.data} />}</QueryBoundary>
+    </div>
+  );
+}
 
-      {info.last_backup_at === null && (
+function SystemInfoView({ info }: { info: SystemInfoResponse }): React.JSX.Element {
+  return (
+    <>
+      {info.backup.last_run_at === null && (
         <Alert tone="danger" title="ຍັງບໍ່ມີການສຳຮອງຂໍ້ມູນ">
           ຍັງບໍ່ໄດ້ກຳນົດປາຍທາງສຳຮອງຂໍ້ມູນນອກສະຖານທີ່ — ຕ້ອງກຳນົດ ແລະ
           ທົດສອບການກູ້ຄືນຢ່າງໜ້ອຍໜຶ່ງຄັ້ງກ່ອນເປີດໃຊ້ງານຈິງ
@@ -49,10 +56,10 @@ export default function SystemPage(): React.JSX.Element {
           </CardHeader>
           <CardBody>
             <dl className="divide-y divide-hair">
-              <DefRow label="ເວີຊັນ">{info.version}</DefRow>
-              <DefRow label="ສະພາບແວດລ້ອມ">{info.environment}</DefRow>
+              <DefRow label="ເວີຊັນ">{info.app.version}</DefRow>
+              <DefRow label="ສະພາບແວດລ້ອມ">{info.app.environment}</DefRow>
               <DefRow label="ເຮັດວຽກຕໍ່ເນື່ອງ">
-                {formatMinutes(Math.round(info.uptime_seconds / 60), 'calendar_minutes')}
+                {formatMinutes(Math.round(info.app.uptime_seconds / 60), 'calendar_minutes')}
               </DefRow>
               <DefRow label="ເຂດເວລາ">Asia/Vientiane (UTC+7)</DefRow>
             </dl>
@@ -92,14 +99,14 @@ export default function SystemPage(): React.JSX.Element {
         <CardBody>
           <dl className="divide-y divide-hair">
             <DefRow label="ສຳຮອງຫຼ້າສຸດ">
-              {info.last_backup_at ? (
-                formatDateTime(info.last_backup_at)
+              {info.backup.last_run_at ? (
+                formatDateTime(info.backup.last_run_at)
               ) : (
                 <span className="font-semibold text-sla-breach">ຍັງບໍ່ເຄີຍສຳຮອງ</span>
               )}
             </DefRow>
             <DefRow label="ປາຍທາງນອກສະຖານທີ່">
-              {info.backup_destination ?? (
+              {(info.backup.configured ? 'ຕັ້ງຄ່າແລ້ວ' : null) ?? (
                 <span className="font-semibold text-sla-breach">ຍັງບໍ່ໄດ້ກຳນົດ</span>
               )}
             </DefRow>
@@ -109,6 +116,6 @@ export default function SystemPage(): React.JSX.Element {
           </dl>
         </CardBody>
       </Card>
-    </div>
+    </>
   );
 }

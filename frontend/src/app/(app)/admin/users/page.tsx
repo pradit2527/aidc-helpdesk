@@ -11,11 +11,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/field';
-import { Avatar, MockNotice, PageHeader } from '@/components/ui/misc';
+import { Avatar, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { formatRelative } from '@/lib/format';
 import { useSession } from '@/lib/session';
-import { COMPANIES, USERS } from '@/mocks/data';
+import { useCompanies } from '@/lib/queries/master-data';
+import { useUsers } from '@/lib/queries/operations';
+import { useDebounced } from '@/lib/use-debounced';
 import type { AdminUser } from '@/lib/types';
 
 /**
@@ -32,13 +35,23 @@ export default function AdminUsersPage(): React.JSX.Element {
   const [company, setCompany] = React.useState('');
   const [role, setRole] = React.useState('');
 
-  const rows = USERS.filter((u) => {
-    if (q && !`${u.full_name} ${u.username} ${u.employee_code ?? ''}`.toLowerCase().includes(q.toLowerCase()))
-      return false;
-    if (company && String(u.company.id) !== company) return false;
-    if (role && !u.roles.includes(role as AdminUser['roles'][number])) return false;
-    return true;
+  /*
+   * คำค้นและตัวกรองบริษัทส่งไปที่เซิร์ฟเวอร์ ส่วนบทบาทกรองในหน้าจอ
+   *
+   * เซิร์ฟเวอร์ยังไม่มีตัวกรองตามบทบาท และรายชื่อผู้ใช้ต่อหน้ามีแค่ 20 คน
+   * การกรองบทบาทที่หน้าจอจึงยังพอรับได้ — แต่ต้องบอกผู้ใช้ว่ากรองเฉพาะ
+   * หน้าปัจจุบัน ไม่ใช่ทั้งระบบ
+   */
+  const debouncedQ = useDebounced(q, 300);
+  const companies = useCompanies();
+  const query = useUsers({
+    q: debouncedQ || undefined,
+    company_id: company ? Number(company) : undefined,
   });
+
+  const rows = (query.data?.items ?? []).filter(
+    (u) => !role || u.roles.includes(role as AdminUser['roles'][number]),
+  );
 
   const columns: Column<AdminUser>[] = [
     {
@@ -168,8 +181,6 @@ export default function AdminUsersPage(): React.JSX.Element {
         }
       />
 
-      <MockNotice endpoint="GET /users" />
-
       <Card>
         <CardBody className="grid gap-2 border-b border-hair sm:grid-cols-3">
           <div className="relative sm:col-span-1">
@@ -192,7 +203,7 @@ export default function AdminUsersPage(): React.JSX.Element {
             aria-label="ກັ່ນຕອງຕາມບໍລິສັດ"
           >
             <option value="">ທຸກບໍລິສັດໃນຂອບເຂດ</option>
-            {COMPANIES.map((c) => (
+            {(companies.data ?? []).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.code}
               </option>
@@ -207,18 +218,22 @@ export default function AdminUsersPage(): React.JSX.Element {
             ))}
           </Select>
         </CardBody>
-        <DataTable
-          columns={columns}
-          rows={rows}
-          rowKey={(u) => u.id}
-          caption="ລາຍຊື່ຜູ້ໃຊ້"
-          emptyTitle="ບໍ່ພົບຜູ້ໃຊ້ທີ່ຕົງກັບເງື່ອນໄຂ"
-        />
+        <QueryBoundary query={query}>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(u) => u.id}
+            caption="ລາຍຊື່ຜູ້ໃຊ້"
+            emptyTitle="ບໍ່ພົບຜູ້ໃຊ້ທີ່ຕົງກັບເງື່ອນໄຂ"
+          />
+        </QueryBoundary>
       </Card>
 
       <p className="text-caption text-ink-3">
         ຂອບເຂດປັດຈຸບັນ {user.scoped_companies.map((c) => c.code).join(' · ') || 'ທຸກບໍລິສັດ'} —
         ຜູ້ໃຊ້ນອກຂອບເຂດຈະບໍ່ປາກົດ ເຖິງແມ່ນຄົ້ນຫາດ້ວຍຊື່ຖືກຕ້ອງ
+        {query.isSuccess && ` · ສະແດງ ${rows.length} ຈາກ ${query.data.total} ຄົນ`}
+        {role && ' · ການກັ່ນຕອງຕາມບົດບາດໃຊ້ສະເພາະໜ້ານີ້'}
       </p>
     </div>
   );

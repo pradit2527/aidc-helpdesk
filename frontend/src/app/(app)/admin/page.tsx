@@ -22,19 +22,12 @@ import {
 import * as React from 'react';
 
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, MockNotice, PageHeader } from '@/components/ui/misc';
-import { BLOCKING_CONTACT_KEYS, CONTACT_KEY } from '@/config/admin';
+import { Alert, PageHeader } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
-import { formatDate } from '@/lib/format';
 import { useSession } from '@/lib/session';
-import { HOLIDAYS, SYSTEM_INFO } from '@/mocks/data';
-import {
-  ESCALATION_CONTACTS,
-  MAINTENANCE_WINDOWS,
-  PROBLEMS,
-  SERVICES,
-} from '@/mocks/admin-data';
-import type { ReadinessCheck, RoleCode } from '@/lib/types';
+import { useReadiness } from '@/lib/queries/master-data';
+import type { RoleCode } from '@/lib/types';
 
 /**
  * ศูนย์ควบคุมของผู้ดูแลระบบ
@@ -99,90 +92,13 @@ const SECTIONS: { title: string; note?: string; links: AdminLink[] }[] = [
  * ประเมินความพร้อมจากข้อมูลจริง ไม่ใช่รายการที่ติ๊กเอง
  * ถ้าให้ติ๊กเอง จะมีคนติ๊กครบก่อนแล้วค่อยหาว่าทำไมแจ้งเตือนไม่ออก
  */
-function buildChecks(): ReadinessCheck[] {
-  const checks: ReadinessCheck[] = [];
-
-  const haveKeys = new Set(
-    ESCALATION_CONTACTS.filter((c) => c.is_active).map((c) => c.contact_key),
-  );
-  const missingKeys = BLOCKING_CONTACT_KEYS.filter((k) => !haveKeys.has(k));
-  checks.push({
-    key: 'escalation-contacts',
-    label: 'ຜູ້ຮັບແຈ້ງລະດັບຜູ້ບໍລິຫານ',
-    detail:
-      missingKeys.length > 0
-        ? `ຍັງບໍ່ໄດ້ກຳນົດ ${missingKeys.map((k) => CONTACT_KEY[k]).join(' · ')} — ກົດ ES-01, ES-02, ES-03, ES-06, ES-07, ES-10, ES-11 ສົ່ງແຈ້ງເຕືອນບໍ່ໄດ້`
-        : 'ກຳນົດຜູ້ຮັບແຈ້ງຄົບທຸກລະດັບແລ້ວ',
-    status: missingKeys.length > 0 ? 'blocking' : 'ok',
-    href: '/admin/escalation',
-    ref: missingKeys.length > 0 ? 'Q-07' : null,
-  });
-
-  checks.push({
-    key: 'holidays',
-    label: 'ປະຕິທິນວັນພັກ',
-    detail:
-      HOLIDAYS.length === 0
-        ? 'ຍັງບໍ່ມີວັນພັກໃນລະບົບ — ລະບົບຈະນັບວັນພັກທຸກມື້ເປັນມື້ເຮັດວຽກ ກຳນົດເວລາ P2–P4 ຈຶ່ງສັ້ນກວ່າຄວາມຈິງ'
-        : `ມີວັນພັກ ${HOLIDAYS.length} ມື້`,
-    status: HOLIDAYS.length === 0 ? 'blocking' : 'ok',
-    href: '/admin/business-hours',
-    ref: HOLIDAYS.length === 0 ? 'Q-03' : null,
-  });
-
-  checks.push({
-    key: 'backup',
-    label: 'ການສຳຮອງຂໍ້ມູນນອກສະຖານທີ່',
-    detail:
-      SYSTEM_INFO.last_backup_at === null
-        ? 'ຍັງບໍ່ໄດ້ກຳນົດປາຍທາງສຳຮອງ ແລະ ຍັງບໍ່ເຄີຍທົດສອບການກູ້ຄືນ'
-        : `ສຳຮອງຫຼ້າສຸດ ${formatDate(SYSTEM_INFO.last_backup_at)}`,
-    status: SYSTEM_INFO.last_backup_at === null ? 'blocking' : 'ok',
-    href: '/admin/system',
-    ref: null,
-  });
-
-  const ownerless = SERVICES.filter((s) => s.is_active && s.owner === null);
-  checks.push({
-    key: 'service-owner',
-    label: 'ເຈົ້າຂອງລະບົບງານ',
-    detail:
-      ownerless.length > 0
-        ? `ຍັງບໍ່ມີເຈົ້າຂອງ ${ownerless.length} ລະບົບ (${ownerless.map((s) => s.code).join(', ')}) — ບໍ່ຮູ້ວ່າຈະຕາມໃຜເມື່ອລະບົບລົ້ມ`
-        : 'ທຸກລະບົບງານມີເຈົ້າຂອງແລ້ວ',
-    status: ownerless.length > 0 ? 'warning' : 'ok',
-    href: '/admin/services',
-    ref: null,
-  });
-
-  const unnotified = MAINTENANCE_WINDOWS.filter((w) => w.notified_at === null);
-  checks.push({
-    key: 'maintenance-notice',
-    label: 'ການແຈ້ງລ່ວງໜ້າກ່ອນປິດປັບປຸງ',
-    detail:
-      unnotified.length > 0
-        ? `ມີ ${unnotified.length} ໜ້າຕ່າງທີ່ຍັງບໍ່ໄດ້ແຈ້ງຜູ້ຮັບບໍລິການ — ຖ້າບໍ່ແຈ້ງລ່ວງໜ້າ 3 ມື້ເຮັດວຽກ ຈະນັບເປັນ Downtime`
-        : 'ແຈ້ງລ່ວງໜ້າຄົບທຸກໜ້າຕ່າງແລ້ວ',
-    status: unnotified.length > 0 ? 'warning' : 'ok',
-    href: '/admin/services',
-    ref: null,
-  });
-
-  const rcaPending = PROBLEMS.filter((p) => p.status === 'rca_pending');
-  checks.push({
-    key: 'rca',
-    label: 'RCA ທີ່ຍັງບໍ່ໄດ້ສົ່ງ',
-    detail:
-      rcaPending.length > 0
-        ? `ຄ້າງ ${rcaPending.length} ລາຍການ — ຕ້ອງສົ່ງພາຍໃນ 5 ມື້ເຮັດວຽກຫຼັງເຫດ P1`
-        : 'ບໍ່ມີ RCA ຄ້າງ',
-    status: rcaPending.length > 0 ? 'warning' : 'ok',
-    href: '/admin/problems',
-    ref: null,
-  });
-
-  return checks;
-}
+/*
+ * รายการตรวจความพร้อมมาจาก GET /admin/readiness ไม่ได้คำนวณที่หน้าจอ
+ *
+ * เดิมหน้านี้นับจากข้อมูลจำลองที่ import เข้ามา ซึ่งบอกได้แค่ว่า
+ * "ชุดตัวอย่างครบไหม" ไม่ใช่ "ระบบจริงพร้อมไหม" — ตัวที่ต้องรู้คืออย่างหลัง
+ * ทุกข้อจึงต้องนับจากฐานข้อมูลจริงที่ฝั่งเซิร์ฟเวอร์
+ */
 
 const STATUS_META = {
   blocking: { icon: AlertOctagon, className: 'text-sla-breach', label: 'ບລັອກການເປີດໃຊ້ງານ' },
@@ -192,7 +108,8 @@ const STATUS_META = {
 
 export default function AdminHomePage(): React.JSX.Element {
   const { user } = useSession();
-  const checks = React.useMemo(buildChecks, []);
+  const readiness = useReadiness();
+  const checks = readiness.data?.checks ?? [];
   const blocking = checks.filter((c) => c.status === 'blocking');
   const warnings = checks.filter((c) => c.status === 'warning');
 
@@ -202,8 +119,6 @@ export default function AdminHomePage(): React.JSX.Element {
         title="ສູນຄວບຄຸມຜູ້ດູແລລະບົບ"
         description="ທຸກສິ່ງທີ່ຕັ້ງຄ່າໄດ້ໃນລະບົບ ລວມຢູ່ໜ້ານີ້ບ່ອນດຽວ"
       />
-
-      <MockNotice endpoint="GET /admin/readiness" />
 
       {blocking.length > 0 && (
         <Alert
@@ -224,6 +139,7 @@ export default function AdminHomePage(): React.JSX.Element {
           </span>
         </CardHeader>
         <CardBody className="p-0">
+          <QueryBoundary query={readiness}>
           <ul className="divide-y divide-hair">
             {checks.map((check) => {
               const meta = STATUS_META[check.status];
@@ -259,6 +175,7 @@ export default function AdminHomePage(): React.JSX.Element {
               );
             })}
           </ul>
+          </QueryBoundary>
         </CardBody>
       </Card>
 

@@ -124,20 +124,6 @@ export function DefRow({
   );
 }
 
-/**
- * กล่องบอกว่ายังต่อ backend ไม่ครบ
- *
- * มีไว้เพื่อไม่ให้ผู้ทดสอบเข้าใจผิดว่าหน้าเสร็จแล้วทั้งที่ยังอ่านข้อมูลจำลอง
- * ตั้งใจให้เห็นชัด ไม่ใช่ตัวเล็กมุมจอ และจะถูกลบเมื่อผูก API จริงครบ
- */
-export function MockNotice({ endpoint }: { endpoint: string }): React.JSX.Element {
-  return (
-    <p className="mb-4 rounded border border-dashed border-control bg-subtle px-3 py-2 text-caption text-ink-2">
-      ໜ້ານີ້ຍັງໃຊ້ຂໍ້ມູນຈຳລອງ — ລໍຖ້າ <code className="font-mono">{endpoint}</code> ຈາກ backend
-    </p>
-  );
-}
-
 export function Alert({
   tone = 'info',
   title,

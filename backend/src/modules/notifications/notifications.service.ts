@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, inArray, isNull, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 
+import { NOTIFICATION_CHANNEL } from '../../common/constants';
 import { paged, type PagedResult } from '../../common/http/pagination';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
@@ -137,5 +138,45 @@ export class NotificationsService {
       .from(notificationChannel)
       .where(eq(notificationChannel.userId, scope.userId))
       .orderBy(notificationChannel.channel);
+  }
+
+  /**
+   * ตั้งค่าช่องทางรับการแจ้งเตือนของตนเอง
+   *
+   * ⚠️ is_verified ตั้งจากที่นี่ไม่ได้เด็ดขาด
+   *    LINE ต้องผูกบัญชีสำเร็จก่อนจึงส่งได้ ถ้าปล่อยให้ผู้ใช้ติ๊กเองว่า
+   *    ยืนยันแล้ว งานส่งแจ้งเตือนจะพยายามส่งไปยังปลายทางที่ไม่มีอยู่จริง
+   *    แล้วล้มเหลวเงียบ ๆ ทุกครั้ง — ผู้ใช้จะคิดว่าเปิดรับแจ้งเตือนแล้ว
+   *    แต่ไม่เคยได้รับอะไรเลย
+   */
+  async setChannels(
+    scope: AccessScope,
+    channels: { channel: string; is_enabled: boolean; destination?: string | null }[],
+  ) {
+    const allowed = new Set(NOTIFICATION_CHANNEL);
+
+    for (const c of channels) {
+      if (!allowed.has(c.channel as (typeof NOTIFICATION_CHANNEL)[number])) continue;
+
+      await this.db
+        .insert(notificationChannel)
+        .values({
+          userId: scope.userId,
+          channel: c.channel,
+          isEnabled: c.is_enabled,
+          destination: c.destination ?? null,
+        })
+        .onConflictDoUpdate({
+          target: [notificationChannel.userId, notificationChannel.channel],
+          // อัปเดตเฉพาะสองฟิลด์นี้ — is_verified ไม่อยู่ในรายการโดยตั้งใจ
+          set: {
+            isEnabled: sql`excluded.is_enabled`,
+            destination: sql`excluded.destination`,
+            updatedAt: new Date(),
+          },
+        });
+    }
+
+    return this.channels(scope);
   }
 }

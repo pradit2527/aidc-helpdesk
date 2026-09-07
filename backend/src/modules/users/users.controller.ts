@@ -1,5 +1,15 @@
-import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBody, ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
@@ -42,6 +52,70 @@ export class UsersController {
       is_active: isActive,
       page: clampPage(page),
       page_size: clampPageSize(pageSize),
+    });
+  }
+
+  @Patch('me')
+  @ApiOperation({
+    summary: 'แก้ไขข้อมูลติดต่อของตนเอง',
+    description:
+      'แก้ได้เฉพาะ `full_name` `email` `phone` — ฟิลด์ที่ตัดสินสิทธิ์ ' +
+      '(บริษัท แผนก สถานะใช้งาน) ต้องแก้ผ่านผู้ดูแลเท่านั้น ' +
+      'มิฉะนั้นผู้ใช้จะย้ายตัวเองเข้าบริษัทอื่นแล้วเห็นข้อมูลของบริษัทนั้นได้',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        full_name: { type: 'string' },
+        email: { type: 'string', nullable: true },
+        phone: { type: 'string', nullable: true },
+      },
+    },
+  })
+  updateMe(
+    @CurrentScope() scope: AccessScope,
+    @Body() body: { full_name?: string; email?: string | null; phone?: string | null },
+  ) {
+    // ไม่ต้องมีสิทธิ์พิเศษ — ทุกคนแก้ข้อมูลติดต่อของตัวเองได้
+    return this.users.updateMe(scope.userId, body);
+  }
+
+  @Post('import')
+  @ApiOperation({
+    summary: 'นำเข้าผู้ใช้จากไฟล์ CSV',
+    description:
+      'คืนผลรายแถว ไม่ใช่แค่ยอดรวม — ไฟล์รายชื่อพนักงานมีหลักร้อยแถว ' +
+      'ถ้าบอกแค่ยอดรวม ผู้ดูแลต้องไล่หาเองว่าแถวไหนตก · ' +
+      '`dry_run: true` ตรวจไฟล์อย่างเดียว ไม่เขียนอะไรลงฐานข้อมูล · ' +
+      'คอลัมน์บังคับ: `username` `full_name` `company_code` · ' +
+      'ทุกบัญชีที่สร้างถูกบังคับ `must_change_password` และไม่ได้รับบทบาทใดจากไฟล์',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['csv'],
+      properties: {
+        csv: { type: 'string', description: 'เนื้อไฟล์ CSV ทั้งไฟล์ รวมบรรทัดหัวคอลัมน์' },
+        default_password: {
+          type: 'string',
+          description: 'รหัสตั้งต้นของทุกบัญชีที่สร้าง ≥ 12 อักขระ · ไม่ต้องส่งเมื่อ dry_run',
+        },
+        dry_run: { type: 'boolean', example: true },
+      },
+    },
+  })
+  importUsers(
+    @CurrentScope() scope: AccessScope,
+    @Body() body: { csv?: string; default_password?: string; dry_run?: boolean },
+  ) {
+    scope.require('user.create');
+    return this.users.importUsers(scope, {
+      csv: body.csv ?? '',
+      ...(body.default_password !== undefined
+        ? { default_password: body.default_password }
+        : {}),
+      ...(body.dry_run !== undefined ? { dry_run: body.dry_run } : {}),
     });
   }
 

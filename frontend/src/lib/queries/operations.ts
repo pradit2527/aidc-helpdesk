@@ -7,6 +7,7 @@ import type {
   KbArticle,
   NotificationItem,
   ProblemRecord,
+  SlaComplianceRow,
 } from '@/lib/types';
 
 /**
@@ -197,6 +198,94 @@ export function useMarkNotificationsRead(): ReturnType<
   });
 }
 
+export interface NotificationChannelRow {
+  id: number;
+  channel: string;
+  destination: string | null;
+  is_enabled: boolean;
+  /** ตั้งจากหน้าจอไม่ได้ — ต้องผ่านการผูกบัญชีจริง (เช่น LINE) */
+  is_verified: boolean;
+}
+
+export function useNotificationChannels(): UseQueryResult<NotificationChannelRow[], Error> {
+  return useQuery({
+    queryKey: ['notifications', 'channels'],
+    queryFn: () => api.get<NotificationChannelRow[]>('/notifications/channels'),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useSetNotificationChannels(): ReturnType<
+  typeof useMutation<
+    NotificationChannelRow[],
+    Error,
+    { channel: string; is_enabled: boolean; destination?: string | null }[]
+  >
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (channels: { channel: string; is_enabled: boolean; destination?: string | null }[]) =>
+      api.put<NotificationChannelRow[]>('/notifications/channels', { channels }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications', 'channels'] }),
+  });
+}
+
+export function useUpdateMe(): ReturnType<
+  typeof useMutation<
+    { id: number; username: string; full_name: string; email: string | null; phone: string | null },
+    Error,
+    { full_name?: string; email?: string | null; phone?: string | null }
+  >
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { full_name?: string; email?: string | null; phone?: string | null }) =>
+      api.patch<{
+        id: number;
+        username: string;
+        full_name: string;
+        email: string | null;
+        phone: string | null;
+      }>('/users/me', body),
+    // ชื่อผู้ใช้แสดงอยู่บนแถบด้านบนด้วย จึงต้องดึง session ใหม่
+    // ไม่ใช่แค่หน้าโปรไฟล์ที่เห็นค่าที่เปลี่ยน
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['session'] }),
+  });
+}
+
+export interface ImportRowResult {
+  line: number;
+  username: string;
+  full_name: string;
+  company: string;
+  status: 'ok' | 'error' | 'skipped';
+  message: string;
+}
+
+export interface ImportResult {
+  dry_run: boolean;
+  rows: ImportRowResult[];
+  summary: { total: number; ok: number; skipped: number; error: number };
+}
+
+export function useImportUsers(): ReturnType<
+  typeof useMutation<
+    ImportResult,
+    Error,
+    { csv: string; default_password?: string; dry_run?: boolean }
+  >
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { csv: string; default_password?: string; dry_run?: boolean }) =>
+      api.post<ImportResult>('/users/import', body),
+    onSuccess: (r) => {
+      // ดึงรายชื่อใหม่เฉพาะตอนที่เขียนจริง — dry run ไม่เปลี่ยนอะไร
+      if (!r.dry_run) void qc.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
 // ── คำขออนุมัติ ──────────────────────────────────────────────────────
 
 export function useApprovals(
@@ -294,26 +383,17 @@ export function useKpiReport(from?: string, to?: string): UseQueryResult<KpiRepo
 export interface SlaComplianceReport {
   period: { from: string; to: string; label: string };
   target_percent: number;
-  overall: { closed: number; met: number; compliance_percent: number | null };
-  by_company: {
-    company_code: string;
-    closed: number;
-    met: number;
+  overall: { total: number; met: number; excluded: number; compliance_percent: number | null };
+  by_company: (Omit<SlaComplianceRow, 'priority' | 'compliance_percent'> & {
     compliance_percent: number | null;
-  }[];
-  by_priority: {
-    priority: string;
-    closed: number;
-    met: number;
+  })[];
+  by_priority: (Omit<SlaComplianceRow, 'company' | 'compliance_percent'> & {
     compliance_percent: number | null;
-  }[];
-  matrix: {
-    company_code: string;
-    priority: string;
-    closed: number;
-    met: number;
+  })[];
+  /** หนึ่งแถวต่อคู่ (บริษัท × ระดับความสำคัญ) */
+  matrix: (Omit<SlaComplianceRow, 'compliance_percent'> & {
     compliance_percent: number | null;
-  }[];
+  })[];
 }
 
 export function useSlaComplianceReport(

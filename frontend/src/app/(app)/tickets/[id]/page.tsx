@@ -17,11 +17,13 @@ import { PriorityBadge, SlaBadge, StatusBadge } from '@/components/common/badges
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Select, Textarea } from '@/components/ui/field';
-import { Alert, Avatar, BackLink, DefRow, MockNotice, Tabs } from '@/components/ui/misc';
+import { Alert, Avatar, BackLink, DefRow, Tabs } from '@/components/ui/misc';
+import { QueryBoundary } from '@/components/ui/query-boundary';
 import { CHANNEL, PENDING_REASON, TICKET_STATUS, TICKET_TYPE } from '@/config/enums';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatFileSize, formatRelative } from '@/lib/format';
-import { ticketDetail } from '@/mocks/data';
+import { ApiError } from '@/lib/api';
+import { useTicket } from '@/lib/queries/tickets';
 import type { TicketDetail } from '@/lib/types';
 
 type DetailTab = 'conversation' | 'approvals' | 'checklist' | 'history';
@@ -39,9 +41,29 @@ export default function TicketDetailPage({
   params: Promise<{ id: string }>;
 }): React.JSX.Element {
   const { id } = React.use(params);
-  const ticket = ticketDetail(Number(id));
-  if (!ticket) notFound();
+  const query = useTicket(Number(id));
 
+  /*
+   * เรื่องที่อยู่นอกขอบเขตได้ 404 จากเซิร์ฟเวอร์ ไม่ใช่ 403
+   *
+   * เหตุความปลอดภัย (SOP-10) ก็ได้ 404 เหมือนกันเมื่อผู้เรียกไม่ใช่ผู้เกี่ยวข้อง
+   * ทำให้แยกไม่ออกว่า "ไม่มีเรื่องนี้" กับ "มีแต่ดูไม่ได้" ซึ่งเป็นสิ่งที่ตั้งใจ
+   */
+  if (query.isError && query.error instanceof ApiError && query.error.status === 404) {
+    notFound();
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <BackLink href="/queue" label="ກັບໄປຄິວວຽກ" />
+      <QueryBoundary query={query}>
+        {query.data && <TicketDetailView ticket={query.data} />}
+      </QueryBoundary>
+    </div>
+  );
+}
+
+function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   const [tab, setTab] = React.useState<DetailTab>('conversation');
 
   const tabs = [
@@ -56,9 +78,7 @@ export default function TicketDetailPage({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <BackLink href="/queue" label="ກັບໄປຄິວວຽກ" />
-
+    <>
       {ticket.is_security_incident && (
         <Alert tone="danger" title="ເຫດຄວາມປອດໄພ — ຈຳກັດການເບິ່ງເຫັນ">
           ເລື່ອງນີ້ເຫັນໄດ້ສະເພາະຜູ້ແຈ້ງ ຜູ້ຮັບຜິດຊອບ ຫົວໜ້າໄອທີ ຜູ້ບໍລິຫານສູງສຸດ ແລະ DPO ເທົ່ານັ້ນ
@@ -71,8 +91,6 @@ export default function TicketDetailPage({
           ແຈ້ງຫົວໜ້າໄອທີ ແລະ ທີມ On-call ແລ້ວ ຕ້ອງລາຍງານສະຖານະທຸກ 1 ຊົ່ວໂມງຈົນກວ່າຈະຄືນບໍລິການ
         </Alert>
       )}
-
-      <MockNotice endpoint={`GET /tickets/${id}`} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex min-w-0 flex-col gap-4">
@@ -140,7 +158,7 @@ export default function TicketDetailPage({
           <DetailsPanel ticket={ticket} />
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
