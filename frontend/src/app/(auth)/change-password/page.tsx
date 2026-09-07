@@ -1,9 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { Check, KeyRound, X } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
+
+import { ApiError } from '@/lib/api';
+import { changePassword } from '@/lib/auth';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
@@ -27,11 +29,11 @@ const RULES = [
 ];
 
 export default function ChangePasswordPage(): React.JSX.Element {
-  const router = useRouter();
   const [current, setCurrent] = React.useState('');
   const [next, setNext] = React.useState('');
   const [confirm, setConfirm] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const passed = RULES.filter((r) => r.test(next));
   const allPassed = passed.length === RULES.length;
@@ -40,11 +42,42 @@ export default function ChangePasswordPage(): React.JSX.Element {
   async function onSubmit(event: React.FormEvent): Promise<void> {
     event.preventDefault();
     if (!allPassed || !matches) return;
+
     setSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    toast.success('ປ່ຽນລະຫັດຜ່ານແລ້ວ');
-    setSubmitting(false);
-    router.push('/');
+    setError(null);
+
+    try {
+      await changePassword(current, next);
+
+      /*
+       * สำเร็จแล้ว backend ล้างคุกกี้ทิ้งทั้งหมด เพราะการเปลี่ยนรหัสผ่าน
+       * เพิ่ม token_version ทำให้ token เดิมใช้ไม่ได้ทุกใบทุกอุปกรณ์
+       * (เหตุผลที่พบบ่อยที่สุดของการเปลี่ยนรหัสคือสงสัยว่ารหัสเดิมรั่ว)
+       *
+       * ⚠️ ต้องพาไป /login ไม่ใช่ / — ตอนนี้ไม่มี session แล้ว
+       *    ถ้าพาไปหน้าแรก SessionProvider จะถาม /auth/me ได้ 401
+       *    แล้วเด้งมา /login อยู่ดี แต่ผู้ใช้จะเห็นจอกระพริบระหว่างทาง
+       *
+       * ใช้ location.assign ไม่ใช่ router.replace เพื่อล้าง state ในหน่วยความจำ
+       * ให้หมด — ข้อมูลผู้ใช้คนเดิมต้องไม่ค้างอยู่หลังเปลี่ยนรหัสผ่าน
+       */
+      toast.success('ປ່ຽນລະຫັດຜ່ານແລ້ວ — ກະລຸນາເຂົ້າສູ່ລະບົບໃໝ່ດ້ວຍລະຫັດຜ່ານໃໝ່');
+      window.location.assign('/login');
+      return;
+    } catch (cause) {
+      setSubmitting(false);
+
+      if (cause instanceof ApiError) {
+        // 401 ตรงนี้แปลว่า "รหัสผ่านปัจจุบันไม่ถูก" ไม่ใช่ session หมดอายุ
+        setError(
+          cause.status === 401
+            ? 'ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ'
+            : (cause.fields ? Object.values(cause.fields)[0] : null) ?? cause.message,
+        );
+        return;
+      }
+      setError('ບັນທຶກບໍ່ສຳເລັດ ກະລຸນາລອງໃໝ່');
+    }
   }
 
   return (
@@ -118,6 +151,17 @@ export default function ChangePasswordPage(): React.JSX.Element {
               required
             />
           </Field>
+
+          {/*
+            ข้อผิดพลาดจากเซิร์ฟเวอร์ต้องแสดงให้เห็น
+            ที่พบบ่อยคือรหัสผ่านปัจจุบันผิด กับใช้รหัสซ้ำกับ 3 อันล่าสุด
+            ซึ่งฝั่ง client ตรวจแทนไม่ได้ทั้งคู่
+          */}
+          {error && (
+            <p className="text-body-sm font-medium text-danger" role="alert">
+              {error}
+            </p>
+          )}
 
           <Button
             type="submit"

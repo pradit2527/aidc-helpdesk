@@ -42,13 +42,34 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
   const pathname = usePathname();
 
   const [user, setUser] = React.useState<SessionUser | null>(null);
-  const [state, setState] = React.useState<'loading' | 'ready' | 'anonymous'>('loading');
+  const [state, setState] = React.useState<'loading' | 'ready' | 'anonymous' | 'error'>('loading');
 
+  /**
+   * โหลดผู้ใช้ปัจจุบัน
+   *
+   * ⚠️ ต้องดักข้อผิดพลาดให้ครบทุกทาง
+   *
+   * เดิมไม่มี try/catch — พอ /auth/me ล้มด้วยเหตุอื่นที่ไม่ใช่ 401
+   * (เน็ตสะดุด, เซิร์ฟเวอร์กำลังตื่นจากการหลับ, ECONNRESET)
+   * promise จะ reject แล้ว state ค้างที่ 'loading' ตลอดไป
+   * ผู้ใช้เห็นหน้าจอหมุนไม่จบ สลับกับเนื้อหาเป็นจังหวะกระพริบ
+   * และไม่มีทางออกจากสถานะนั้นนอกจากรีเฟรชเอง
+   *
+   * แยก 'error' ออกจาก 'anonymous' โดยตั้งใจ — เน็ตล่มไม่ใช่ "ยังไม่ล็อกอิน"
+   * ถ้ากลบเป็นอันเดียวกัน ผู้ใช้จะถูกเด้งไปหน้าล็อกอินแล้วกรอกซ้ำไปเรื่อย
+   * ทั้งที่รหัสถูกต้องและ session ยังอยู่
+   */
   const load = React.useCallback(async (): Promise<SessionUser | null> => {
-    const me = await fetchMe();
-    setUser(me);
-    setState(me ? 'ready' : 'anonymous');
-    return me;
+    try {
+      const me = await fetchMe();
+      setUser(me);
+      setState(me ? 'ready' : 'anonymous');
+      return me;
+    } catch {
+      setUser(null);
+      setState('error');
+      return null;
+    }
   }, []);
 
   React.useEffect(() => {
@@ -103,6 +124,34 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
   );
 
   if (isPublic(pathname)) return <>{children}</>;
+
+  /*
+   * ติดต่อเซิร์ฟเวอร์ไม่ได้ — ต้องมีทางออกให้ผู้ใช้กดเอง
+   *
+   * ห้ามเด้งไปหน้าล็อกอิน เพราะปัญหาไม่ได้อยู่ที่ตัวตนของผู้ใช้
+   * การให้กรอกรหัสใหม่ไม่ช่วยอะไร มีแต่ทำให้เข้าใจผิดว่ารหัสผิด
+   */
+  if (state === 'error') {
+    return (
+      <div className="grid min-h-screen place-items-center bg-canvas px-6" role="alert">
+        <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+          <p className="text-body-sm text-ink-2">
+            ຕິດຕໍ່ເຊີບເວີບໍ່ໄດ້ຊົ່ວຄາວ — ອາດຍ້ອນເຊີບເວີກຳລັງເລີ່ມເຮັດວຽກ
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setState('loading');
+              void load();
+            }}
+            className="min-h-tap rounded-md bg-primary px-5 py-2 text-body-sm font-semibold text-white"
+          >
+            ລອງໃໝ່
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (state === 'loading' || !value) {
     return (
