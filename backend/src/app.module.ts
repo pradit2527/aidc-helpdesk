@@ -27,6 +27,8 @@ import { AuthService } from './modules/auth/auth.service';
 import { DashboardController } from './modules/dashboard/dashboard.controller';
 import { DashboardService } from './modules/dashboard/dashboard.service';
 import { HealthController } from './modules/health/health.controller';
+import { MasterDataController } from './modules/master-data/master-data.controller';
+import { MasterDataService } from './modules/master-data/master-data.service';
 import { HealthService } from './modules/health/health.service';
 import { SystemController } from './modules/system/system.controller';
 import { SystemService } from './modules/system/system.service';
@@ -46,6 +48,7 @@ import { TicketsService } from './modules/tickets/tickets.service';
     AuthController,
     DashboardController,
     HealthController,
+    MasterDataController,
     SystemController,
     TicketsController,
   ],
@@ -56,6 +59,7 @@ import { TicketsService } from './modules/tickets/tickets.service';
     HealthService,
     SystemService,
     DashboardService,
+    MasterDataService,
     TicketRepository,
     TicketDetailRepository,
     SlaConfigRepository,

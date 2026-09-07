@@ -25,6 +25,12 @@ export interface TicketListParams {
   ticket_type?: string;
   /** 'me' = เฉพาะงานที่มอบหมายให้ผู้เรียก — backend แปลงเป็น id ให้เอง */
   assignee_id?: string;
+  /**
+   * 'me' = เฉพาะเรื่องที่ผู้เรียกเป็นผู้แจ้ง
+   * รับเฉพาะค่า 'me' โดยตั้งใจ — backend แปลงเป็น id ของผู้เรียกเอง
+   * ถ้าส่งเลขผู้ใช้ได้ ใครก็แก้เป็นเลขคนอื่นแล้วดูเรื่องของเขา
+   */
+  requester_id?: 'me';
   company_id?: string;
   category_id?: string;
   /** กรองด้วยสถานะ SLA ที่คำนวณตอนอ่าน — on_track / at_risk / breached / paused */
