@@ -507,8 +507,8 @@ function DetailsPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
           <DefRow label="ແຈ້ງເມື່ອ">{formatDateTime(ticket.created_at)}</DefRow>
           <DefRow label="ຄົບກຳນົດຕອບຮັບ">{formatDateTime(ticket.response_due_at)}</DefRow>
           <DefRow label="ຕອບຮັບຄັ້ງທຳອິດ">
-            {ticket.first_response_at ? (
-              formatDateTime(ticket.first_response_at)
+            {ticket.sla.first_response_at ? (
+              formatDateTime(ticket.sla.first_response_at)
             ) : (
               <span className="text-sla-risk">ຍັງບໍ່ໄດ້ຕອບຮັບ</span>
             )}

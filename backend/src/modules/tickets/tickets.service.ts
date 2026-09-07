@@ -9,6 +9,8 @@ import { ReassessTicketPriorityUseCase } from '../../application/use-cases/reass
 import { SlaConfigRepository } from '../../db/repositories/sla-config.repository';
 import { TicketDetailRepository } from '../../db/repositories/ticket-detail.repository';
 import { TicketRepository, type TicketRow } from '../../db/repositories/ticket.repository';
+import { TicketWriteRepository } from '../../db/repositories/ticket-write.repository';
+import { ForbiddenError, ValidationError } from '../../common/errors/domain-error';
 import {
   ChangePriorityDto,
   ChangeStatusDto,
@@ -52,6 +54,7 @@ export class TicketsService {
     private readonly createTicket: CreateTicketUseCase,
     private readonly changeTicketStatus: ChangeTicketStatusUseCase,
     private readonly reassessPriority: ReassessTicketPriorityUseCase,
+    private readonly writes: TicketWriteRepository,
   ) {}
 
   async list(scope: AccessScope, query: Record<string, string>): Promise<TicketListResponseDto> {
@@ -372,4 +375,97 @@ export class TicketsService {
       },
     };
   }
+
+  /**
+   * เพิ่มคอมเมนต์ (POST /tickets/{id}/comments)
+   *
+   * ⚠️ คอมเมนต์ภายในเขียนได้เฉพาะผู้ที่มีสิทธิ์ ticket.comment_internal
+   *    ผู้แจ้งที่ส่ง is_internal=true มาต้องไม่ได้คอมเมนต์ภายใน — ถ้ายอมให้ตั้ง
+   *    ผู้แจ้งจะเขียนคอมเมนต์ที่ตัวเองมองไม่เห็นอีกต่อไป ซึ่งอ่านแล้วเหมือน
+   *    ข้อความหายไป และยังทำให้เกิดข้อความที่ผู้แจ้งเขียนแต่อยู่ในโซนภายใน
+   *    ซึ่งขัดกับความหมายของฟิลด์นี้
+   *
+   * เวลาตอบรับครั้งแรกถูกบันทึกที่นี่ที่เดียวในระบบ — เป็นตัวตั้งของ KPI-2
+   */
+  async addComment(
+    scope: AccessScope,
+    id: number,
+    input: { body: string; is_internal?: boolean },
+  ) {
+    const row = await this.tickets.findById(scope, id);
+
+    const isOwner = row.requesterId === scope.userId;
+    if (!scope.has('ticket.comment') && !isOwner) {
+      throw new ForbiddenError('FORBIDDEN', 'ທ່ານບໍ່ມີສິດສະແດງຄວາມເຫັນໃນເລື່ອງນີ້');
+    }
+
+    const body = input.body?.trim() ?? '';
+    if (body.length === 0) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຂໍ້ຄວາມຫວ່າງເປົ່າ', [
+        { field: 'body', message: 'ກະລຸນາພິມຂໍ້ຄວາມ' },
+      ]);
+    }
+
+    const wantsInternal = input.is_internal === true;
+    if (wantsInternal && !scope.has('ticket.comment_internal')) {
+      throw new ForbiddenError('FORBIDDEN', 'ທ່ານບໍ່ມີສິດຂຽນຄຳເຫັນພາຍໃນ');
+    }
+
+    /*
+     * นับเป็นการตอบรับครั้งแรกเมื่อครบสามข้อพร้อมกัน
+     *   1. ยังไม่เคยมีการตอบรับ
+     *   2. ไม่ใช่คอมเมนต์ภายใน — ผู้แจ้งต้องเห็นจึงจะนับว่าได้รับการตอบ
+     *   3. ผู้เขียนไม่ใช่ผู้แจ้งเอง — ผู้แจ้งพิมพ์เพิ่มเองไม่ใช่การตอบรับ
+     */
+    const isFirstResponse = row.firstResponseAt === null && !wantsInternal && !isOwner;
+
+    const created = await this.writes.addComment({
+      ticketId: id,
+      authorId: scope.userId,
+      body,
+      isInternal: wantsInternal,
+      isFirstResponse,
+      now: new Date(),
+    });
+
+    return {
+      ...(await this.writes.commentById(created!.id)),
+      counted_as_first_response: isFirstResponse,
+    };
+  }
+
+  /**
+   * ติ๊กรายการตรวจ (PATCH /checklist-items/{id})
+   *
+   * ตรวจขอบเขตผ่านเรื่องที่ข้อนี้สังกัด ไม่ใช่ตรวจที่ตัวข้อ —
+   * ตาราง ticket_checklist_item ไม่มี company_id ให้กรอง
+   */
+  async setChecklistItem(
+    scope: AccessScope,
+    itemId: number,
+    input: { is_done?: boolean; note?: string | null; attachment_id?: number | null },
+  ) {
+    const ticketId = await this.writes.ticketIdOfChecklistItem(itemId);
+    // โยน 404 ให้เองถ้าเรื่องอยู่นอกขอบเขต
+    await this.tickets.findById(scope, ticketId);
+    scope.require('checklist.update', 'ticket.update');
+
+    const result = await this.writes.setChecklistItem({
+      itemId,
+      userId: scope.userId,
+      ...(input.is_done !== undefined ? { isDone: input.is_done } : {}),
+      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.attachment_id !== undefined ? { attachmentId: input.attachment_id } : {}),
+      now: new Date(),
+    });
+
+    return {
+      id: itemId,
+      ticket_id: result.ticketId,
+      // หน้าจอใช้ค่านี้เปิด/ปิดปุ่ม "แก้ไขเสร็จแล้ว" — ข้อบังคับที่ยังไม่ครบ
+      // กันการเปลี่ยนสถานะเป็น resolved ตาม SOP-04/05 ข้อ 6
+      all_required_done: result.all_required_done,
+    };
+  }
+
 }

@@ -39,6 +39,13 @@ export interface SessionUser {
 
 export interface TicketSla {
   status: SlaStatus;
+  /**
+   * เวลาตอบรับครั้งแรก — อยู่ใน sla ไม่ใช่ระดับบนสุดของ ticket
+   *
+   * ตรงกับ docs/03-api-spec.md §ticket detail · เป็นตัวตั้งของ KPI-2
+   * null = ยังไม่เคยมีใครที่ไม่ใช่ผู้แจ้งตอบแบบสาธารณะ
+   */
+  first_response_at: string | null;
   remaining_minutes: number | null;
   /** P1 นับปฏิทิน · P2–P4 นับนาทีทำการ — หน่วยต่างกันจึงห้ามเอาไปบวกกัน */
   remaining_unit: 'business_minutes' | 'calendar_minutes';
@@ -136,7 +143,6 @@ export interface TicketDetail extends TicketListItem {
   impact: 'org_wide' | 'department' | 'individual';
   urgency: 'high' | 'medium' | 'low';
   created_at: string;
-  first_response_at: string | null;
   response_due_at: string;
   resolved_at: string | null;
   resolution_note: string | null;

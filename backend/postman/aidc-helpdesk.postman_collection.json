@@ -1228,6 +1228,36 @@
       "name": "Tickets",
       "item": [
         {
+          "name": "PATCH /checklist-items/{id} — ติ๊กรายการตรวจ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_done\": false,\n  \"note\": \"\",\n  \"attachment_id\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/checklist-items/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "checklist-items",
+                "{id}"
+              ]
+            },
+            "description": "ข้อที่ `evidence_required` ต้องมี `attachment_id` ก่อนจึงติ๊กเสร็จได้ (422 EVIDENCE_REQUIRED) — บังคับที่ระดับฐานข้อมูลด้วย จึงข้ามผ่าน API ไม่ได้ · `all_required_done` ในคำตอบบอกว่าข้อบังคับครบหรือยัง ซึ่งเป็นเงื่อนไข ของการเปลี่ยนสถานะเป็น resolved ตาม SOP-04/05 ข้อ 6"
+          },
+          "response": []
+        },
+        {
           "name": "GET /tickets — รายการเรื่องที่แจ้ง",
           "request": {
             "method": "GET",
@@ -1426,6 +1456,37 @@
             "description": "**กำหนดเวลาถูกคำนวณใหม่จากเวลาที่ปรับ ไม่ใช่จากเวลาที่สร้างเรื่อง**\n\nAIDC-IT-SLA-001 ข้อ 5.4 ระบุว่า *\"ให้นับเวลาตามระดับใหม่ตั้งแต่เวลาที่ปรับ\"*\nถ้านับจาก `created_at` เรื่องที่เพิ่งยกระดับเป็น P1 จะกลายเป็นเกินกำหนดทันที\n\nยกระดับเป็น P1 → ตั้งเป็นเหตุขัดข้องร้ายแรงและแจ้ง Head of IT ทันทีแม้นอกเวลาทำการ"
           },
           "response": []
+        },
+        {
+          "name": "POST /tickets/{id}/comments — เพิ่มความเห็นในเรื่อง",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"\",\n  \"is_internal\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tickets/{id}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tickets",
+                "{id}",
+                "comments"
+              ]
+            },
+            "description": "`is_internal: true` ต้องมีสิทธิ์ `ticket.comment_internal` — ผู้แจ้งตั้งเองไม่ได้ · ความเห็นสาธารณะครั้งแรกจากคนที่ไม่ใช่ผู้แจ้ง จะถูกบันทึกเป็น `first_response_at` ซึ่งเป็นตัวตั้งของ KPI-2 · `counted_as_first_response` ในคำตอบบอกว่ารอบนี้ถูกนับหรือไม่"
+          },
+          "response": []
         }
       ]
     },
@@ -1562,6 +1623,28 @@
               ]
             },
             "description": "บทบาทที่หมดอายุแล้วยังคืนมาด้วยแต่ติดธง `is_expired` — ผู้ดูแลต้องเห็นว่าเคยให้สิทธิ์อะไรไว้ ไม่ใช่ให้มันหายไปเฉย ๆ"
+          },
+          "response": []
+        },
+        {
+          "name": "POST /users/{id}/unlock — ปลดล็อกบัญชี",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{id}/unlock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{id}",
+                "unlock"
+              ]
+            },
+            "description": "นโยบาย 3.2 ห้ามปลดล็อกเองตามเวลา ต้องผ่าน Service Desk ที่ยืนยันตัวตนแล้ว · รีเซ็ต `failed_login_count` ให้ด้วย — ถ้าล้างแต่ธง ตัวนับยังค้างที่ค่าเดิม แล้วการกรอกผิดครั้งเดียวหลังจากนั้นจะล็อกซ้ำทันที"
           },
           "response": []
         }

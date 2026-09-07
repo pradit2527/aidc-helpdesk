@@ -4,6 +4,7 @@ import { and, asc, count, eq, gt, ilike, inArray, isNull, or, sql, type SQL } fr
 import { alias } from 'drizzle-orm/pg-core';
 
 import { NotFoundError, ValidationError } from '../../common/errors/domain-error';
+import { TicketWriteRepository } from '../../db/repositories/ticket-write.repository';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
@@ -75,7 +76,10 @@ export interface UserListParams {
  */
 @Injectable()
 export class UsersService {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    private readonly writes: TicketWriteRepository,
+  ) {}
 
   /**
    * เงื่อนไขขอบเขต — ผู้ดูแลบริษัทหนึ่งไม่ควรเห็นรายชื่อพนักงานของอีกบริษัท
@@ -592,4 +596,19 @@ export class UsersService {
       },
     };
   }
+  /**
+   * ปลดล็อกบัญชี (POST /users/{id}/unlock)
+   *
+   * นโยบาย 3.2 ห้ามปลดล็อกเองตามเวลา ต้องผ่าน Service Desk ที่ยืนยันตัวตนแล้ว
+   * จึงมี endpoint นี้ให้เจ้าหน้าที่กด ไม่ใช่ปล่อยให้หมดเวลาแล้วปลดเอง
+   *
+   * ⚠️ ต้องตรวจขอบเขตก่อนเสมอ ผ่าน detail() ซึ่งตอบ 404 ให้ผู้ใช้นอกขอบเขต
+   *    ถ้าปลดโดยไม่ตรวจ ผู้ดูแลบริษัทหนึ่งจะปลดล็อกบัญชีของอีกบริษัทได้
+   *    ซึ่งเป็นการแทรกแซงกระบวนการยืนยันตัวตนของบริษัทนั้น
+   */
+  async unlock(scope: AccessScope, id: number) {
+    await this.detail(scope, id);
+    return this.writes.unlockUser(id);
+  }
+
 }

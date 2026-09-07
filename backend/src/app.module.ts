@@ -22,6 +22,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { SlaConfigRepository } from './db/repositories/sla-config.repository';
 import { TicketDetailRepository } from './db/repositories/ticket-detail.repository';
 import { TicketRepository } from './db/repositories/ticket.repository';
+import { TicketWriteRepository } from './db/repositories/ticket-write.repository';
 import { ApprovalsController } from './modules/approvals/approvals.controller';
 import { ApprovalsService } from './modules/approvals/approvals.service';
 import { AuditController } from './modules/audit/audit.controller';
@@ -44,6 +45,7 @@ import { ReportsController } from './modules/reports/reports.controller';
 import { ReportsService } from './modules/reports/reports.service';
 import { SystemController } from './modules/system/system.controller';
 import { SystemService } from './modules/system/system.service';
+import { ChecklistController } from './modules/tickets/checklist.controller';
 import { TicketsController } from './modules/tickets/tickets.controller';
 import { TicketsService } from './modules/tickets/tickets.service';
 import { UsersController } from './modules/users/users.controller';
@@ -61,6 +63,7 @@ import { UsersService } from './modules/users/users.service';
   controllers: [
     ApprovalsController,
     AuditController,
+    ChecklistController,
     AuthController,
     DashboardController,
     HealthController,
@@ -90,6 +93,7 @@ import { UsersService } from './modules/users/users.service';
     MasterDataService,
     TicketRepository,
     TicketDetailRepository,
+    TicketWriteRepository,
     SlaConfigRepository,
     TicketsService,
 

@@ -130,4 +130,17 @@ export class UsersController {
     scope.require('user.read');
     return this.users.detail(scope, id);
   }
+  @Post(':id/unlock')
+  @ApiOperation({
+    summary: 'ปลดล็อกบัญชี',
+    description:
+      'นโยบาย 3.2 ห้ามปลดล็อกเองตามเวลา ต้องผ่าน Service Desk ที่ยืนยันตัวตนแล้ว · ' +
+      'รีเซ็ต `failed_login_count` ให้ด้วย — ถ้าล้างแต่ธง ตัวนับยังค้างที่ค่าเดิม ' +
+      'แล้วการกรอกผิดครั้งเดียวหลังจากนั้นจะล็อกซ้ำทันที',
+  })
+  unlock(@CurrentScope() scope: AccessScope, @Param('id', ParseIntPipe) id: number) {
+    scope.require('user.reset_password', 'user.update');
+    return this.users.unlock(scope, id);
+  }
+
 }

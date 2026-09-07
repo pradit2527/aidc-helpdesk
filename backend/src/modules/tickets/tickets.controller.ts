@@ -194,4 +194,31 @@ export class TicketsController {
   ): Promise<TicketDetailDto> {
     return this.tickets.changePriority(scope, id, dto);
   }
+  @Post(':id/comments')
+  @ApiOperation({
+    summary: 'เพิ่มความเห็นในเรื่อง',
+    description:
+      '`is_internal: true` ต้องมีสิทธิ์ `ticket.comment_internal` — ผู้แจ้งตั้งเองไม่ได้ · ' +
+      'ความเห็นสาธารณะครั้งแรกจากคนที่ไม่ใช่ผู้แจ้ง จะถูกบันทึกเป็น ' +
+      '`first_response_at` ซึ่งเป็นตัวตั้งของ KPI-2 · ' +
+      '`counted_as_first_response` ในคำตอบบอกว่ารอบนี้ถูกนับหรือไม่',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['body'],
+      properties: {
+        body: { type: 'string' },
+        is_internal: { type: 'boolean', example: false },
+      },
+    },
+  })
+  addComment(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { body: string; is_internal?: boolean },
+  ) {
+    return this.tickets.addComment(scope, id, body);
+  }
+
 }
