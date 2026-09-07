@@ -135,107 +135,107 @@ export class SystemService {
       {
         key: 'business_hours',
         href: '/admin/business-hours',
-        label: 'เวลาทำการ',
+        label: 'ເວລາເຮັດວຽກ',
         status: n.businessHours > 0 ? 'ok' : 'blocking',
         detail:
           n.businessHours > 0
-            ? `กำหนดไว้ ${n.businessHours} รายการ`
-            : 'ยังไม่มีเวลาทำการ — เครื่องคำนวณ SLA หากำหนดเวลาไม่ได้เลย',
+            ? `ກຳນົດໄວ້ ${n.businessHours} ລາຍການ`
+            : 'ຍັງບໍ່ມີເວລາເຮັດວຽກ — ເຄື່ອງຄຳນວນ SLA ຫາກຳນົດເວລາບໍ່ໄດ້ເລີຍ',
         ref: null,
       },
       {
         key: 'sla_policy',
         href: '/admin/sla',
-        label: 'นโยบาย SLA',
+        label: 'ນະໂຍບາຍ SLA',
         status: n.slaPolicies > 0 ? 'ok' : 'blocking',
         detail:
           n.slaPolicies > 0
-            ? `ใช้งานอยู่ ${n.slaPolicies} นโยบาย`
-            : 'ยังไม่มีนโยบาย SLA ที่เปิดใช้ — ticket ใหม่จะไม่มีกำหนดเวลา',
+            ? `ໃຊ້ງານຢູ່ ${n.slaPolicies} ນະໂຍບາຍ`
+            : 'ຍັງບໍ່ມີນະໂຍບາຍ SLA ທີ່ເປີດໃຊ້ — ticket ໃໝ່ຈະບໍ່ມີກຳນົດເວລາ',
         ref: null,
       },
       {
         key: 'holiday_calendar',
         href: '/admin/business-hours',
-        label: 'ปฏิทินวันหยุด',
+        label: 'ປະຕິທິນວັນພັກ',
         status: n.holidays > 0 ? 'ok' : 'blocking',
         detail:
           n.holidays > 0
-            ? `มีวันหยุด ${n.holidays} วันในระบบ`
-            : 'ตารางว่าง — เครื่องคำนวณ SLA นับวันหยุดราชการเป็นวันทำการ ' +
-              'ทำให้กำหนดเวลาที่คืนเร็วกว่าความจริงโดยไม่มี error',
+            ? `ມີວັນພັກ ${n.holidays} ມື້ໃນລະບົບ`
+            : 'ຕາຕະລາງວ່າງ — ເຄື່ອງຄຳນວນ SLA ນັບວັນພັກລັດຖະການເປັນມື້ເຮັດວຽກ ' +
+              'ເຮັດໃຫ້ກຳນົດເວລາທີ່ຄືນໄວກວ່າຄວາມຈິງໂດຍບໍ່ມີ error',
         ref: 'Q-03',
       },
       {
         key: 'escalation_contacts',
         href: '/admin/escalation',
-        label: 'ผู้รับการยกระดับ',
+        label: 'ຜູ້ຮັບການຍົກລະດັບ',
         status: n.contacts > 0 ? 'ok' : 'blocking',
         detail:
           n.contacts > 0
-            ? `กำหนดไว้ ${n.contacts} รายการ`
-            : 'ยังไม่มีผู้รับ — กฎยกระดับจะทำงานแล้วไม่มีใครได้รับแจ้ง ' +
-              'ซึ่งเป็นความล้มเหลวแบบเงียบ',
+            ? `ກຳນົດໄວ້ ${n.contacts} ລາຍການ`
+            : 'ຍັງບໍ່ມີຜູ້ຮັບ — ກົດຍົກລະດັບຈະເຮັດວຽກແລ້ວບໍ່ມີໃຜໄດ້ຮັບແຈ້ງ ' +
+              'ຊຶ່ງເປັນຄວາມລົ້ມເຫຼວແບບງຽບ',
         ref: 'Q-07',
       },
       {
         key: 'service_registry',
         href: '/admin/services',
-        label: 'ทะเบียนระบบงานระดับ critical',
+        label: 'ທະບຽນລະບົບງານລະດັບ critical',
         status: n.criticalServices > 0 ? 'ok' : 'warning',
         detail:
           n.criticalServices > 0
-            ? `มี ${n.criticalServices} ระบบ`
-            : 'ยังไม่มีระบบงานระดับ critical — คำนวณ KPI-6 Uptime ไม่ได้ ' +
-              'และ SOP-03 ไม่มีผู้อนุมัติขั้นที่ 2',
+            ? `ມີ ${n.criticalServices} ລະບົບ`
+            : 'ຍັງບໍ່ມີລະບົບງານລະດັບ critical — ຄຳນວນ KPI-6 Uptime ບໍ່ໄດ້ ' +
+              'ແລະ SOP-03 ບໍ່ມີຜູ້ອະນຸມັດຂັ້ນທີ 2',
         ref: 'Q-05',
       },
       {
         key: 'admin_account',
         href: '/admin/users',
-        label: 'บัญชีผู้ดูแล',
+        label: 'ບັນຊີຜູ້ດູແລ',
         status: n.admins >= 2 ? 'ok' : n.admins === 1 ? 'warning' : 'blocking',
         detail:
           n.admins >= 2
-            ? `มี ${n.admins} บัญชี`
+            ? `ມີ ${n.admins} ບັນຊີ`
             : n.admins === 1
-              ? 'มีบัญชีผู้ดูแลเพียงบัญชีเดียว — ถ้าบัญชีนี้เข้าไม่ได้ ' +
-                'จะไม่มีใครแก้ไขการตั้งค่าระบบได้เลย'
-              : 'ไม่มีบัญชีผู้ดูแลที่ใช้งานได้',
+              ? 'ມີບັນຊີຜູ້ດູແລພຽງບັນຊີດຽວ — ຖ້າບັນຊີນີ້ເຂົ້າບໍ່ໄດ້ ' +
+                'ຈະບໍ່ມີໃຜແກ້ໄຂການຕັ້ງຄ່າລະບົບໄດ້ເລີຍ'
+              : 'ບໍ່ມີບັນຊີຜູ້ດູແລທີ່ໃຊ້ງານໄດ້',
         ref: null,
       },
       {
         key: 'service_catalog',
         href: '/admin/catalog',
-        label: 'แคตตาล็อกบริการ',
+        label: 'ແຄັດຕາລັອກບໍລິການ',
         status: n.catalogItems > 0 ? 'ok' : 'warning',
         detail:
           n.catalogItems > 0
-            ? `มี ${n.catalogItems} รายการ`
-            : 'ยังไม่มีรายการบริการ — ผู้ใช้แจ้งคำขอบริการไม่ได้',
+            ? `ມີ ${n.catalogItems} ລາຍການ`
+            : 'ຍັງບໍ່ມີລາຍການບໍລິການ — ຜູ້ໃຊ້ແຈ້ງຄຳຂໍບໍລິການບໍ່ໄດ້',
         ref: null,
       },
       {
         key: 'knowledge_base',
         href: '/kb',
-        label: 'คลังความรู้',
+        label: 'ຄັງຄວາມຮູ້',
         status: n.publishedKb > 0 ? 'ok' : 'warning',
         detail:
           n.publishedKb > 0
-            ? `เผยแพร่แล้ว ${n.publishedKb} บทความ`
-            : 'ยังไม่มีบทความที่เผยแพร่ — ผู้ใช้ช่วยเหลือตัวเองไม่ได้',
+            ? `ເຜີຍແຜ່ແລ້ວ ${n.publishedKb} ບົດຄວາມ`
+            : 'ຍັງບໍ່ມີບົດຄວາມທີ່ເຜີຍແຜ່ — ຜູ້ໃຊ້ຊ່ວຍເຫຼືອຕົນເອງບໍ່ໄດ້',
         ref: null,
       },
       {
         key: 'backup',
         href: '/admin/system',
-        label: 'การสำรองข้อมูลนอกสถานที่',
+        label: 'ການສຳຮອງຂໍ້ມູນນອກສະຖານທີ່',
         // อ่านจากตัวแปรสภาพแวดล้อมจริง ไม่ใช่ค่าคงที่ — วันที่ตั้งค่าเสร็จ
         // ข้อนี้ต้องเปลี่ยนเป็น ok เองโดยไม่ต้องแก้โค้ด
         status: process.env.BACKUP_DESTINATION ? 'ok' : 'blocking',
         detail: process.env.BACKUP_DESTINATION
-          ? 'ตั้งค่าปลายทางสำรองข้อมูลแล้ว'
-          : 'ยังไม่ได้ตั้ง BACKUP_DESTINATION — ข้อมูลทั้งหมดอยู่ที่เดียว',
+          ? 'ຕັ້ງຄ່າປາຍທາງສຳຮອງຂໍ້ມູນແລ້ວ'
+          : 'ຍັງບໍ່ໄດ້ຕັ້ງ BACKUP_DESTINATION — ຂໍ້ມູນທັງໝົດຢູ່ບ່ອນດຽວ',
         ref: null,
       },
     ];

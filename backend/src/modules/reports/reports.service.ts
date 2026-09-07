@@ -417,7 +417,7 @@ export class ReportsService {
         direction: 'higher',
         meets_target: this.verdict(kpi1, 95, 'higher'),
         denominator: closedCount,
-        note: 'ตัด ticket ที่มี sla_exclusion_code ออกจากตัวหารแล้ว',
+        note: 'ຕັດ ticket ທີ່ມີເຫດຍົກເວັ້ນອອກຈາກຕົວຫານແລ້ວ (SLA ພາກຜະໜວກ ກ.2)',
       },
       {
         code: 'KPI-3',
@@ -438,7 +438,7 @@ export class ReportsService {
         direction: 'higher',
         meets_target: this.verdict(kpi4, 4.2, 'higher'),
         denominator: csatRow?.responded ?? 0,
-        note: 'ต้องอ่านคู่กับ csat.response_rate_percent เสมอ (SLA 7.1)',
+        note: 'ຕ້ອງອ່ານຄູ່ກັບອັດຕາການຕອບແບບສອບຖາມສະເໝີ (SLA 7.1)',
       },
       {
         code: 'KPI-5',
@@ -449,11 +449,11 @@ export class ReportsService {
         direction: 'lower',
         meets_target: this.verdict(kpi5, 5, 'lower'),
         denominator: openCount,
-        note: 'วัด ณ เวลาที่เรียก ไม่ใช่ในช่วงเวลาที่เลือก',
+        note: 'ວັດຄ່າ ຕອນທີ່ເອີ້ນ ບໍ່ແມ່ນຕະຫຼອດຊ່ວງເວລາທີ່ເລືອກ',
       },
       {
         code: 'KPI-6',
-        name: 'Uptime ระบบ Critical',
+        name: 'Uptime ລະບົບ Critical',
         value: kpi6,
         unit: 'percent',
         target: 99.9,
@@ -462,8 +462,8 @@ export class ReportsService {
         denominator: uptimeRow?.services ?? 0,
         note:
           (uptimeRow?.services ?? 0) === 0
-            ? 'ยังไม่มีระบบงานระดับ critical ในทะเบียน (Q-05)'
-            : 'นับเฉพาะ downtime ที่ไม่ได้วางแผน',
+            ? 'ຍັງບໍ່ມີລະບົບງານລະດັບ critical ໃນທະບຽນ (Q-05)'
+            : 'ນັບສະເພາະ downtime ທີ່ບໍ່ໄດ້ວາງແຜນ',
       },
       {
         code: 'KPI-7',
@@ -509,7 +509,7 @@ export class ReportsService {
       sip_required: failing.length > 0,
       sip_reason:
         failing.length > 0
-          ? `${failing.join(', ')} ต่ำกว่าเป้าหมาย — SLA 7.3 บังคับให้จัดทำ Service Improvement Plan`
+          ? `${failing.join(', ')} ຕ່ຳກວ່າເປົ້າໝາຍ — SLA 7.3 ບັງຄັບໃຫ້ຈັດທຳແຜນປັບປຸງບໍລິການ (SIP)`
           : null,
     };
   }
