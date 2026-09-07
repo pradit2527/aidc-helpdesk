@@ -4,6 +4,7 @@ import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
 import { appUser, kbArticle, ticket } from '../../db/schema';
+import { SlaQueueService } from '../../jobs/jobs.module';
 
 export interface SystemInfo {
   app: {
@@ -45,7 +46,10 @@ const OPEN_STATUSES = ['new', 'assigned', 'in_progress', 'pending_user'] as cons
  */
 @Injectable()
 export class SystemService {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    private readonly slaQueue: SlaQueueService,
+  ) {}
 
   async info(): Promise<SystemInfo> {
     const [dbMeta, counts] = await Promise.all([this.databaseMeta(), this.counts()]);
@@ -120,6 +124,7 @@ export class SystemService {
         (select count(*)::int from kb_article where status = 'published')      as published_kb
     `);
 
+    const slaScan = this.slaQueue.status;
     const n = {
       holidays: row?.holidays ?? 0,
       contacts: row?.contacts ?? 0,
@@ -224,6 +229,28 @@ export class SystemService {
           n.publishedKb > 0
             ? `ເຜີຍແຜ່ແລ້ວ ${n.publishedKb} ບົດຄວາມ`
             : 'ຍັງບໍ່ມີບົດຄວາມທີ່ເຜີຍແຜ່ — ຜູ້ໃຊ້ຊ່ວຍເຫຼືອຕົນເອງບໍ່ໄດ້',
+        ref: null,
+      },
+      {
+        key: 'sla_scan',
+        href: '/admin/system',
+        label: 'ການປະເມີນ SLA ອັດຕະໂນມັດ',
+        /*
+         * ตรวจว่ากวาด SLA "ทำงานอยู่จริง" ไม่ใช่ "ตั้งค่าไว้"
+         *
+         * ถ้าคิวต่อไม่ติดและไม่ได้เปิดโหมดสำรอง ธง is_resolution_breached
+         * จะไม่เคยถูกตั้งเลย — หน้าจอจะแสดงว่าไม่มีเรื่องเกินกำหนดสักใบ
+         * ทั้งที่ความจริงคือไม่มีใครไปตรวจ ซึ่งเป็นความล้มเหลวแบบเงียบ
+         * ที่อันตรายที่สุดในระบบนี้
+         */
+        status: slaScan.mode === 'off' ? 'blocking' : 'ok',
+        detail:
+          slaScan.mode === 'queue'
+            ? `ເຮັດວຽກຜ່ານຄິວ ທຸກ ${slaScan.interval_minutes} ນາທີ`
+            : slaScan.mode === 'interval'
+              ? `ໂໝດສຳຮອງ ທຸກ ${slaScan.interval_minutes} ນາທີ — ໃຊ້ໄດ້ເມື່ອແລ່ນອິນສະແຕນດຽວ`
+              : 'ບໍ່ໄດ້ເຮັດວຽກ — ທຸງເກີນກຳນົດຈະບໍ່ຖືກຕັ້ງ ແລະ ບໍ່ມີໃຜໄດ້ຮັບແຈ້ງ ' +
+                '(ຕັ້ງ SLA_SCAN_FALLBACK=true ຫຼື ເປີດ Redis)',
         ref: null,
       },
       {

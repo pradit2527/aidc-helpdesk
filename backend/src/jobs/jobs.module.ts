@@ -41,12 +41,38 @@ export class SlaQueueService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger('SlaQueue');
   private queue?: Queue;
   private worker?: Worker;
+  private fallbackTimer?: NodeJS.Timeout;
+
+  /**
+   * สถานะการกวาด SLA ที่ทำงานอยู่จริง
+   *
+   * แยกจาก "ตั้งค่าไว้ว่าจะทำ" โดยตั้งใจ — /admin/readiness อ่านค่านี้
+   * เพื่อบอกผู้ดูแลว่าการประเมิน SLA เดินอยู่หรือไม่ ไม่ใช่บอกว่าเปิดใช้ไว้
+   * ระบบที่ตั้งค่าครบแต่คิวต่อไม่ติดจะดูเหมือนปกติทุกอย่าง ทั้งที่
+   * ธงเกินกำหนดไม่เคยถูกตั้งเลยและไม่มีใครได้รับแจ้ง
+   */
+  private mode: 'queue' | 'interval' | 'off' = 'off';
+
+  get status(): { mode: 'queue' | 'interval' | 'off'; interval_minutes: number } {
+    return { mode: this.mode, interval_minutes: SLA_SCAN_INTERVAL_MS / 60_000 };
+  }
 
   constructor(private readonly processor: SlaScanProcessor) {}
 
   async onModuleInit(): Promise<void> {
     if (process.env.JOBS_ENABLED === 'false') {
-      this.logger.log('ปิดการทำงานของคิวไว้ด้วย JOBS_ENABLED=false');
+      /*
+       * JOBS_ENABLED=false ปิดเฉพาะ "คิว" ไม่ได้ปิดการประเมิน SLA ทั้งหมด
+       *
+       * ตัวแปรนี้มีไว้เลี่ยงการต่อ Redis บนเครื่องที่ไม่มี ไม่ใช่คำสั่งให้
+       * หยุดตรวจว่าเรื่องไหนเกินกำหนด — สองอย่างนี้ต่างกัน ถ้ารวมกัน
+       * เครื่องพัฒนาทุกเครื่องจะไม่มีการตั้งธงเกินกำหนดเลย แล้วบั๊กของ
+       * เครื่องคำนวณ SLA จะไม่มีวันถูกเจอจนกว่าจะขึ้น production
+       *
+       * โหมดสำรองยังทำงานได้ถ้าเปิด SLA_SCAN_FALLBACK ไว้
+       */
+      this.logger.log('ไม่ต่อคิวตาม JOBS_ENABLED=false');
+      this.startFallback();
       return;
     }
 
@@ -108,6 +134,7 @@ export class SlaQueueService implements OnModuleInit, OnApplicationShutdown {
         QUEUE_SETUP_TIMEOUT_MS,
       );
 
+      this.mode = 'queue';
       this.logger.log(`ตั้งงานกวาด SLA ทุก ${SLA_SCAN_INTERVAL_MS / 60_000} นาทีแล้ว`);
     } catch (error) {
       /*
@@ -118,11 +145,69 @@ export class SlaQueueService implements OnModuleInit, OnApplicationShutdown {
        * การทำให้ทั้งระบบดับเพราะงานเบื้องหลังต่อไม่ได้ เป็นการแลกที่ไม่คุ้ม
        */
       this.logger.error(
-        `ตั้งคิวไม่สำเร็จ ระบบจะทำงานต่อโดยไม่มีการประเมิน SLA อัตโนมัติ: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `ตั้งคิวไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`,
       );
+      this.startFallback();
     }
+  }
+
+  /**
+   * โหมดสำรองเมื่อ Redis ใช้ไม่ได้ — ตั้งเวลาในโปรเซสเดียว
+   *
+   * ⚠️ ต้องเปิดด้วย SLA_SCAN_FALLBACK=true เท่านั้น ห้ามเป็นค่าเริ่มต้น
+   *
+   *    setInterval รันในทุกอินสแตนซ์ที่เปิดอยู่ — บนระบบที่ขยายเป็นหลายเครื่อง
+   *    งานกวาดจะรันซ้ำเท่าจำนวนเครื่อง แล้วผู้รับการยกระดับจะได้รับแจ้ง
+   *    เรื่องเดียวกันหลายรอบ ซึ่งเป็นเหตุผลที่เลือก BullMQ ตั้งแต่แรก
+   *
+   *    เปิดได้เมื่อมั่นใจว่ารันอินสแตนซ์เดียว เช่นบนเครื่องพัฒนา
+   *    หรือ Render แผนที่มีเครื่องเดียว
+   *
+   * ถ้าไม่เปิด ระบบยังให้บริการได้ครบ แต่ธงเกินกำหนดจะไม่ถูกตั้งเลย
+   * ซึ่ง /admin/readiness รายงานให้เห็นแทนที่จะเงียบ
+   */
+  private startFallback(): void {
+    if (process.env.SLA_SCAN_FALLBACK !== 'true') {
+      this.logger.warn(
+        'ไม่มีการประเมิน SLA อัตโนมัติ — ตั้ง SLA_SCAN_FALLBACK=true เพื่อใช้ตัวจับเวลาในโปรเซส ' +
+          '(ใช้ได้เมื่อรันอินสแตนซ์เดียวเท่านั้น)',
+      );
+      this.mode = 'off';
+      return;
+    }
+
+    this.mode = 'interval';
+    this.logger.warn(
+      `ใช้โหมดสำรอง — กวาด SLA ทุก ${SLA_SCAN_INTERVAL_MS / 60_000} นาทีจากตัวจับเวลาในโปรเซส ` +
+        'ห้ามใช้เมื่อรันหลายอินสแตนซ์',
+    );
+
+    const tick = (): void => {
+      /*
+       * จับ error ทุกครั้ง — ข้อผิดพลาดที่หลุดออกจาก callback ของ setInterval
+       * กลายเป็น unhandled rejection แล้วโปรเซสตายทั้งตัว
+       * งานกวาดที่ล้มหนึ่งรอบไม่ควรทำให้ API ทั้งระบบดับ
+       */
+      this.processor
+        .run()
+        .then((r) => {
+          if (r.responseBreached > 0 || r.resolutionBreached > 0) {
+            this.logger.log(
+              `กวาด SLA: เกินกำหนดตอบรับ ${r.responseBreached} · เกินกำหนดแก้ไข ${r.resolutionBreached}`,
+            );
+          }
+        })
+        .catch((e: unknown) =>
+          this.logger.error(`กวาด SLA ล้มเหลว: ${e instanceof Error ? e.message : String(e)}`),
+        );
+    };
+
+    // รันทันทีหนึ่งรอบ ไม่รอครบช่วงแรก — เรื่องที่เกินกำหนดไปแล้ว
+    // ตอนเซิร์ฟเวอร์เพิ่งขึ้นไม่ควรต้องรออีก 5 นาทีจึงถูกตั้งธง
+    tick();
+    this.fallbackTimer = setInterval(tick, SLA_SCAN_INTERVAL_MS);
+    // ไม่ให้ตัวจับเวลากันโปรเซสไม่ให้ปิดตอน shutdown
+    this.fallbackTimer.unref();
   }
 
   /** ล้มเลิกถ้าไม่เสร็จในเวลาที่กำหนด แทนที่จะรอตลอดไป */
@@ -162,6 +247,7 @@ export class SlaQueueService implements OnModuleInit, OnApplicationShutdown {
   async onApplicationShutdown(): Promise<void> {
     // ปิด worker ก่อน queue เพื่อให้งานที่กำลังทำอยู่จบก่อน
     // ถ้าปิดสลับกัน งานที่ค้างจะถูกทิ้งไว้ในสถานะกำลังทำ แล้วไม่มีใครหยิบต่อ
+    if (this.fallbackTimer) clearInterval(this.fallbackTimer);
     await this.worker?.close().catch(() => undefined);
     await this.queue?.close().catch(() => undefined);
   }
