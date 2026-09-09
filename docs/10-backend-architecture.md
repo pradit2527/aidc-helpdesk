@@ -718,7 +718,7 @@ async def test_end_user_cannot_see_internal_comment(client, seed):
 | Lockout | ผิด 5 ครั้งติด → `locked_until = now + 15 นาที`, ตอบ `423 ACCOUNT_LOCKED`; นับด้วยคอลัมน์ `failed_login_count` ใน DB (ไม่ใช้ Redis เพื่อให้รอดการรีสตาร์ต) | FR-04 |
 | Rate limit login | 10 ครั้ง/นาที/IP บน Redis (`INCR` + `EXPIRE` แบบ fixed window) — **แยกจาก lockout รายบัญชี** เพราะกันคนละภัย (credential stuffing กระจาย IP vs เดารหัสบัญชีเดียว) | NFR-17 |
 | Rate limit API | 120 req/นาที/user; ตอบ header `X-RateLimit-Remaining` ทุก response | NFR-17 |
-| must_change_password | ทุก endpoint ยกเว้น `/auth/me`, `/auth/change-password`, `/auth/logout` ตอบ `403 PASSWORD_CHANGE_REQUIRED` | FR-03, US-18 |
+| ~~must_change_password~~ | ~~ยกเลิกแล้ว~~ — หน้า `/change-password` ถูกถอดออกตามที่องค์กรสั่ง (2026-09-09) ไม่มีการบังคับเปลี่ยนรหัสอีกต่อไป ด่านนี้ไม่เคยถูกเขียนลงโค้ด และจะไม่เขียน — `POST /auth/change-password` ยังอยู่ให้เรียกเองได้ | FR-03, US-18 |
 
 ### 7.2 ลำดับการตรวจตอน login (ลำดับสำคัญ)
 

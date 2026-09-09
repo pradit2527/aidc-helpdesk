@@ -101,7 +101,7 @@ export default function LoginPage(): React.JSX.Element {
     setError(null);
 
     try {
-      const { mustChangePassword } = await login(username.trim(), password);
+      await login(username.trim(), password);
 
       /*
        * ต้องใช้ replace ไม่ใช่ push
@@ -109,10 +109,6 @@ export default function LoginPage(): React.JSX.Element {
        * ถ้า push ผู้ใช้กดปุ่มย้อนกลับจะกลับมาเจอหน้าล็อกอินทั้งที่ล็อกอินอยู่แล้ว
        * ซึ่งสับสน และบนเครื่องที่ใช้ร่วมกันยังทำให้เห็นชื่อผู้ใช้ที่ค้างในฟอร์มด้วย
        */
-      if (mustChangePassword) {
-        router.replace('/change-password');
-        return;
-      }
 
       // พากลับไปหน้าที่ผู้ใช้ตั้งใจเปิดก่อนโดนเด้งมาล็อกอิน
       const next = searchParams.get('next');

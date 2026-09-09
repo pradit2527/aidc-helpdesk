@@ -112,12 +112,20 @@ export default function AdminUsersPage(): React.JSX.Element {
               ຖືກລັອກ
             </span>
           )}
+          {/*
+            ป้ายนี้เคยอ่านว่า "ຕ້ອງປ່ຽນລະຫັດ" ตอนที่ยังมีหน้าบังคับเปลี่ยนรหัส
+            เมื่อหน้านั้นถูกถอดออก ป้ายเดิมกลายเป็นคำสั่งที่ผู้ใช้ทำตามไม่ได้
+            จึงเหลือความหมายเป็นข้อสังเกตว่าบัญชีนี้ยังใช้รหัสตั้งต้นอยู่
+
+            และไม่ตัดป้าย "ປົກກະຕິ" ทิ้งอีกต่อไป — บัญชีที่ใช้รหัสตั้งต้น
+            ก็ยังเป็นบัญชีที่ใช้งานได้ปกติ ไม่ใช่บัญชีมีปัญหา
+          */}
           {u.must_change_password && (
             <span className="rounded-full bg-st-pending-bg px-2 py-0.5 text-caption text-st-pending-fg">
-              ຕ້ອງປ່ຽນລະຫັດ
+              ໃຊ້ລະຫັດຕັ້ງຕົ້ນ
             </span>
           )}
-          {u.is_active && !u.is_locked && !u.must_change_password && (
+          {u.is_active && !u.is_locked && (
             <span className="rounded-full bg-sla-ok-bg px-2 py-0.5 text-caption text-sla-ok">
               ປົກກະຕິ
             </span>

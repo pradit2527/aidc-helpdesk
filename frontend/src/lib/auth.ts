@@ -104,19 +104,10 @@ export async function logout(): Promise<void> {
   }
 }
 
-/**
- * เปลี่ยนรหัสผ่าน
+/*
+ * เคยมี changePassword() ตรงนี้ ถูกถอดออกพร้อมหน้า /change-password
  *
- * สำเร็จแล้ว backend ล้างคุกกี้ทิ้งทั้งหมด ผู้ใช้จึงต้องล็อกอินใหม่
- * เป็นพฤติกรรมที่ตั้งใจ เพราะเหตุผลที่พบบ่อยที่สุดของการเปลี่ยนรหัสผ่าน
- * คือสงสัยว่ารหัสเดิมรั่ว การเตะทุก session จึงเป็นสิ่งที่ต้องเกิด
+ * ตัว endpoint POST /auth/change-password ฝั่ง backend ยังอยู่และยังใช้ได้
+ * ผ่าน Swagger — ถอดออกเฉพาะหน้าจอกับตัวเรียกที่ไม่มีใครเรียกแล้วเท่านั้น
+ * โค้ดที่ไม่มีทางถูกเรียกแต่ยังอยู่ ทำให้คนอ่านทีหลังเข้าใจผิดว่ายังมีหน้านั้น
  */
-export async function changePassword(
-  currentPassword: string,
-  newPassword: string,
-): Promise<void> {
-  await apiRequest<void>('/auth/change-password', {
-    method: 'POST',
-    body: { current_password: currentPassword, new_password: newPassword },
-  });
-}

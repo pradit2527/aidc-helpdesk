@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { KeyRound, Mail, MessageCircle, Smartphone } from 'lucide-react';
+import { Mail, MessageCircle, Smartphone } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
@@ -203,12 +202,6 @@ export default function ProfilePage(): React.JSX.Element {
             ຢ່າງໜ້ອຍ 12 ຕົວອັກສອນ ປະກອບດ້ວຍຕົວພິມໃຫຍ່ ຕົວພິມນ້ອຍ ຕົວເລກ ແລະ ອັກຂະລະພິເສດ
             ແລະ ຫ້າມຊ້ຳກັບ 3 ລະຫັດຫຼ້າສຸດ
           </Alert>
-          <Button asChild variant="secondary">
-            <Link href="/change-password">
-              <KeyRound className="h-4 w-4" aria-hidden="true" />
-              ປ່ຽນລະຫັດຜ່ານ
-            </Link>
-          </Button>
         </CardBody>
       </Card>
     </div>

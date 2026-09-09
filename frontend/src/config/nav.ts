@@ -251,7 +251,6 @@ export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
   '/kb/new': 'page.newArticle',
   '/notifications': 'nav.notifications',
   '/profile': 'page.profile',
-  '/change-password': 'page.changePassword',
   '/admin': 'page.adminConsole',
   '/admin/users': 'nav.users',
   '/admin/users/import': 'page.importUsers',

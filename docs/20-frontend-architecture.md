@@ -60,7 +60,6 @@ frontend/
    │  ├─ (auth)/                  # โซนก่อนเข้าระบบ — ไม่มี AppShell
    │  │  ├─ layout.tsx
    │  │  ├─ login/page.tsx
-   │  │  └─ change-password/page.tsx
    │  │
    │  └─ (app)/                   # โซนหลังเข้าระบบ — มี AppShell
    │     ├─ layout.tsx            # Sidebar / BottomNav / Topbar  (Server Component)
@@ -171,7 +170,7 @@ flowchart TD
 
 | หน้า | ชนิด | เหตุผล |
 |---|---|---|
-| `/login` · `/change-password` | Client | ฟอร์ม |
+| `/login` | Client | ฟอร์ม |
 | `/tickets` · `/tickets/my` | **RSC** + `<TicketFilterBar>` เป็น Client | ตารางอ่านอย่างเดียว · ตัวกรองอยู่ใน URL |
 | `/tickets/new` | Client | ฟอร์ม + อัปโหลด + ร่างอัตโนมัติ |
 | `/tickets/[id]` | **RSC** + แผงการดำเนินการเป็น Client | เนื้อหาส่วนใหญ่อ่านอย่างเดียว |
@@ -213,7 +212,7 @@ sequenceDiagram
 | ที่เก็บ token | **httpOnly cookie ที่ FastAPI เป็นผู้ตั้ง** — `lib/api/*` ไม่เคยเห็นค่า token |
 | refresh | ทำที่ `middleware.ts` ก่อน render — ผู้ใช้ไม่เห็นการกะพริบ |
 | CSRF | client fetch อ่าน cookie `aidc_csrf` แล้วใส่ header `X-CSRF-Token` ทุก `POST/PUT/PATCH/DELETE` |
-| บังคับเปลี่ยนรหัสผ่าน | middleware อ่าน `must_change_password` จาก `/auth/me` แล้วบังคับไป `/change-password` |
+| ~~บังคับเปลี่ยนรหัสผ่าน~~ | ~~ยกเลิกแล้ว~~ — หน้า `/change-password` ถูกถอดออกตามที่องค์กรสั่ง (2026-09-09) ไม่มีการบังคับเปลี่ยนรหัสอีกต่อไป `must_change_password` ยังส่งมาใน `/auth/me` แต่ใช้แค่แสดงป้าย "ໃຊ້ລະຫັດຕັ້ງຕົ້ນ" ในหน้าจัดการผู้ใช้ ไม่มีผลกับการนำทาง |
 | logout | `POST /auth/logout` → backend ลบ cookie + ใส่ jti ลง denylist |
 
 ### 4.2 `src/middleware.ts`
@@ -229,7 +228,7 @@ const RT = 'aidc_rt';
  * ด่านแรกของทุกคำขอ — ทำ 3 อย่าง
  *   1. ยังไม่ล็อกอิน -> ส่งไป /login พร้อม ?redirect=
  *   2. access token หมดอายุแต่มี refresh -> ต่ออายุที่นี่ ผู้ใช้ไม่รู้สึก
- *   3. must_change_password -> บังคับไป /change-password
+ *   3. (เดิมมีข้อบังคับเปลี่ยนรหัส — ถอดออกแล้วพร้อมหน้า /change-password)
  *
  * หมายเหตุ: นี่คือ "ประสบการณ์ผู้ใช้" ไม่ใช่ security boundary
  * FastAPI ตรวจสิทธิ์ซ้ำทุกคำขอเสมอ (NFR-13)

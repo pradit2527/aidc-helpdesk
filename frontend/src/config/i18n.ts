@@ -244,7 +244,6 @@ export const MESSAGES = {
   'page.kbEdit': { lo: 'ແກ້ໄຂບົດຄວາມ', th: 'แก้ไขบทความ' },
   'page.userDetail': { lo: 'ລາຍລະອຽດຜູ້ໃຊ້', th: 'รายละเอียดผู้ใช้' },
   'page.slaReport': { lo: 'ລາຍງານ SLA ລາຍເດືອນ', th: 'รายงาน SLA รายเดือน' },
-  'page.changePassword': { lo: 'ປ່ຽນລະຫັດຜ່ານ', th: 'เปลี่ยนรหัสผ่าน' },
   'page.importUsers': { lo: 'ນຳເຂົ້າຜູ້ໃຊ້ຈາກໄຟລ໌', th: 'นำเข้าผู้ใช้จากไฟล์' },
   'page.newArticle': { lo: 'ຂຽນບົດຄວາມໃໝ່', th: 'เขียนบทความใหม่' },
   'page.adminConsole': { lo: 'ສູນຄວບຄຸມຜູ້ດູແລລະບົບ', th: 'ศูนย์ควบคุมผู้ดูแลระบบ' },

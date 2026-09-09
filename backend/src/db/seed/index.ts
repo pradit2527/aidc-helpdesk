@@ -424,7 +424,6 @@ async function seedCatalog(db: Db): Promise<void> {
  *
  * รหัสผ่านมาจาก SEED_ADMIN_PASSWORD เท่านั้น ไม่มีค่าตายตัวสำรอง
  * เพราะรหัสตายตัวในซอร์สคือรหัสที่ทุกคนบนอินเทอร์เน็ตรู้ และมักติดไปถึง production
- * must_change_password = true บังคับเปลี่ยนตั้งแต่เข้าครั้งแรกอยู่แล้ว
  */
 async function seedSuperAdmin(db: Db, companyByCode: Map<string, number>): Promise<void> {
   const username = process.env.SEED_ADMIN_USERNAME ?? 'admin';
@@ -449,6 +448,8 @@ async function seedSuperAdmin(db: Db, companyByCode: Map<string, number>): Promi
       fullName: 'ຜູ້ດູແລລະບົບ',
       passwordHash,
       authProvider: 'local',
+      // ไม่มีการบังคับเปลี่ยนแล้ว (หน้า /change-password ถูกถอดออก)
+      // ธงนี้เหลือความหมายว่า "ยังใช้รหัสตั้งต้น" ไว้ให้ผู้ดูแลเห็นเท่านั้น
       mustChangePassword: true,
       isAdminAccount: true,
       isActive: true,
@@ -472,7 +473,7 @@ async function seedSuperAdmin(db: Db, companyByCode: Map<string, number>): Promi
     .onConflictDoNothing({ target: [schema.userRole.userId, schema.userRole.roleId] });
 
   record('app_user', 1);
-  console.log(`  บัญชีผู้ดูแล: ${username} (ต้องเปลี่ยนรหัสผ่านเมื่อเข้าครั้งแรก)`);
+  console.log(`  บัญชีผู้ดูแล: ${username} (ยังใช้รหัสตั้งต้น — ควรเปลี่ยนเอง)`);
 }
 
 async function main(): Promise<void> {

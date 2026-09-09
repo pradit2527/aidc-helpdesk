@@ -99,17 +99,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
   }, [state, pathname, router]);
 
   /*
-   * บังคับเปลี่ยนรหัสผ่านก่อนใช้งานอย่างอื่น (US-18 AC-1)
+   * ไม่มีการบังคับเปลี่ยนรหัสผ่านแล้ว — หน้า /change-password ถูกถอดออก
+   * ตามที่องค์กรสั่ง (เดิมคือ US-18 AC-1)
    *
-   * ตรวจที่นี่ ไม่ใช่แค่ตอนล็อกอิน เพราะผู้ดูแลระบบสั่งรีเซ็ตรหัสผ่านได้
-   * ระหว่างที่ผู้ใช้เปิดแอปค้างไว้ ถ้าตรวจแค่ตอนล็อกอิน ผู้ใช้คนนั้น
-   * จะใช้งานต่อได้ทั้งวันโดยไม่เคยเปลี่ยนรหัสเลย
+   * ฟิลด์ must_change_password ยังอยู่ในฐานข้อมูลและยังถูกส่งมาใน session
+   * เพื่อให้หน้าจัดการผู้ใช้แสดงธงได้ว่าบัญชีไหนยังใช้รหัสตั้งต้นอยู่
+   * แต่ไม่มีผลกับการนำทางอีกต่อไป
    */
-  React.useEffect(() => {
-    if (state !== 'ready' || !user?.must_change_password) return;
-    if (pathname === '/change-password') return;
-    router.replace('/change-password');
-  }, [state, user?.must_change_password, pathname, router]);
 
   const signOut = React.useCallback(async (): Promise<void> => {
     await logoutRequest();
