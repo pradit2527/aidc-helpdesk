@@ -11,43 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
 
-<!-- ── Tailwind Play CDN + ผูกชุดสีแบรนด์เข้ากับ theme.extend.colors ── -->
-<script src="https://cdn.tailwindcss.com"
-        onerror="document.documentElement.classList.add('no-tw')"></script>
-<script>
-  // สีทุกตัวชี้ไปที่ CSS variable เพื่อให้สลับ light/dark ได้จากจุดเดียว
-  // (กัน error กรณีเปิดไฟล์ตอนไม่มีเน็ต — สไตล์หลักอยู่ใน <style> ด้านล่างอยู่แล้ว)
-  window.tailwind = window.tailwind || {};
-  tailwind.config = {
-    darkMode: 'class',
-    theme: {
-      extend: {
-        colors: {
-          canvas:    'var(--c-bg)',        // พื้นหลังหลัก
-          surface:   'var(--c-surface)',   // พื้นแผง/แถบข้าง
-          card:      'var(--c-card)',      // พื้นการ์ดที่ยกขึ้นมา
-          ink:       'var(--c-ink)',       // ตัวอักษรหลัก
-          muted:     'var(--c-muted)',     // ตัวอักษรรอง
-          faint:     'var(--c-faint)',     // ตัวอักษรจาง / eyebrow
-          hair:      'var(--c-hair)',      // เส้น hairline ตกแต่ง
-          'hair-soft':'var(--c-hair-soft)', // เส้นคั่นภายในการ์ด/แถวตาราง
-          line:      'var(--c-line)',      // เส้นขอบเชิงหน้าที่ (input/ปุ่ม)
-          accent:    'var(--c-accent)',    // สีแบรนด์ — ใช้เป็นพื้น/แถบ ไม่ใช้เป็นตัวอักษร
-          'accent-text': 'var(--c-accent-text)', // สีแบรนด์เวอร์ชันที่ผ่าน AA เมื่อเป็นตัวอักษร
-          'accent-btn':  'var(--c-accent-btn)',
-          'accent-soft': 'var(--c-accent-soft)',
-          'accent-soft-ink': 'var(--c-accent-soft-ink)',
-          'on-accent':   'var(--c-on-accent)'
-        },
-        fontFamily: {
-          display: ['Archivo', 'IBM Plex Sans Thai', 'system-ui', 'sans-serif'],
-          body:    ['IBM Plex Sans Thai', 'Archivo', 'system-ui', 'sans-serif']
-        },
-        borderRadius: { none: '0' }
-      }
-    }
-  };
-</script>
+<!-- ── Tailwind: คอมไพล์ไว้แล้วและฝังอยู่ท้าย <head> — ไม่เรียก CDN ไม่ต้องต่อเน็ต ── -->
 
 <style>
 /* ═══════════════════════════════════════════════════════════════
@@ -618,6 +582,148 @@ html.dark .login-hero { border-right:1px solid #444141; }
 .barrow:hover .barfill { filter:brightness(.92); }
 .barfill { transition:filter .16s ease; }
 
+/* ═══════════════════════════════════════════════════════════════
+   11c. Executive Dashboard
+        แถบหัวสีหมึกเต็มความกว้าง + สเกลตัวเลขที่อ่านลำดับได้ทันที
+        รูปแบบกราฟเลือกตามหน้าที่ของข้อมูล: ปริมาณ = แท่งเน้นเดี่ยว ·
+        ส่วนต่างจากเป้าหมาย = แท่งสองทางรอบเส้นศูนย์ · แนวโน้ม = sparkline
+        สีใช้แค่ "หมึก + แบรนด์ + เทา" ตามระบบเดิม ไม่มีจานสีใหม่
+   ═══════════════════════════════════════════════════════════════ */
+
+/* แถบหัว — พื้นหมึกเสมอในทั้งสองธีม จึงต้องมีชุดสีของตัวเองที่ผ่าน AA บนพื้นเข้ม */
+.hero {
+  --h-ink:#f8f4f4; --h-mute:#bab6b6; --h-faint:#9b9797;
+  --h-line:#444141; --h-accent:#ff9783; --h-bar:#ff563c;
+  background:var(--c-ink); color:var(--h-ink); border:1px solid var(--c-ink);
+}
+html.dark .hero { background:#100f0f; border-color:#2d2b2b; }
+.hero .eyebrow { color:var(--h-faint); }
+.hero-grid { display:grid; }
+@media (min-width:1024px) { .hero-grid { grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); } }
+.hero-div { border-top:1px solid var(--h-line); }
+@media (min-width:1024px) { .hero-div { border-top:0; border-left:1px solid var(--h-line); } }
+.hero-fig {
+  font-family:'Archivo',sans-serif; font-weight:800; font-variant-numeric:tabular-nums;
+  font-size:clamp(3.1rem,7.4vw,4.5rem); line-height:.86; letter-spacing:-.045em;
+}
+.hero-fig .unit { font-size:.42em; letter-spacing:-.02em; margin-left:.12em; vertical-align:.44em; color:var(--h-mute); }
+.hero-facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; background:var(--h-line); }
+.hero-facts > div { background:var(--c-ink); padding:.9rem 1rem; min-width:0; }
+html.dark .hero-facts > div { background:#100f0f; }
+
+/* จุดสถานะสด — จังหวะช้า ไม่ชวนมอง แต่บอกว่าข้อมูลไหลอยู่ */
+.live { position:relative; width:7px; height:7px; flex:none; background:var(--h-bar); }
+.live::after { content:''; position:absolute; inset:0; background:inherit; animation:livep 2.6s ease-out infinite; }
+@keyframes livep { 0% { opacity:.55; transform:scale(1); } 70%,100% { opacity:0; transform:scale(2.6); } }
+@media (prefers-reduced-motion:reduce) { .live::after { animation:none; } }
+
+/* มาตรวัดเทียบเป้าหมาย — รางเดียว ขีดเป้าหมายเป็นเส้นตั้ง อ่าน "ถึงหรือยัง" ได้ในสายตาเดียว */
+.gauge { position:relative; height:6px; background:var(--c-hair-soft); }
+.hero .gauge { background:#2d2b2b; }
+.gauge > i { position:absolute; inset-block:0; left:0; background:var(--c-ink); display:block; }
+.hero .gauge > i { background:var(--h-ink); }
+.gauge.miss > i { background:var(--c-accent); }
+.hero .gauge.miss > i { background:var(--h-bar); }
+.gauge > b { position:absolute; inset-block:-3px; width:2px; background:var(--c-line); display:block; }
+.hero .gauge > b { background:var(--h-mute); }
+.gauge-grow > i { animation:gaugein .72s cubic-bezier(.22,.61,.36,1) both; }
+@keyframes gaugein { from { width:0 !important; } }
+@media (prefers-reduced-motion:reduce) { .gauge-grow > i { animation:none; } }
+
+/* sparkline — เส้นบาง จุดปลายเดียว ไม่มีแกน ไม่มีตัวเลขบนทุกจุด */
+/* ── ผังกราฟ: แกน เส้นกริด และเส้นอ้างอิง ─────────────────────────────
+   กราฟที่ไม่มีแกนคือกราฟที่ตรวจสอบไม่ได้ — ทุกกราฟในหน้านี้จึงมีสเกลกำกับ
+   เส้นกริดจางกว่าเส้นข้อมูลเสมอ และเส้นเป้าหมายเป็นเส้นประเพื่อไม่ให้ปนกับข้อมูล */
+.plot { position:relative; }
+.plot .gl { position:absolute; top:0; bottom:0; width:1px; background:var(--c-hair); }
+.plot .gl.zero { background:var(--c-line); }
+.plot .gl.ref { background:none; border-left:1px dashed var(--c-line); width:0; }
+.hero .plot .gl { background:#2d2b2b; }
+.hero .plot .gl.ref { background:none; border-left-color:#7d7979; }
+.axis { position:relative; height:16px; margin-top:.45rem; }
+.axis > span { position:absolute; top:0; font-size:var(--fs-fine); color:var(--c-faint); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.hero .axis > span { color:#9b9797; }
+
+/* เส้นกริดแนวนอนของกราฟเส้น */
+.plot .hl { position:absolute; left:0; right:0; height:1px; background:var(--c-hair); }
+.plot .hl.ref { background:none; border-top:1px dashed var(--c-line); height:0; }
+.hero .plot .hl { background:#2d2b2b; }
+.hero .plot .hl.ref { border-top-color:#9b9797; }
+.plot .hlab { position:absolute; left:0; transform:translateY(-50%); font-size:var(--fs-fine); color:var(--c-faint); font-variant-numeric:tabular-nums; background:var(--c-card); padding-right:.35rem; }
+.hero .plot .hlab { color:#9b9797; background:var(--c-ink); }
+html.dark .hero .plot .hlab { background:#100f0f; }
+
+/* กราฟเส้น */
+.lc { display:block; width:100%; height:100%; overflow:visible; }
+.lc path.ln { fill:none; stroke:var(--c-ink); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.lc path.ar { fill:var(--c-hair-soft); stroke:none; opacity:.75; }
+.hero .lc path.ln { stroke:var(--h-ink); }
+.hero .lc path.ar { fill:#2d2b2b; opacity:1; }
+.plot.miss .lc path.ln { stroke:var(--c-accent); }
+.plot.miss .lc path.ar { fill:var(--c-accent-soft); opacity:.5; }
+.plot.miss .pt { background:var(--c-accent); }
+.lc-draw path.ln { stroke-dasharray:1200; stroke-dashoffset:1200; animation:lndraw 1.1s cubic-bezier(.22,.61,.36,1) forwards; }
+.lc-draw path.ar { animation:fadein .8s .35s both; }
+@keyframes lndraw { to { stroke-dashoffset:0; } }
+@keyframes fadein { from { opacity:0; } }
+@media (prefers-reduced-motion:reduce) { .lc-draw path.ln, .lc-draw path.ar { animation:none; stroke-dashoffset:0; } }
+
+/* จุดข้อมูลและพื้นที่รับ hover — วางเป็น HTML เพื่อไม่ให้ถูก svg ยืดแกนจนบิด */
+.pt { position:absolute; width:7px; height:7px; background:var(--c-ink); transform:translate(-50%,-50%); }
+.hero .pt { background:var(--h-ink); box-shadow:0 0 0 2px var(--c-ink); }
+html.dark .hero .pt { box-shadow:0 0 0 2px #100f0f; }
+.hit { position:absolute; top:0; bottom:0; transform:translateX(-50%); cursor:default; }
+.hit::after { content:''; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--c-ink); opacity:0; transition:opacity .12s ease; }
+.hero .hit::after { background:var(--h-ink); }
+.hit:hover::after { opacity:.32; }
+
+.sparkwrap { position:relative; }
+.spark { display:block; width:100%; height:30px; overflow:visible; }
+.spark-lg .spark { height:56px; }
+@media (min-width:1024px) { .spark-lg .spark { height:78px; } }
+.sparkwrap > i { position:absolute; right:0; width:7px; height:7px; display:block; background:var(--c-ink); box-shadow:0 0 0 1.5px var(--c-card); transform:translate(1px,-50%); }
+.sparkwrap.miss > i { background:var(--c-accent); }
+.hero .sparkwrap > i { background:var(--h-ink); box-shadow:0 0 0 2px var(--c-ink); }
+html.dark .hero .sparkwrap > i { box-shadow:0 0 0 2px #100f0f; }
+.spark path { fill:none; stroke:var(--c-line); stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.spark .area { fill:var(--c-hair-soft); stroke:none; }
+.spark.miss path { stroke:var(--c-accent); }
+.hero .spark path { stroke:var(--h-mute); }
+.hero .spark .area { fill:#2d2b2b; }
+
+/* กราฟแท่งแนวนอน — ปลายแท่งมนเล็กน้อย เว้นช่องพื้น 2px ระหว่างแท่งกับราง */
+.hb { position:relative; height:10px; background:var(--c-hair-soft); }
+/* ในกราฟที่มีแกน ไม่ต้องมีรางหลังแท่ง — ปล่อยให้อ่านเทียบเส้นกริดแทน */
+.plot .hb { background:transparent; }
+.hb > i { position:absolute; inset-block:0; left:0; display:block; background:var(--c-ink); border-radius:0 2px 2px 0; }
+.hb.on > i { background:var(--c-accent); }
+.hbrow:hover .hb > i { filter:brightness(1.12); }
+html.dark .hbrow:hover .hb > i { filter:brightness(.86); }
+.hb-grow > i { animation:hbin .78s cubic-bezier(.22,.61,.36,1) both; }
+@keyframes hbin { from { width:0 !important; } }
+@media (prefers-reduced-motion:reduce) { .hb-grow > i { animation:none; } }
+
+/* แท่งสองทาง — ส่วนต่างจากเป้าหมาย กางออกจากเส้นศูนย์กลาง */
+.dv { position:relative; height:22px; }
+.dv::before { content:''; position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:var(--c-rail); }
+.dv > i { position:absolute; top:4px; height:14px; display:block; background:var(--c-ink); }
+.dv > i.neg { background:var(--c-accent); }
+.dv-grow > i { animation:dvin .78s cubic-bezier(.22,.61,.36,1) both; }
+@keyframes dvin { from { width:0 !important; } }
+@media (prefers-reduced-motion:reduce) { .dv-grow > i { animation:none; } }
+
+/* แถวกราฟ — ชื่อ / กราฟ / ค่า เรียงเป็นคอลัมน์คงที่ ให้เลขตรงแนวกันทุกแถว */
+.cgrid { display:grid; grid-template-columns:minmax(84px,auto) minmax(0,1fr) minmax(74px,auto); align-items:center; gap:.75rem 1rem; }
+@media (min-width:640px) { .cgrid { grid-template-columns:minmax(132px,auto) minmax(0,1fr) minmax(88px,auto); } }
+
+/* ตัวเลือกช่วงเวลา */
+.seg { display:inline-flex; border:1px solid var(--c-hair); background:var(--c-card); }
+.seg > button { padding:.42rem .8rem; font-size:var(--fs-fine); font-weight:600; color:var(--c-muted); border-left:1px solid var(--c-hair); transition:background-color .14s ease,color .14s ease; }
+.seg > button:first-child { border-left:0; }
+.seg > button:hover { background:var(--c-surface); color:var(--c-ink); }
+.seg > button[aria-pressed="true"] { background:var(--c-ink); color:var(--c-bg); }
+.seg > button:focus-visible { outline:2px solid var(--c-accent); outline-offset:-2px; }
+
 /* การ์ดคลิกได้ */
 .hovercard { transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
 .hovercard:hover { border-color:var(--c-line); box-shadow:var(--c-shadow); transform:translateY(-1px); }
@@ -726,6 +832,9 @@ html.no-tw .tbl-wrap { overflow-x:auto; }
   position:absolute; width:1px; height:1px; padding:0; margin:-1px;
   overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
 }
+</style>
+<style id="tw">
+*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.19 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}.pointer-events-none{pointer-events:none}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.inset-0{inset:0}.left-0{left:0}.left-3{left:.75rem}.right-0{right:0}.top-0{top:0}.top-1\/2{top:50%}.z-30{z-index:30}.mx-auto{margin-left:auto;margin-right:auto}.my-7{margin-top:1.75rem;margin-bottom:1.75rem}.-mt-1{margin-top:-.25rem}.-mt-2{margin-top:-.5rem}.mb-1\.5{margin-bottom:.375rem}.mb-2{margin-bottom:.5rem}.mb-3\.5{margin-bottom:.875rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-6{margin-bottom:1.5rem}.mb-7{margin-bottom:1.75rem}.ml-1{margin-left:.25rem}.mt-0\.5{margin-top:.125rem}.mt-1{margin-top:.25rem}.mt-1\.5{margin-top:.375rem}.mt-2{margin-top:.5rem}.mt-2\.5{margin-top:.625rem}.mt-3{margin-top:.75rem}.mt-3\.5{margin-top:.875rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.mt-6{margin-top:1.5rem}.mt-7{margin-top:1.75rem}.mt-8{margin-top:2rem}.mt-auto{margin-top:auto}.block{display:block}.inline{display:inline}.flex{display:flex}.inline-flex{display:inline-flex}.table{display:table}.grid{display:grid}.hidden{display:none}.h-1\.5{height:.375rem}.h-10{height:2.5rem}.h-11{height:2.75rem}.h-3\.5{height:.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-9{height:2.25rem}.h-\[13px\]{height:13px}.h-\[14px\]{height:14px}.h-\[18px\]{height:18px}.h-\[19px\]{height:19px}.h-\[34px\]{height:34px}.h-\[58px\]{height:58px}.h-\[68px\]{height:68px}.h-\[76px\]{height:76px}.h-\[7px\]{height:7px}.h-\[92px\]{height:92px}.h-screen{height:100vh}.min-h-screen{min-height:100vh}.w-1\.5{width:.375rem}.w-10{width:2.5rem}.w-11{width:2.75rem}.w-2\/3{width:66.666667%}.w-3\.5{width:.875rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-9{width:2.25rem}.w-\[13px\]{width:13px}.w-\[142px\]{width:142px}.w-\[14px\]{width:14px}.w-\[18px\]{width:18px}.w-\[190px\]{width:190px}.w-\[19px\]{width:19px}.w-\[230px\]{width:230px}.w-\[268px\]{width:268px}.w-\[72px\]{width:72px}.w-\[76px\]{width:76px}.w-\[7px\]{width:7px}.w-full{width:100%}.min-w-0{min-width:0}.min-w-\[112px\]{min-width:112px}.min-w-\[120px\]{min-width:120px}.min-w-\[128px\]{min-width:128px}.min-w-\[142px\]{min-width:142px}.min-w-\[144px\]{min-width:144px}.min-w-\[146px\]{min-width:146px}.min-w-\[148px\]{min-width:148px}.min-w-\[160px\]{min-width:160px}.min-w-\[164px\]{min-width:164px}.min-w-\[168px\]{min-width:168px}.min-w-\[180px\]{min-width:180px}.min-w-\[198px\]{min-width:198px}.min-w-\[200px\]{min-width:200px}.min-w-\[210px\]{min-width:210px}.min-w-\[220px\]{min-width:220px}.min-w-\[224px\]{min-width:224px}.min-w-\[230px\]{min-width:230px}.min-w-\[260px\]{min-width:260px}.min-w-\[280px\]{min-width:280px}.min-w-\[300px\]{min-width:300px}.max-w-\[124px\]{max-width:124px}.max-w-\[1400px\]{max-width:1400px}.max-w-\[320px\]{max-width:320px}.max-w-\[340px\]{max-width:340px}.max-w-\[416px\]{max-width:416px}.max-w-\[420px\]{max-width:420px}.max-w-\[46ch\]{max-width:46ch}.max-w-\[74ch\]{max-width:74ch}.max-w-full{max-width:100%}.flex-1{flex:1 1 0%}.flex-none{flex:none}.grow{flex-grow:1}.-translate-x-1\/2{--tw-translate-x:-50%}.-translate-x-1\/2,.-translate-y-1\/2{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.-translate-y-1\/2{--tw-translate-y:-50%}.transform{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.place-items-center{place-items:center}.items-start{align-items:flex-start}.items-end{align-items:flex-end}.items-center{align-items:center}.items-baseline{align-items:baseline}.items-stretch{align-items:stretch}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-0\.5{gap:.125rem}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-2\.5{gap:.625rem}.gap-3{gap:.75rem}.gap-3\.5{gap:.875rem}.gap-4{gap:1rem}.gap-5{gap:1.25rem}.gap-9{gap:2.25rem}.gap-px{gap:1px}.gap-x-4{-moz-column-gap:1rem;column-gap:1rem}.gap-x-5{-moz-column-gap:1.25rem;column-gap:1.25rem}.gap-y-3{row-gap:.75rem}.gap-y-4{row-gap:1rem}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis}.truncate,.whitespace-nowrap{white-space:nowrap}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-hair{border-color:var(--c-hair)}.bg-accent{background-color:var(--c-accent)}.bg-canvas{background-color:var(--c-bg)}.bg-card{background-color:var(--c-card)}.bg-hair{background-color:var(--c-hair)}.bg-hair-soft{background-color:var(--c-hair-soft)}.bg-ink{background-color:var(--c-ink)}.bg-surface{background-color:var(--c-surface)}.p-10{padding:2.5rem}.p-3{padding:.75rem}.p-3\.5{padding:.875rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-6{padding:1.5rem}.p-7{padding:1.75rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-3\.5{padding-left:.875rem;padding-right:.875rem}.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.pb-2{padding-bottom:.5rem}.pb-3{padding-bottom:.75rem}.pb-5{padding-bottom:1.25rem}.pt-1{padding-top:.25rem}.pt-3{padding-top:.75rem}.pt-3\.5{padding-top:.875rem}.pt-4{padding-top:1rem}.pt-5{padding-top:1.25rem}.text-left{text-align:left}.text-center{text-align:center}.text-right{text-align:right}.font-display{font-family:Archivo,IBM Plex Sans Thai,system-ui,sans-serif}.text-\[10\.5px\]{font-size:10.5px}.text-\[11\.5px\]{font-size:11.5px}.text-\[11px\]{font-size:11px}.text-\[12\.5px\]{font-size:12.5px}.text-\[13\.5px\]{font-size:13.5px}.text-\[13px\]{font-size:13px}.text-\[15px\]{font-size:15px}.text-\[19px\]{font-size:19px}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-medium{font-weight:500}.font-semibold{font-weight:600}.leading-\[1\.65\]{line-height:1.65}.leading-\[1\.7\]{line-height:1.7}.leading-none{line-height:1}.leading-relaxed{line-height:1.625}.leading-snug{line-height:1.375}.leading-tight{line-height:1.25}.tracking-tight{letter-spacing:-.025em}.text-accent-text{color:var(--c-accent-text)}.text-canvas{color:var(--c-bg)}.text-faint{color:var(--c-faint)}.text-hair{color:var(--c-hair)}.text-ink{color:var(--c-ink)}.text-muted{color:var(--c-muted)}.opacity-60{opacity:.6}.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.transition-colors{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.ease-out{transition-timing-function:cubic-bezier(0,0,.2,1)}.first\:mt-0:first-child{margin-top:0}.first\:border-t-0:first-child{border-top-width:0}.first\:pt-0:first-child{padding-top:0}.hover\:bg-surface:hover{background-color:var(--c-surface)}.group:hover .group-hover\:text-accent-text{color:var(--c-accent-text)}@media (min-width:640px){.sm\:col-span-2{grid-column:span 2/span 2}.sm\:inline{display:inline}.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.sm\:grid-cols-\[minmax\(0\2c 1fr\)_200px\]{grid-template-columns:minmax(0,1fr) 200px}.sm\:p-12{padding:3rem}.sm\:p-5{padding:1.25rem}.sm\:p-7{padding:1.75rem}.sm\:p-8{padding:2rem}.sm\:px-4{padding-left:1rem;padding-right:1rem}.sm\:py-5{padding-top:1.25rem;padding-bottom:1.25rem}.sm\:text-\[22px\]{font-size:22px}}@media (min-width:768px){.md\:block{display:block}.md\:flex{display:flex}.md\:hidden{display:none}.md\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (min-width:1024px){.lg\:sticky{position:sticky}.lg\:top-\[92px\]{top:92px}.lg\:block{display:block}.lg\:flex{display:flex}.lg\:hidden{display:none}.lg\:h-\[76px\]{height:76px}.lg\:w-auto{width:auto}.lg\:flex-none{flex:none}.lg\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.lg\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.lg\:grid-cols-\[1\.08fr_1fr\]{grid-template-columns:1.08fr 1fr}.lg\:grid-cols-\[216px_minmax\(0\2c 1fr\)\]{grid-template-columns:216px minmax(0,1fr)}.lg\:grid-cols-\[minmax\(0\2c 1\.55fr\)_minmax\(0\2c 1fr\)\]{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}.lg\:p-14{padding:3.5rem}.lg\:px-8{padding-left:2rem;padding-right:2rem}.lg\:py-8{padding-top:2rem;padding-bottom:2rem}}@media (min-width:1280px){.xl\:w-\[230px\]{width:230px}.xl\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.xl\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.xl\:p-16{padding:4rem}}
 </style>
 </head>
 <body>
@@ -841,13 +950,33 @@ const ESCALATION = [
 
 // KPI ตามเอกสารจริง ข้อ 7.1
 const KPIS = [
-  { label:'SLA Compliance', value:'92%',    target:'เป้าหมาย ≥ 95%',      pass:false, note:'Heavy Machine ฉุดค่าเฉลี่ยลง 13 จุด', freq:'รายเดือน · ระบบ Ticketing' },
-  { label:'First Response', value:'24 นาที', target:'เป้าหมาย ≤ 30 นาที', pass:true,  note:'ดีขึ้น 6 นาทีจากเดือนก่อน',        freq:'รายเดือน · ระบบ Ticketing' },
-  { label:'FCR',            value:'61%',    target:'เป้าหมาย ≥ 70%',      pass:false, note:'แก้จบตั้งแต่ครั้งแรก — ขึ้น 6 จุด', freq:'รายเดือน · ระบบ Ticketing' },
-  { label:'CSAT',           value:'4.4',    target:'เป้าหมาย ≥ 4.2 / 5.0', pass:true,  note:'จาก 1,806 แบบประเมิน',           freq:'รายไตรมาส · แบบสำรวจหลังปิดงาน' },
-  { label:'Aged Backlog',   value:'6.1%',   target:'เป้าหมาย ≤ 5%',        pass:false, note:'Ticket ค้างเกิน SLA 47 รายการจาก 770 รายการ', freq:'รายสัปดาห์ · ระบบ Ticketing' },
-  { label:'Uptime Critical',value:'99.94%', target:'เป้าหมาย ≥ 99.9%',     pass:true,  note:'Downtime ไม่ได้วางแผน 26 นาที',   freq:'รายเดือน · ระบบ Monitoring' }
+  { label:'SLA Compliance', value:'92', unit:'%', target:'เป้าหมาย ≥ 95%', pass:false, hero:true,
+    now:92, goal:95, min:80, max:100, better:'high', delta:'-3 จุดจากเดือนก่อน', down:true,
+    note:'Heavy Machine ฉุดค่าเฉลี่ยลง 13 จุด', freq:'รายเดือน · ระบบ Ticketing',
+    trend:[95,96,95,94,96,95,94,93,95,94,95,92] },
+  { label:'First Response', value:'24', unit:'นาที', target:'เป้าหมาย ≤ 30 นาที', pass:true,
+    now:24, goal:30, min:0, max:45, better:'low', delta:'-6 นาทีจากเดือนก่อน', down:false,
+    note:'เร็วขึ้นหลังเพิ่มเวรรับสายช่วงเช้า', freq:'รายเดือน · ระบบ Ticketing',
+    trend:[36,35,33,34,32,31,33,30,31,29,30,24] },
+  { label:'FCR', value:'61', unit:'%', target:'เป้าหมาย ≥ 70%', pass:false,
+    now:61, goal:70, min:40, max:100, better:'high', delta:'+6 จุดจากเดือนก่อน', down:false,
+    note:'แก้จบตั้งแต่ครั้งแรก — ยังห่างเป้า 9 จุด', freq:'รายเดือน · ระบบ Ticketing',
+    trend:[52,51,53,54,53,55,54,56,55,57,55,61] },
+  { label:'CSAT', value:'4.4', unit:'/ 5', target:'เป้าหมาย ≥ 4.2', pass:true,
+    now:4.4, goal:4.2, min:3, max:5, better:'high', delta:'+0.1 จากไตรมาสก่อน', down:false,
+    note:'จาก 1,806 แบบประเมินหลังปิดงาน', freq:'รายไตรมาส · แบบสำรวจ',
+    trend:[4.1,4.2,4.2,4.1,4.3,4.2,4.3,4.3,4.2,4.4,4.3,4.4] },
+  { label:'Aged Backlog', value:'6.1', unit:'%', target:'เป้าหมาย ≤ 5%', pass:false,
+    now:6.1, goal:5, min:0, max:12, better:'low', delta:'+1.2 จุดจากสัปดาห์ก่อน', down:true,
+    note:'Ticket ค้างเกิน SLA 47 จาก 770 รายการ', freq:'รายสัปดาห์ · ระบบ Ticketing',
+    trend:[4.2,4.6,4.4,5.1,4.8,5.3,5.0,5.6,5.2,5.8,4.9,6.1] },
+  { label:'Uptime Critical', value:'99.94', unit:'%', target:'เป้าหมาย ≥ 99.9%', pass:true,
+    now:99.94, goal:99.9, min:99.5, max:100, better:'high', delta:'ทรงตัวจากเดือนก่อน', down:false,
+    note:'Downtime ที่ไม่ได้วางแผน 26 นาที', freq:'รายเดือน · ระบบ Monitoring',
+    trend:[99.91,99.95,99.88,99.96,99.93,99.97,99.90,99.95,99.92,99.96,99.94,99.94] }
 ];
+// ยอดรวมที่แถบหัวใช้ — คิดจาก CHART ทีเดียว ไม่ต้องเขียนเลขซ้ำสองที่
+const DASH_ASOF = '09:41 น.';
 
 const KB = [
   { id:'KB-01', cat:'Access', title:'รีเซ็ตรหัสผ่านบัญชีองค์กรด้วยตัวเอง', views:'1,240', deflect:'312 รายการ', updated:'12 ส.ค. 2569',
@@ -998,16 +1127,12 @@ const PERMS = [
   { g:PG_WORK, k:'ticket.transfer',      d:'ส่งต่อ Ticket ข้ามบริษัทในเครือ' },
   { g:PG_VIEW, k:'settings.view',        d:'เปิดดูหน้าตั้งค่าระบบได้ทุกหมวด' },
   { g:PG_VIEW, k:'user.view',            d:'ดูทะเบียนผู้ใช้และสิทธิ์' },
-  { g:PG_VIEW, k:'asset.view',           d:'ดูทะเบียนทรัพย์สิน (ITAM)' },
   { g:PG_VIEW, k:'audit.read',           d:'อ่าน Audit Log' },
   { g:PG_VIEW, k:'report.export',        d:'ส่งออกรายงาน Excel / PDF' },
   { g:PG_EDIT, k:'user.edit',            d:'เพิ่ม/แก้ไขผู้ใช้และมอบบทบาท' },
   { g:PG_EDIT, k:'user.delete',          d:'ปิดใช้งานและลบผู้ใช้' },
   { g:PG_EDIT, k:'company.edit',         d:'แก้ไขและปิดใช้งานบริษัทในเครือ' },
   { g:PG_EDIT, k:'category.edit',        d:'เพิ่ม / แก้ / ลบหมวดหมู่ปัญหา' },
-  { g:PG_EDIT, k:'routing.edit',         d:'แก้ไขและลบกฎการมอบหมาย' },
-  { g:PG_EDIT, k:'sla.manage',           d:'แก้ค่าเป้าหมาย SLA และเวลาทำการ' },
-  { g:PG_EDIT, k:'kb.publish',           d:'เผยแพร่และลบบทความคลังความรู้' },
   { g:PG_EDIT, k:'settings.manage',      d:'บันทึกการเปลี่ยนแปลงในหน้าตั้งค่าระบบ' }
 ];
 // เมทริกซ์เริ่มต้น: helpdesk ได้ *.view และงาน Ticket ครบ แต่ *.edit / *.delete / settings.manage เป็นของ superadmin
@@ -1015,7 +1140,7 @@ const RBAC = {
   employee:   { 'ticket.view.own':true, 'ticket.create':true, 'ticket.reply':true },
   helpdesk:   { 'ticket.view.own':true, 'ticket.view.all':true, 'ticket.create':true, 'ticket.reply':true,
                 'ticket.assign':true, 'ticket.change_status':true, 'ticket.transfer':true,
-                'settings.view':true, 'user.view':true, 'asset.view':true, 'audit.read':true, 'report.export':true },
+                'settings.view':true, 'user.view':true, 'audit.read':true, 'report.export':true },
   superadmin: PERMS.reduce(function (a, p) { a[p.k] = true; return a; }, {})
 };
 
@@ -1198,6 +1323,7 @@ const P = {
   save:'M5 4h11l3 3v13H5zM8.5 4v5h7V4M8.5 20v-6h7v6',
   up:'M12 19V6M6 12l6-6 6 6',
   down:'M12 5v13M6 12l6 6 6-6',
+  download:'M12 3.5v11M7.6 10.2l4.4 4.4 4.4-4.4M4.5 19.5h15',
   key:'M15.5 3.6a5.2 5.2 0 1 0-4.2 8.3l-7 7V21h3.1v-2.1h2.1v-2.1h2.1l1.4-1.4a5.2 5.2 0 0 0 2.5-11.8zM16.7 7.9v.1'
 };
 // สร้าง SVG ไอคอนจาก path (stroke 1.7 ทุกตัว)
@@ -1347,6 +1473,7 @@ const S = {
   escOpen:false, escTo:'TECH', escWhy:'',
   csatOpen:false, csatPick:0, csatFor:null,
   menuOpen:false, loading:false, fresh:true,
+  range:'30',
   assetIdx:0, kbId:null, rr:0, attached:0,
   extra:[], deflected:false, dark:false,
   login:{ user:'', pass:'', show:false, remember:true, eu:'', ep:'', tries:0, lockUntil:0, disc:false },
@@ -1388,8 +1515,6 @@ const SECS = [
   { k:'user', icon:'users',    label:'ผู้ใช้และสิทธิ์',           short:'ผู้ใช้',      lvl:'co',    kicker:'Identity' },
   { k:'role', icon:'shield',   label:'บทบาทและสิทธิ์ (RBAC)',     short:'RBAC',        lvl:'group', kicker:'Access Control' },
   { k:'cat',  icon:'folder',   label:'หมวดหมู่และแบบฟอร์ม',       short:'หมวดหมู่',    lvl:'co',    kicker:'Service Catalog' },
-  { k:'sla',  icon:'clock',    label:'SLA และเวลาทำการ',          short:'SLA',         lvl:'group', kicker:'AIDC-IT-SLA-001 v1.1' },
-  { k:'rt',   icon:'route',    label:'กฎการมอบหมาย',              short:'Routing',     lvl:'co',    kicker:'Conditional Routing' },
   { k:'team', icon:'user',     label:'ทีมและเจ้าหน้าที่',          short:'ทีม',         lvl:'group', kicker:'Support Teams' },
   { k:'noti', icon:'bell',     label:'การแจ้งเตือน',              short:'แจ้งเตือน',   lvl:'group', kicker:'Notifications' },
   { k:'chan', icon:'headset',  label:'ช่องทางรับแจ้ง',            short:'ช่องทาง',     lvl:'group', kicker:'Intake Channels' },
@@ -1403,8 +1528,7 @@ function secPerm() { return canEditData() ? 'edit' : 'ro'; }
 const curSec = () => (SECS.some(s => s.k === S.set.tab) ? S.set.tab : 'co');
 const rowEditable = perm => perm === 'edit';
 
-/* เมนูตามบทบาท — ผู้ใช้ทั่วไปเห็นสามรายการเท่านั้น
-   คลังความรู้เข้าถึงได้จากปุ่มบนแถบหัว จึงไม่ต้องเป็นเมนูหลักของผู้ใช้ทั่วไป */
+/* เมนูตามบทบาท — ผู้ใช้ทั่วไปเห็นสามรายการเท่านั้น */
 function navModel() {
   if (isEmp()) {
     return [
@@ -1419,9 +1543,6 @@ function navModel() {
     { key:'queue',    icon:'layers',  label:'Ticket ทั้งหมดในขอบเขต',    short:'ทั้งหมด',     badge:vis.filter(t => t.status !== 'ปิดงานแล้ว').length },
     { key:'dash',     icon:'gauge',   label:'Executive Dashboard',       short:'แดชบอร์ด',    badge:'' },
     { key:'new',      icon:'plus',    label:'แจ้งเรื่องใหม่',            short:'แจ้งเรื่อง',  badge:'' },
-    { key:'kb',       icon:'book',    label:'คลังความรู้',               short:'คลังความรู้', badge:KB.length },
-    { key:'assets',   icon:'box',     label:'ทรัพย์สิน / ITAM',          short:'ทรัพย์สิน',   badge:ASSETS.length },
-    { key:'rules',    icon:'sliders', label:'กฎการมอบหมาย & SLA',        short:'กฎ / SLA',    badge:RULES.length },
     { key:'settings', icon:'gear',    label:'ตั้งค่าระบบ',               short:'ตั้งค่า',     badge:'' }
   ];
 }
@@ -1434,15 +1555,12 @@ const TITLES = {
   track:   () => ['ติดตามเรื่องที่แจ้ง', 'Self-Service', 'เรื่องที่คุณแจ้งไว้และยังไม่ปิด — สถานะปัจจุบัน เวลาคงเหลือตามเป้าหมาย SLA และความคืบหน้าล่าสุด'],
   history: () => ['ประวัติการแจ้ง', 'Self-Service', 'เรื่องที่ปิดงานแล้ว พร้อมวันที่ปิด คะแนนความพึงพอใจที่คุณเคยให้ และปุ่มเปิดเรื่องซ้ำ'],
   queue:   () => ['Ticket ทั้งหมดในขอบเขตที่มองเห็น', 'Ticket Queue', 'มุมมองรวมทั้งกลุ่ม — 7 บริษัทในเครือ'],
-  new:     () => ['แจ้งปัญหา / ขอรับบริการ', 'Smart Intake', 'ฟอร์มปรับตามประเภทธุรกิจของบริษัทที่เลือก พร้อมผู้ช่วย AI ค้นคู่มือก่อนส่ง'],
+  new:     () => ['แจ้งปัญหา / ขอรับบริการ', 'Smart Intake', 'ฟอร์มปรับตามประเภทธุรกิจของบริษัทที่เลือก'],
   dash:    () => ['Executive Dashboard', 'Analytics', 'ตัวชี้วัดตาม AIDC-IT-SLA-001 ข้อ 7.1 เทียบเป้าหมายรายบริษัท'],
-  assets:  () => ['ทะเบียนทรัพย์สินและประวัติซ่อมบำรุง', 'ITAM', 'ผูก Ticket กับรหัสอุปกรณ์และเครื่องจักร พร้อมแผนบำรุงรักษาเชิงป้องกัน'],
-  kb:      () => ['คลังความรู้', 'Knowledge Base', 'คู่มือแก้ปัญหาเบื้องต้นที่ผู้ช่วย AI ใช้อ้างอิงเพื่อลดปริมาณ Ticket'],
-  rules:   () => ['กฎการมอบหมายงานและ SLA', 'Administration', 'Conditional Routing · Priority Matrix · Escalation ตามเอกสาร AIDC-IT-SLA-001'],
   settings: () => ['ตั้งค่าระบบ', 'Admin Console',
     canEditData()
-      ? 'ตั้งค่าทั้ง 12 หมวดของกลุ่มบริษัท — การแก้ไขทุกครั้งถูกบันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา'
-      : 'เปิดดูได้ทั้ง 12 หมวดเพื่อใช้อ้างอิงระหว่างทำงาน — ' + NO_EDIT_WHY]
+      ? 'ตั้งค่าทั้ง 10 หมวดของกลุ่มบริษัท — การแก้ไขทุกครั้งถูกบันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา'
+      : 'เปิดดูได้ทั้ง 10 หมวดเพื่อใช้อ้างอิงระหว่างทำงาน — ' + NO_EDIT_WHY]
 };
 
 /* ─────────────────────────── 5. Toast ─────────────────────────── */
@@ -1710,7 +1828,6 @@ function shell() {
           '<span class="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none">' + ic('search', 'w-4 h-4') + '</span>' +
           '<input data-act="q" data-fkey="q" value="' + esc(S.q) + '" class="input input-search w-[190px] xl:w-[230px]" placeholder="ค้นหา Ticket / อุปกรณ์" aria-label="ค้นหา">' +
         '</div>' +
-        '<button data-act="nav" data-view="kb" class="btn btn-secondary btn-sm hidden xl:inline-flex">' + ic('book', 'w-4 h-4') + 'คลังความรู้</button>' +
         '<button data-act="nav" data-view="new" class="btn btn-primary btn-sm">' + ic('plus', 'w-4 h-4') + 'แจ้งเรื่องใหม่</button>' +
       '</div>' +
       '<button data-act="nav" data-view="new" class="btn btn-primary btn-icon md:hidden flex-none" aria-label="แจ้งเรื่องใหม่">' + ic('plus', 'w-5 h-5') + '</button>' +
@@ -1723,9 +1840,9 @@ function shell() {
     '</div>' +
   '</header>';
 
-  // ── bottom nav มือถือ: เฉพาะงานที่ทำจากหน้างานจริง — แดชบอร์ด/ITAM/กฎ เป็นงานโต๊ะ ไปอยู่ในเมนู ──
+  // ── bottom nav มือถือ: เฉพาะงานที่ทำจากหน้างานจริง — แดชบอร์ด/ตั้งค่า เป็นงานโต๊ะ ไปอยู่ในเมนู ──
   // ผู้ใช้ทั่วไปมีเมนูแค่สามรายการ จึงใส่ครบใน bottom nav ได้ · บทบาทอื่นเก็บงานโต๊ะไว้ในเมนูรวม
-  const BOT_KEYS = isEmp() ? ['new', 'track', 'history'] : ['my', 'queue', 'new', 'kb'];
+  const BOT_KEYS = isEmp() ? ['new', 'track', 'history'] : ['my', 'queue', 'new', 'dash'];
   const bn = nav.filter(n => BOT_KEYS.indexOf(n.key) >= 0);
   const botnav =
   '<nav class="botnav lg:hidden" aria-label="เมนูหลัก (มือถือ)">' +
@@ -1767,10 +1884,7 @@ function viewBody(view) {
   if (view === 'history') return historyView();
   if (view === 'new') return newTicketView();
   if (view === 'dash') return dashView();
-  if (view === 'assets') return assetsView();
-  if (view === 'rules') return rulesView();
   if (view === 'settings') return settingsView();
-  if (view === 'kb') return kbView();
   return listView();
 }
 
@@ -2052,12 +2166,6 @@ function historyView() {
 
 /* ─────────────────────────── 9. หน้า: แจ้งเรื่องใหม่ ─────────────────────────── */
 
-// ผู้ช่วย AI ค้นคู่มือจากข้อความที่พิมพ์แบบ real-time
-function aiHits() {
-  const txt = (S.form.title + ' ' + S.form.desc).toLowerCase();
-  if (txt.trim().length < 8) return [];
-  return KB.filter(a => a.keys.some(k => txt.includes(k.toLowerCase()))).slice(0, 2);
-}
 /* กฎ routing ที่ตรงกับฟอร์มปัจจุบัน — กฎที่ถูกปิดในหน้าตั้งค่าจะไม่ถูกเลือก
    ทำให้ผลของ "ปิด/เปิดกฎ" เห็นได้ทันทีในแผง Auto Routing ของฟอร์มแจ้งเรื่อง */
 function ruleForForm() {
@@ -2083,8 +2191,6 @@ function newTicketView() {
   // ฟิลด์ ITAM / GPS เปิดตามที่ตั้งไว้ในหน้าตั้งค่า › หมวดหมู่และแบบฟอร์ม
   const cc = catCfg(f.company, f.cat);
   const needAsset = !!(cc.itam || cc.gps);
-  const hits = aiHits();
-  const showAi = hits.length > 0 && !S.deflected;
   const rule = ruleForForm();
   const p = PRIO(f.prio);
   const r = S.fresh ? ' rise' : '';
@@ -2119,7 +2225,7 @@ function newTicketView() {
 
     '<div class="field"><label for="fdesc">รายละเอียด</label>' +
       '<textarea id="fdesc" data-act="f" data-k="desc" data-fkey="fdesc" class="input" placeholder="อธิบายอาการ ช่วงเวลาที่เกิด และสิ่งที่ลองแก้ไปแล้ว">' + esc(f.desc) + '</textarea>' +
-      '<p class="text-[11.5px] text-faint">ยิ่งละเอียด ผู้ช่วย AI ยิ่งค้นคู่มือได้ตรงขึ้น และเจ้าหน้าที่ไม่ต้องถามซ้ำ</p></div>' +
+      '<p class="text-[11.5px] text-faint">ยิ่งละเอียด เจ้าหน้าที่ยิ่งวินิจฉัยได้เร็วขึ้น และไม่ต้องถามข้อมูลซ้ำ</p></div>' +
 
     // ฟิลด์ ITAM + GPS โผล่เฉพาะหมวดเครื่องจักร / GPS / อะไหล่
     (needAsset ?
@@ -2164,48 +2270,9 @@ function newTicketView() {
     (formReady() ? '' : '<p class="text-[11.5px] text-faint -mt-2">กรอกหัวเรื่องอย่างน้อย 4 ตัวอักษร และรายละเอียดอย่างน้อย 9 ตัวอักษร จึงจะส่ง Ticket ได้</p>') +
   '</form>';
 
-  // ── แผงผู้ช่วย AI + ผลการประเมิน routing ──
+  // ── แผงผลการประเมิน routing ──
   const ai =
   '<div class="flex flex-col gap-4 lg:sticky lg:top-[92px]">' +
-    '<section class="panel p-5">' +
-      '<div class="flex items-start gap-2.5">' +
-        '<span class="flex-none text-accent-text mt-0.5">' + ic('spark', 'w-[18px] h-[18px]') + '</span>' +
-        '<div><div class="eyebrow eyebrow-accent">AI Knowledge Assistant</div>' +
-          '<p class="text-[12.5px] text-muted leading-relaxed mt-1.5">วิเคราะห์ข้อความก่อนส่ง Ticket เพื่อเสนอวิธีแก้เบื้องต้น (Ticket Deflection)</p></div>' +
-      '</div>' +
-      '<div class="mt-4 pt-4 rule-in">' +
-        (showAi ?
-          '<div class="rise">' +
-            '<div class="flex items-center justify-between gap-2 flex-wrap">' +
-              '<span class="tag tag-soft">พบ ' + hits.length + ' บทความที่ตรงกัน</span>' +
-              '<span class="eyebrow">ความเชื่อมั่น ' + (hits.length > 1 ? '92%' : '78%') + '</span>' +
-            '</div>' +
-            '<ul class="mt-3 flex flex-col gap-px bg-hair border border-hair">' +
-              hits.map(a =>
-                '<li class="bg-canvas p-3.5">' +
-                  '<div class="eyebrow">' + a.id + ' · ' + a.cat + '</div>' +
-                  '<div class="font-semibold text-[13.5px] leading-snug mt-1.5">' + esc(a.title) + '</div>' +
-                  '<p class="text-[12.5px] text-muted leading-relaxed mt-1.5">' + esc(a.steps[0]) + '</p>' +
-                  '<button data-act="kbopen" data-id="' + a.id + '" class="btn btn-ghost btn-ghost-sm mt-1.5">อ่านคู่มือทั้งหมด</button>' +
-                '</li>').join('') +
-            '</ul>' +
-            '<div class="mt-4 pt-4 rule-in">' +
-              '<p class="text-[13.5px] font-semibold">วิธีนี้ช่วยแก้ปัญหาได้หรือไม่</p>' +
-              '<div class="mt-2.5 flex flex-col gap-2">' +
-                '<button data-act="deflect" class="btn btn-ink btn-sm">' + ic('check', 'w-4 h-4') + 'แก้ได้แล้ว ไม่ต้องส่ง Ticket</button>' +
-                '<button data-act="keepgoing" class="btn btn-secondary btn-sm">ยังไม่หาย ส่งต่อเจ้าหน้าที่</button>' +
-              '</div>' +
-            '</div>' +
-          '</div>'
-        :
-          '<div class="flex items-start gap-2.5 text-[12.5px] text-faint leading-relaxed">' +
-            ic('search', 'w-4 h-4 flex-none mt-0.5') +
-            '<span>' + (S.deflected ? 'ปิดคำแนะนำแล้ว — กรอกฟอร์มต่อได้เลย ระบบจะไม่เสนอคู่มือซ้ำสำหรับเรื่องนี้'
-              : 'พิมพ์หัวเรื่องหรือรายละเอียด — ผู้ช่วยจะค้นคู่มือที่เกี่ยวข้องให้อัตโนมัติขณะพิมพ์') + '</span>' +
-          '</div>') +
-      '</div>' +
-    '</section>' +
-
     '<section class="panel p-5' + (formReady() ? '' : ' opacity-60') + '">' +
       '<div class="flex items-center gap-2">' + ic('route', 'w-[18px] h-[18px] text-faint') +
         '<div class="eyebrow">Auto Routing — ผลการประเมิน</div></div>' +
@@ -2225,62 +2292,290 @@ function newTicketView() {
 }
 
 /* ─────────────────────────── 10. หน้า: แดชบอร์ด ─────────────────────────── */
+/* sparkline: คืน <svg> เส้นเดียว + จุดปลาย — ไม่มีแกน ไม่มีตัวเลขบนทุกจุด
+   viewBox กว้าง 100 สูง 30 แล้วให้ CSS ยืดเต็มความกว้างจริงของช่อง */
+const MONTHS = ['ก.ย.','ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.'];
+
+/* กราฟเส้นแบบมีแกน — ใช้ทั้งในแถบหัวและในกระเบื้องตัวชี้วัด
+   o = { h, lo, hi, ticks:[..], ref:number, unit, fmt, labels:[..], miss:bool, draw:bool } */
+function lineChart(vals, o) {
+  o = o || {};
+  const lo = o.lo != null ? o.lo : Math.min.apply(null, vals);
+  const hi = o.hi != null ? o.hi : Math.max.apply(null, vals);
+  const span = (hi - lo) || 1;
+  const h = o.h || 150;
+  const fmt = o.fmt || (v => v);
+  const px = i => (i / (vals.length - 1)) * 100;
+  const py = v => (1 - (v - lo) / span) * 100;              // 0 = บนสุด, 100 = ล่างสุด
+  const pts = vals.map((v, i) => px(i).toFixed(2) + ',' + py(v).toFixed(2));
+
+  const grid = (o.ticks || []).filter(t => t !== o.ref).map(t =>
+    '<div class="hl" style="top:' + py(t).toFixed(2) + '%"></div>').join('') +
+    (o.ref != null ? '<div class="hl ref" style="top:' + py(o.ref).toFixed(2) + '%"></div>' : '');
+  const glab = (o.tickLabels === false ? '' : (o.ticks || []).map(t =>
+    '<div class="hlab" style="top:' + py(t).toFixed(2) + '%">' + esc(String(fmt(t))) + (o.unit || '') + '</div>').join(''));
+
+  // เส้นกำกับเป้าหมาย วางชิดขวาเพื่อไม่ทับตัวเลขแกน
+  const refLab = (o.ref != null && o.refLabel !== false)
+    ? '<div class="hlab" style="top:' + py(o.ref).toFixed(2) + '%;left:auto;right:0;padding:0 0 0 .35rem">เป้าหมาย ' +
+      esc(String(fmt(o.ref))) + (o.unit || '') + '</div>' : '';
+
+  const hits = vals.map((v, i) =>
+    '<div class="hit" style="left:' + px(i).toFixed(2) + '%;width:' + (100 / vals.length).toFixed(2) + '%" ' +
+      'title="' + esc((o.labels ? o.labels[i] + ' · ' : '') + fmt(v) + (o.unit || '')) + '"></div>').join('');
+
+  return '<div class="plot' + (o.miss ? ' miss' : '') + '" style="height:' + h + 'px;padding-left:' + (o.pad || 0) + 'px">' +
+    '<div class="absolute inset-0" style="left:' + (o.pad || 0) + 'px">' +
+      grid +
+      '<svg class="lc' + (o.draw ? ' lc-draw' : '') + '" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">' +
+        '<path class="ar" d="M0,100 L' + pts.join(' L') + ' L100,100 Z"></path>' +
+        '<path class="ln" d="M' + pts.join(' L') + '"></path>' +
+      '</svg>' +
+      '<div class="pt" style="left:100%;top:' + py(vals[vals.length - 1]).toFixed(2) + '%"></div>' +
+      hits +
+    '</div>' +
+    glab + refLab +
+  '</div>';
+}
+
+/* sparkline ในกระเบื้องตัวชี้วัด — กราฟเส้นย่อส่วนที่ยังมีเส้นเป้าหมายกำกับ
+   ไม่ใช่เส้นหยุกหยิกลอย ๆ ที่อ่านไม่ได้ว่าดีหรือแย่ */
+function spark(vals, miss, ref, fmt, unit) {
+  const lo = Math.min.apply(null, vals.concat(ref != null ? [ref] : []));
+  const hi = Math.max.apply(null, vals.concat(ref != null ? [ref] : []));
+  const pad = (hi - lo) * 0.18 || 1;
+  return lineChart(vals, {
+    h:44, lo:lo - pad, hi:hi + pad, ticks:[], ref:ref, refLabel:false, tickLabels:false,
+    unit:unit || '', fmt:fmt || (v => v), labels:MONTHS, miss:miss, draw:false
+  });
+}
+
+/* มาตรวัดเทียบเป้าหมาย: รางเดียว + ขีดเป้าหมาย — อ่าน "ถึงหรือยัง" ได้ในสายตาเดียว */
+function gauge(k, grow) {
+  const pos = v => Math.max(0, Math.min(100, ((v - k.min) / (k.max - k.min)) * 100));
+  return '<div class="gauge' + (k.pass ? '' : ' miss') + (grow ? ' gauge-grow' : '') + '" role="img" ' +
+    'aria-label="' + esc(k.label + ' ' + k.value + (k.unit || '') + ' — ' + k.target) + '">' +
+    '<i style="width:' + pos(k.now).toFixed(1) + '%"></i>' +
+    '<b style="left:' + pos(k.goal).toFixed(1) + '%"></b></div>';
+}
+
+const deltaLine = (k, hero) =>
+  '<span class="inline-flex items-center gap-1.5 ' +
+    (hero ? '' : (k.down ? 'text-accent-text' : 'text-muted')) + '">' +
+    ic(k.down ? 'down' : 'up', 'w-3.5 h-3.5 flex-none') +
+    '<span class="num">' + esc(k.delta) + '</span></span>';
+
 function dashView() {
-  const maxTotal = Math.max.apply(null, CHART.map(c => c.total));
   const r = S.fresh ? ' rise' : '';
-  const grow = S.fresh ? ' bargrow' : '';
+  const grow = S.fresh;
+  const H = KPIS[0];                       // SLA Compliance — ตัวเลขที่หน้านี้นำด้วย
+  const rest = KPIS.slice(1);
+  const totalT = CHART.reduce((a, c) => a + c.total, 0);
+  const openT  = CHART.reduce((a, c) => a + c.open, 0);
+  const maxTotal = Math.max.apply(null, CHART.map(c => c.total));
+  const RANGES = [['7', '7 วัน'], ['30', '30 วัน'], ['90', '90 วัน']];
 
-  const kpi =
-  '<section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-px bg-hair border border-hair">' +
-    KPIS.map(k =>
-      '<div class="bg-card p-5">' +
-        '<div class="flex items-start justify-between gap-2">' +
-          '<span class="eyebrow">' + esc(k.label) + '</span>' +
-          '<span class="tag ' + (k.pass ? 'tag-quiet' : 'tag-soft') + '">' +
-            ic(k.pass ? 'check' : 'alert', 'w-3.5 h-3.5') + (k.pass ? 'ถึงเป้า' : 'ต่ำกว่าเป้า') + '</span>' +
+  /* ── แถบควบคุม: ช่วงเวลาอยู่แถวเดียวเหนือทุกกราฟ ── */
+  const bar =
+  '<div class="flex flex-wrap items-center justify-between gap-3">' +
+    '<div class="flex items-center gap-2.5 min-w-0">' +
+      '<span class="live" aria-hidden="true"></span>' +
+      '<p class="text-[12.5px] text-faint leading-relaxed num">ข้อมูล ณ ' + DASH_ASOF +
+        ' · อัปเดตอัตโนมัติทุก 5 นาที · ที่มา ระบบ Ticketing และ Monitoring</p>' +
+    '</div>' +
+    '<div class="flex items-center gap-2 flex-none">' +
+      '<span class="eyebrow hidden sm:inline">ช่วงเวลา</span>' +
+      '<div class="seg" role="group" aria-label="เลือกช่วงเวลา">' +
+        RANGES.map(x =>
+          '<button data-act="range" data-r="' + x[0] + '" aria-pressed="' + (S.range === x[0] ? 'true' : 'false') + '">' +
+            esc(x[1]) + '</button>').join('') +
+      '</div>' +
+      '<button data-act="export" class="btn btn-secondary btn-sm">' + ic('download', 'w-4 h-4') + 'ส่งออก</button>' +
+    '</div>' +
+  '</div>';
+
+  /* ── แถบหัว: ตัวเลขนำเรื่องหนึ่งตัว ไม่ใช่ KPI หกใบเท่ากันหมด ── */
+  const hero =
+  '<section class="hero">' +
+    '<div class="hero-grid">' +
+      '<div class="p-6 sm:p-8">' +
+        '<div class="flex items-center gap-2.5">' +
+          '<span class="eyebrow">SLA Compliance · ' + esc(S.range) + ' วันล่าสุด</span>' +
+          '<span class="tag" style="background:#4d170e;color:#ffc4b8;border-color:transparent">' +
+            ic('alert', 'w-3.5 h-3.5') + 'ต่ำกว่าเป้า</span>' +
         '</div>' +
-        '<div class="kpi-val stat-xl mt-3.5 ' + (k.pass ? '' : 'text-accent-text') + '">' + esc(k.value) + '</div>' +
-        '<div class="text-[12.5px] font-semibold mt-2.5">' + esc(k.target) + '</div>' +
-        '<p class="text-[11.5px] text-faint leading-relaxed mt-1">' + esc(k.note) + '</p>' +
-        '<p class="eyebrow mt-4 pt-3 rule-in">' + esc(k.freq) + '</p>' +
-      '</div>').join('') +
-  '</section>';
-
-  const chart =
-  '<section class="panel p-5">' +
-    '<div class="eyebrow">ปริมาณ Ticket รายบริษัท · 30 วันย้อนหลัง</div>' +
-    '<p class="text-[12.5px] text-faint mt-1.5">แท่งสีแบรนด์ = บริษัทที่ SLA Compliance ต่ำกว่าเป้าหมาย 95%</p>' +
-    '<div class="mt-5 pt-4 rule-in flex flex-col gap-4">' +
-      CHART.map(c => {
-        const under = c.sla < 95;
-        return '<div class="barrow">' +
-          '<div class="flex items-baseline justify-between gap-3 text-[12.5px]">' +
-            '<span class="font-medium truncate">' + esc(CONAME(c.code)) + '</span>' +
-            '<span class="num text-faint flex-none tabular-nums">' + c.total + ' รายการ · SLA ' + c.sla + '%</span>' +
+        '<div class="hero-fig mt-5">' + esc(H.value) + '<span class="unit">' + esc(H.unit) + '</span></div>' +
+        '<div class="mt-4 text-[13px]" style="color:#ff9783">' + deltaLine(H, true) + '</div>' +
+        '<div class="mt-6">' + gauge(H, grow) +
+          // ป้ายเป้าหมายวางตรงกับขีดจริง ไม่ใช่กลางราง — ตัวเลขกับตำแหน่งต้องตรงกัน
+          '<div class="relative mt-2.5 h-4 text-[11.5px] num" style="color:#9b9797">' +
+            '<span class="absolute left-0">' + H.min + '%</span>' +
+            '<span class="absolute -translate-x-1/2 whitespace-nowrap" style="color:#bab6b6;left:' +
+              (((H.goal - H.min) / (H.max - H.min)) * 100).toFixed(1) + '%">เป้าหมาย ' + H.goal + '%</span>' +
+            '<span class="absolute right-0">' + H.max + '%</span>' +
           '</div>' +
-          '<div class="mt-2 h-2.5 bg-surface relative">' +
-            '<div class="barfill absolute inset-y-0 left-0' + grow + '" style="width:' + Math.round((c.total / maxTotal) * 100) + '%;background:' +
-              (under ? 'var(--c-accent)' : 'var(--c-ink)') + '"></div>' +
+        '</div>' +
+        '<p class="text-[13px] leading-relaxed mt-5 max-w-[46ch]" style="color:#bab6b6">' + esc(H.note) +
+          ' — ต้องปิดส่วนต่าง 3 จุดจึงจะถึงเกณฑ์ในข้อตกลงระดับการให้บริการ</p>' +
+      '</div>' +
+      '<div class="hero-div flex flex-col justify-between">' +
+        '<div class="p-6 sm:p-8 pb-5">' +
+          '<div class="flex items-baseline justify-between gap-3">' +
+            '<span class="eyebrow">แนวโน้ม SLA Compliance</span>' +
+            '<span class="text-[11.5px] num" style="color:#9b9797">ก.ย. 2568 – ส.ค. 2569</span>' +
           '</div>' +
-        '</div>';
-      }).join('') +
+          '<div class="mt-5">' +
+            lineChart(H.trend, { h:150, lo:88, hi:100, ticks:[88, 92, 100], ref:95,
+                                 unit:'%', labels:MONTHS, pad:34, draw:grow }) +
+          '</div>' +
+          '<div class="axis" style="margin-left:34px">' +
+            [0, 3, 6, 9, 11].map(i =>
+              '<span style="left:' + ((i / (H.trend.length - 1)) * 100).toFixed(1) + '%;transform:translateX(' +
+                (i === 0 ? '0' : i === 11 ? '-100%' : '-50%') + ')">' + MONTHS[i] + '</span>').join('') +
+          '</div>' +
+        '</div>' +
+        '<div class="hero-facts">' +
+          [['Ticket ทั้งหมด', totalT.toLocaleString(), esc(S.range) + ' วัน'],
+           ['ค้างอยู่', openT.toLocaleString(), 'ทุกสถานะที่ยังไม่ปิด'],
+           ['เกินเป้าหมาย SLA', '47', '6.1% ของทั้งหมด']].map(f =>
+            '<div><div class="eyebrow">' + esc(f[0]) + '</div>' +
+              '<div class="stat-md num mt-2 truncate" style="color:#f8f4f4">' + esc(f[1]) + '</div>' +
+              '<div class="text-[11px] mt-1 truncate" style="color:#9b9797">' + esc(f[2]) + '</div></div>').join('') +
+        '</div>' +
+      '</div>' +
     '</div>' +
   '</section>';
 
+  /* ── ตัวชี้วัดที่เหลือ: กระเบื้องแคบ ๆ เรียงเป็นแถบเดียว อ่านไล่ซ้ายไปขวา ── */
+  const kpi =
+  '<section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-px bg-hair border border-hair">' +
+    rest.map(k =>
+      '<div class="bg-card p-4 sm:p-5 flex flex-col">' +
+        '<div class="flex items-start justify-between gap-2">' +
+          '<span class="eyebrow leading-snug">' + esc(k.label) + '</span>' +
+          '<span class="flex-none ' + (k.pass ? 'text-faint' : 'text-accent-text') + '" ' +
+            'title="' + (k.pass ? 'ถึงเป้าหมาย' : 'ต่ำกว่าเป้าหมาย') + '">' +
+            ic(k.pass ? 'check' : 'alert', 'w-4 h-4') + '</span>' +
+        '</div>' +
+        '<div class="flex items-baseline gap-1.5 mt-3">' +
+          '<span class="stat-lg num ' + (k.pass ? '' : 'text-accent-text') + '">' + esc(k.value) + '</span>' +
+          '<span class="text-[13px] text-faint">' + esc(k.unit) + '</span>' +
+        '</div>' +
+        '<div class="mt-3.5">' + gauge(k, grow) + '</div>' +
+        '<div class="text-[11.5px] text-faint mt-2 num">' + esc(k.target) + '</div>' +
+        '<div class="mt-3.5">' + spark(k.trend, !k.pass, k.goal, v => v, k.unit === '/ 5' ? '' : k.unit) + '</div>' +
+        '<div class="text-[11.5px] mt-2.5">' + deltaLine(k) + '</div>' +
+        '<p class="text-[11.5px] text-faint leading-relaxed mt-auto pt-3 rule-in">' + esc(k.note) + '</p>' +
+      '</div>').join('') +
+  '</section>';
+
+  /* ── ปริมาณงาน: แท่งบนสเกลที่มีแกนจริง อ่านค่าโดยไม่ต้องเชื่อความยาวเปล่า ๆ ──
+     สเกลปัดขึ้นเป็นหลักร้อย เส้นกริดทุก 100 และมีเส้นค่าเฉลี่ยกำกับ */
+  const volMax = Math.ceil(maxTotal / 100) * 100;
+  const volAvg = totalT / CHART.length;
+  const volTicks = []; for (let t = 0; t <= volMax; t += 100) volTicks.push(t);
+  const volSorted = CHART.slice().sort((x, y) => y.total - x.total);
+  const vol =
+  '<section class="panel">' +
+    '<div class="panel-head flex flex-wrap items-baseline justify-between gap-2">' +
+      '<div><div class="eyebrow">ปริมาณ Ticket รายบริษัท</div>' +
+        '<p class="text-[12.5px] text-faint mt-1.5">แท่งสีแบรนด์คือบริษัทที่ SLA ยังต่ำกว่าเป้าหมาย 95%</p></div>' +
+      '<span class="text-[11.5px] text-faint num flex-none">รวม ' + totalT.toLocaleString() + ' รายการ</span>' +
+    '</div>' +
+    '<div class="p-5">' +
+      '<div class="cgrid">' +
+        volSorted.map(c => {
+          const under = c.sla < 95;
+          return '<div class="text-[13px] font-medium truncate">' + esc(CONAME(c.code)) + '</div>' +
+            '<div class="hbrow plot" title="' + esc(CONAME(c.code)) + ' · ' + c.total + ' รายการ · SLA ' + c.sla +
+              '% · ค้างอยู่ ' + c.open + ' รายการ">' +
+              volTicks.map(t => '<div class="gl' + (t === 0 ? ' zero' : '') +
+                '" style="left:' + ((t / volMax) * 100).toFixed(2) + '%"></div>').join('') +
+              '<div class="gl ref" style="left:' + ((volAvg / volMax) * 100).toFixed(2) + '%"></div>' +
+              '<div class="hb' + (under ? ' on' : '') + (grow ? ' hb-grow' : '') + '">' +
+                '<i style="width:' + ((c.total / volMax) * 100).toFixed(2) + '%"></i></div>' +
+            '</div>' +
+            '<div class="text-[13px] num text-right whitespace-nowrap">' + c.total +
+              '<span class="text-faint text-[11.5px] ml-1">รายการ</span></div>';
+        }).join('') +
+        '<div></div>' +
+        '<div class="axis">' +
+          volTicks.map((t, i) =>
+            '<span style="left:' + ((t / volMax) * 100).toFixed(2) + '%;transform:translateX(' +
+              (i === 0 ? '0' : i === volTicks.length - 1 ? '-100%' : '-50%') + ')">' + t + '</span>').join('') +
+        '</div>' +
+        '<div></div>' +
+      '</div>' +
+      '<p class="text-[11.5px] text-faint leading-relaxed mt-4 pt-3.5 rule-in">' +
+        'เส้นประคือค่าเฉลี่ยของกลุ่ม ' + Math.round(volAvg).toLocaleString() + ' รายการต่อบริษัท · ' +
+        'สเกลเริ่มที่ 0 ทุกแท่ง · ที่มา ระบบ Ticketing ย้อนหลัง ' + esc(S.range) + ' วัน</p>' +
+    '</div>' +
+  '</section>';
+
+  /* ── ส่วนต่างจากเป้าหมาย: แท่งสองทางบนแกนที่มีขีดกำกับทั้งสองฝั่ง ── */
+  const gapMax = Math.ceil(Math.max.apply(null, CHART.map(c => Math.abs(c.sla - 95))) / 5) * 5 || 5;
+  const gapTicks = []; for (let t = -gapMax; t <= gapMax; t += 5) gapTicks.push(t);
+  const gpos = v => ((v + gapMax) / (gapMax * 2)) * 100;
+  const gap =
+  '<section class="panel">' +
+    '<div class="panel-head flex flex-wrap items-baseline justify-between gap-2">' +
+      '<div><div class="eyebrow">ส่วนต่างจากเป้าหมาย SLA</div>' +
+        '<p class="text-[12.5px] text-faint mt-1.5">หน่วยเป็นจุด เทียบเกณฑ์ 95% ที่เส้นศูนย์</p></div>' +
+      '<span class="text-[11.5px] text-faint flex-none num">' +
+        CHART.filter(c => c.sla < 95).length + ' จาก ' + CHART.length + ' บริษัทยังไม่ถึงเกณฑ์</span>' +
+    '</div>' +
+    '<div class="p-5">' +
+      '<div class="cgrid">' +
+        CHART.slice().sort((x, y) => (x.sla - 95) - (y.sla - 95)).map(c => {
+          const d = c.sla - 95;
+          const half = (Math.abs(d) / (gapMax * 2)) * 100;
+          const style = d < 0 ? 'right:50%;width:' + half.toFixed(2) + '%'
+                              : 'left:50%;width:' + half.toFixed(2) + '%';
+          return '<div class="text-[13px] font-medium truncate">' + esc(CONAME(c.code)) + '</div>' +
+            '<div class="dv plot' + (grow ? ' dv-grow' : '') + '" title="' + esc(CONAME(c.code)) + ' · SLA ' + c.sla + '% · ' +
+              (d < 0 ? 'ต่ำกว่าเป้า ' + Math.abs(d) : d > 0 ? 'สูงกว่าเป้า ' + d : 'เท่ากับเป้าหมายพอดี') +
+              (d === 0 ? '' : ' จุด') + '">' +
+              gapTicks.map(t => '<div class="gl' + (t === 0 ? ' zero' : '') +
+                '" style="left:' + gpos(t).toFixed(2) + '%"></div>').join('') +
+              '<i class="' + (d < 0 ? 'neg' : '') + '" style="' + style + '"></i>' +
+            '</div>' +
+            '<div class="text-[13px] num text-right whitespace-nowrap ' + (d < 0 ? 'text-accent-text font-semibold' : '') + '">' +
+              (d > 0 ? '+' : '') + d + ' จุด</div>';
+        }).join('') +
+        '<div></div>' +
+        '<div class="axis">' +
+          gapTicks.map((t, i) =>
+            '<span style="left:' + gpos(t).toFixed(2) + '%;transform:translateX(' +
+              (i === 0 ? '0' : i === gapTicks.length - 1 ? '-100%' : '-50%') + ')">' +
+              (t > 0 ? '+' : '') + t + '</span>').join('') +
+        '</div>' +
+        '<div></div>' +
+      '</div>' +
+      '<p class="text-[11.5px] text-faint leading-relaxed mt-4 pt-3.5 rule-in">' +
+        'เส้นศูนย์คือเกณฑ์ 95% ตาม AIDC-IT-SLA-001 ข้อ 7.1 · เรียงจากบริษัทที่ห่างเป้าหมายมากที่สุด</p>' +
+    '</div>' +
+  '</section>';
+
+  /* ── ตารางรายละเอียด: ตัวเลขที่กราฟด้านบนสรุปไว้ ดูทีละบริษัทได้ครบ ── */
   const perf =
   '<section class="panel">' +
     '<div class="panel-head"><div class="eyebrow">ประสิทธิภาพรายบริษัท</div>' +
-      '<p class="text-[12.5px] text-faint mt-1.5">MTTR / SLA Compliance / CSAT เทียบเป้าหมายองค์กร</p></div>' +
+      '<p class="text-[12.5px] text-faint mt-1.5">ค้างอยู่ / MTTR / SLA Compliance / CSAT เทียบเป้าหมายองค์กร</p></div>' +
     '<div class="tbl-wrap">' +
-      '<table class="tbl tbl-sticky"><thead><tr><th>บริษัท</th><th class="rt">ค้างอยู่</th><th class="rt">MTTR</th><th class="rt">SLA</th><th class="rt">CSAT</th></tr></thead><tbody>' +
+      '<table class="tbl tbl-sticky"><thead><tr>' +
+        '<th>บริษัท</th><th class="rt">ค้างอยู่</th><th class="rt">MTTR</th>' +
+        '<th class="rt">SLA</th><th class="rt">CSAT</th><th class="min-w-[112px]">CSAT เทียบ 4.2</th>' +
+      '</tr></thead><tbody>' +
       CHART.map(c =>
         '<tr>' +
           '<td class="font-medium whitespace-nowrap">' + esc(CONAME(c.code)) + '</td>' +
-          '<td class="rt">' + c.open + '</td>' +
-          '<td class="rt whitespace-nowrap">' + esc(c.mttr) + '</td>' +
-          '<td class="rt"><span class="inline-flex items-center gap-1.5 ' + (c.sla < 95 ? 'text-accent-text font-semibold' : '') + '">' +
+          '<td class="rt num">' + c.open + '</td>' +
+          '<td class="rt num whitespace-nowrap">' + esc(c.mttr) + '</td>' +
+          '<td class="rt"><span class="inline-flex items-center gap-1.5 num ' + (c.sla < 95 ? 'text-accent-text font-semibold' : '') + '">' +
             (c.sla < 95 ? ic('alert', 'w-3.5 h-3.5') : ic('check', 'w-3.5 h-3.5 text-faint')) + c.sla + '%</span></td>' +
-          '<td class="rt ' + (c.csat < 4.2 ? 'text-accent-text font-semibold' : '') + '">' + c.csat.toFixed(1) + '</td>' +
+          '<td class="rt num ' + (c.csat < 4.2 ? 'text-accent-text font-semibold' : '') + '">' + c.csat.toFixed(1) + '</td>' +
+          '<td>' + gauge({ now:c.csat, goal:4.2, min:3, max:5, pass:c.csat >= 4.2,
+                           label:CONAME(c.code) + ' CSAT', value:c.csat.toFixed(1), unit:'', target:'เป้าหมาย ≥ 4.2' }, grow) + '</td>' +
         '</tr>').join('') +
       '</tbody></table>' +
     '</div>' +
@@ -2289,7 +2584,7 @@ function dashView() {
   const insights = [
     { kicker:'ต้องดำเนินการ', title:'Heavy Machine ต่ำกว่าเป้า SLA 13 จุด', body:'Ticket เครื่องจักรรอช่างเข้าไซต์เฉลี่ย 7.6 ชม. สาเหตุหลักคือช่างประจำภาคตะวันออกมีเพียง 2 คน', meta:'เสนอเพิ่มช่าง on-call 1 อัตรา', hot:true },
     { kicker:'Ticket ซ้ำ', title:'POS Cosi ชั้น 2 แจ้งซ้ำ 4 ครั้งใน 30 วัน', body:'ต้นทุนซ่อมสะสมเกินราคาเครื่องใหม่ 1.4 เท่า ระบบแนะนำเปลี่ยนอุปกรณ์แทนการซ่อม', meta:'ผูกกับ POS-COSI-21', hot:false },
-    { kicker:'ผลของ AI', title:'AI Assistant ลด Ticket ได้ 982 รายการ', body:'คิดเป็น 24% ของเรื่องที่พนักงานเริ่มพิมพ์ โดยหมวดรหัสผ่านและเครื่องพิมพ์ถูกเบี่ยงมากที่สุด', meta:'สะสม 6 เดือน', hot:false }
+    { kicker:'แนวโน้ม', title:'เรื่องซ้ำหมวดรหัสผ่านและเครื่องพิมพ์ 982 รายการ', body:'คิดเป็น 24% ของ Ticket ทั้งหมดใน 6 เดือน — ทั้งสองหมวดแก้ได้ด้วยขั้นตอนมาตรฐาน เหมาะกับการทำ self-service ในเฟสถัดไป', meta:'สะสม 6 เดือน', hot:false }
   ].map(i =>
     '<article class="panel p-5 flex flex-col gap-2">' +
       '<div class="flex items-center gap-2">' +
@@ -2300,164 +2595,13 @@ function dashView() {
       '<p class="eyebrow mt-auto pt-3.5 rule-in">' + esc(i.meta) + '</p>' +
     '</article>').join('');
 
-  return '<div class="flex flex-col gap-5' + r + '">' + kpi +
-    '<div class="grid lg:grid-cols-2 gap-5 items-start">' + chart + perf + '</div>' +
+  return '<div class="flex flex-col gap-5' + r + '">' + bar + hero + kpi +
+    '<div class="grid lg:grid-cols-2 gap-5 items-start">' + vol + gap + '</div>' +
+    perf +
     '<section class="grid md:grid-cols-2 xl:grid-cols-3 gap-5 items-stretch">' + insights + '</section>' +
   '</div>';
 }
 
-/* ─────────────────────────── 11. หน้า: ทรัพย์สิน (ITAM) ─────────────────────────── */
-function assetsView() {
-  const a = ASSETS[S.assetIdx] || ASSETS[0];
-  const r = S.fresh ? ' rise' : '';
-  const stTag = st => st === 'รอซ่อม' ? 'tag-solid' : st === 'เฝ้าระวัง' ? 'tag-soft' : 'tag-quiet';
-  const stIcon = st => st === 'รอซ่อม' ? 'alert' : st === 'เฝ้าระวัง' ? 'clock' : 'check';
-
-  const table =
-  '<section class="panel">' +
-    '<div class="tbl-wrap">' +
-      '<table class="tbl tbl-sticky"><thead><tr><th>รหัส</th><th class="min-w-[210px]">อุปกรณ์ / เครื่องจักร</th><th>บริษัท</th><th class="rt">Ticket</th><th>สถานะ</th></tr></thead><tbody>' +
-      ASSETS.map((x, i) =>
-        '<tr class="clickable' + (i === S.assetIdx ? ' is-active' : '') + '" data-act="asset" data-i="' + i + '" tabindex="0" role="button">' +
-          '<td class="num text-[12.5px] font-semibold whitespace-nowrap">' + esc(x.code) + '</td>' +
-          '<td class="font-medium">' + esc(x.name) + '</td>' +
-          '<td class="text-[13.5px] whitespace-nowrap">' + esc(x.company) + '</td>' +
-          '<td class="rt">' + x.tickets + '</td>' +
-          '<td><span class="tag ' + stTag(x.st) + '">' + ic(stIcon(x.st), 'w-3.5 h-3.5') + esc(x.st) + '</span></td>' +
-        '</tr>').join('') +
-      '</tbody></table>' +
-    '</div>' +
-  '</section>';
-
-  const detail =
-  '<section class="panel p-5 lg:sticky lg:top-[92px]">' +
-    '<div class="eyebrow">Maintenance History</div>' +
-    '<h2 class="display-lg mt-2">' + esc(a.name) + '</h2>' +
-    '<p class="text-[12.5px] text-faint mt-1.5 num">' + esc(a.code) + ' · ' + esc(a.company) + ' · ติดตั้ง ' + esc(a.installed) + '</p>' +
-    '<dl class="grid grid-cols-3 gap-px bg-hair border border-hair mt-4">' +
-      [['Ticket สะสม', a.tickets], ['ครั้งที่ซ่อม', a.history.length], ['สถานะ', a.st]].map(kv =>
-        '<div class="bg-canvas px-3 py-3">' +
-          '<dt class="eyebrow">' + esc(kv[0]) + '</dt>' +
-          '<dd class="stat-val font-display font-bold text-[15px] mt-1.5 truncate">' + esc(kv[1]) + '</dd></div>').join('') +
-    '</dl>' +
-    '<div class="mt-5 pt-5 rule-in">' +
-      '<div class="eyebrow mb-3.5">ไทม์ไลน์การซ่อมบำรุง</div>' +
-      '<ol class="tl">' +
-        a.history.map((h, i) =>
-          '<li class="tl-item' + (i === 0 ? ' hot' : '') + '">' +
-            '<div class="num eyebrow">' + esc(h.date) + '</div>' +
-            '<div class="text-[13.5px] font-medium leading-snug mt-1">' + esc(h.what) + '</div>' +
-            '<div class="text-[11.5px] text-faint mt-0.5">' + esc(h.by) + '</div>' +
-          '</li>').join('') +
-      '</ol>' +
-    '</div>' +
-    '<div class="mt-5 p-3.5 panel-flat flex items-start gap-2.5">' +
-      '<span class="text-accent-text flex-none mt-0.5">' + ic('alert', 'w-4 h-4') + '</span>' +
-      '<p class="text-[12.5px] leading-relaxed">' + esc(a.pmNote) + '</p>' +
-    '</div>' +
-  '</section>';
-
-  return '<div class="grid lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-5 items-start' + r + '">' + table + detail + '</div>';
-}
-
-/* ─────────────────────────── 12. หน้า: กฎการมอบหมาย & SLA ─────────────────────────── */
-function rulesView() {
-  const r = S.fresh ? ' rise' : '';
-
-  const rulesTable =
-  '<section class="panel">' +
-    '<div class="panel-head"><div class="eyebrow">Conditional Routing</div>' +
-      '<h2 class="display-md mt-1.5">กฎการมอบหมายงานอัตโนมัติ</h2>' +
-      '<p class="text-[12.5px] text-faint mt-1.5">การเปิด/ปิดกฎทุกครั้งถูกบันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา' +
-        (canEditData() ? '' : ' · ' + esc(NO_EDIT_WHY)) + '</p></div>' +
-    '<div class="tbl-wrap">' +
-      '<table class="tbl"><thead><tr><th>#</th><th class="min-w-[280px]">เงื่อนไข (Company + Department + Category)</th><th>มอบหมายให้</th><th>วิธีกระจาย</th><th>ระดับ</th><th>เปิดใช้</th></tr></thead><tbody>' +
-      RULES.map((x, i) => {
-        const off = !x.on;
-        return '<tr class="' + (off ? 'opacity-55' : '') + '">' +
-          '<td class="num text-faint text-[12.5px]">' + String(i + 1).padStart(2, '0') + '</td>' +
-          '<td class="font-medium">' + esc(x.cond) + '</td>' +
-          '<td class="text-[13.5px]">' + esc(x.team) + '</td>' +
-          '<td class="text-[12.5px] text-faint whitespace-nowrap">' + esc(x.mode) + '</td>' +
-          '<td>' + prioTag(x.prio) + '</td>' +
-          '<td><button data-act="rule" data-i="' + i + '" class="sw" role="switch" aria-checked="' + (off ? 'false' : 'true') + '" ' +
-            'aria-label="' + (off ? 'เปิดใช้' : 'ปิดใช้') + 'กฎข้อ ' + (i + 1) + '"' + roAttr() + '><i></i></button></td>' +
-        '</tr>';
-      }).join('') +
-      '</tbody></table>' +
-    '</div>' +
-  '</section>';
-
-  // ตาราง Priority Matrix ตาม SLA ข้อ 4
-  const matrix =
-  '<section class="panel">' +
-    '<div class="panel-head"><div class="eyebrow">AIDC-IT-SLA-001 · ข้อ 4</div>' +
-      '<h2 class="display-md mt-1.5">Priority Matrix — ผลกระทบ × ความเร่งด่วน</h2>' +
-      '<p class="text-[12.5px] text-faint mt-1.5">Service Desk กำหนดระดับเบื้องต้น ผู้รับบริการขอทบทวนระดับได้โดยระบุเหตุผลทางธุรกิจ</p></div>' +
-    '<div class="tbl-wrap">' +
-      '<table class="tbl tbl-sticky"><thead><tr><th class="min-w-[200px]">ผลกระทบ \\ ความเร่งด่วน</th>' +
-        MATRIX.cols.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' +
-        MATRIX.rows.map(row =>
-          '<tr><td class="font-medium">' + esc(row.label) + '</td>' +
-            row.cells.map(p => '<td>' + prioTag(p) + '</td>').join('') + '</tr>').join('') +
-      '</tbody></table>' +
-    '</div>' +
-    '<div class="tbl-wrap rule-in">' +
-      '<table class="tbl tbl-sticky"><thead><tr><th>ระดับ</th><th>เวลาตอบรับ</th><th>เวลาแก้ไข</th><th>การรายงานสถานะ</th><th class="min-w-[260px]">คำอธิบาย</th></tr></thead><tbody>' +
-        PRIOS.map(p =>
-          '<tr>' +
-            '<td>' + prioTag(p.key) + '</td>' +
-            '<td class="num font-semibold whitespace-nowrap">' + esc(p.resp) + '</td>' +
-            '<td class="num font-semibold whitespace-nowrap">' + esc(p.res) + '</td>' +
-            '<td class="text-[12.5px] text-faint whitespace-nowrap">' + esc(p.report) + '</td>' +
-            '<td class="text-[12.5px] text-muted leading-relaxed">' + esc(p.desc) + '</td>' +
-          '</tr>').join('') +
-      '</tbody></table>' +
-    '</div>' +
-    '<p class="p-5 text-[11.5px] text-faint leading-relaxed rule-in">' +
-      'เวลาทำการ จันทร์–ศุกร์ 08:30–17:30 น. (ยกเว้นวันหยุดบริษัท) · P1 มีทีม On-call ตลอด 24 ชั่วโมงทุกวัน · ' +
-      'ปิดปรับปรุงตามแผน เสาร์ 20:00–24:00 น. แจ้งล่วงหน้าอย่างน้อย 3 วันทำการ · ' +
-      'นาฬิกา SLA หยุดชั่วคราวเมื่อรอข้อมูลจากผู้แจ้ง (Pending User) ตามข้อ 5.4</p>' +
-  '</section>';
-
-  // Escalation Tier 1/2/3 + Hierarchical
-  const escal =
-  '<section>' +
-    '<div class="eyebrow mb-3">Escalation · AIDC-IT-SLA-001 ข้อ 6</div>' +
-    '<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-5">' +
-      ESCALATION.map(e =>
-        '<article class="panel p-5 flex flex-col gap-2">' +
-          '<div class="flex items-center gap-2">' +
-            '<span class="tag ' + (e.kind === 'hier' ? 'tag-solid' : 'tag-outline') + '">' + esc(e.tier) + '</span>' +
-            '<span class="eyebrow">' + (e.kind === 'hier' ? 'Hierarchical' : 'Functional') + '</span>' +
-          '</div>' +
-          '<h3 class="display-md leading-snug mt-0.5">' + esc(e.who) + '</h3>' +
-          '<p class="text-[12.5px] text-muted leading-relaxed">' + esc(e.when) + '</p>' +
-        '</article>').join('') +
-    '</div>' +
-    '<div class="grid md:grid-cols-3 gap-5 mt-5">' +
-      [
-        { k:'Near-SLA Warning', t:'เตือนล่วงหน้าก่อนเกินเป้าหมาย', b:'เมื่อเวลาคงเหลือต่ำกว่า 20% ระบบแจ้งผู้รับผิดชอบทุก 5 นาทีผ่าน LINE OA และอีเมล พร้อมแจ้งหัวหน้าทีมเป็นสำเนา' },
-        { k:'Auto Escalation', t:'ไม่มีผู้รับเรื่องใน 15 นาที', b:'Ticket ระดับ P1 ที่ไม่มีผู้รับจะถูกดันขึ้นหัวหน้าทีมของบริษัทนั้น และหากยังไม่มีผู้รับอีก 15 นาที จะดันต่อไปที่ Head of IT' },
-        { k:'Cross-Company', t:'ส่งต่อข้ามบริษัทในเครือ', b:'Ticket ที่เกี่ยวเนื่องหลายบริษัทส่งต่อได้โดยคงประวัติเดิมทั้งหมด นาฬิกา SLA เริ่มนับใหม่ตามเงื่อนไขของบริษัทผู้รับ' }
-      ].map(c =>
-        '<article class="panel p-5">' +
-          '<div class="eyebrow eyebrow-accent">' + esc(c.k) + '</div>' +
-          '<h3 class="display-md mt-2 leading-snug">' + esc(c.t) + '</h3>' +
-          '<p class="text-[12.5px] text-muted leading-relaxed mt-2">' + esc(c.b) + '</p>' +
-        '</article>').join('') +
-    '</div>' +
-  '</section>';
-
-  return '<div class="flex flex-col gap-5' + r + '">' + rulesTable + matrix + escal + '</div>';
-}
-
-/* ═════════════════════ 12b. หน้า: ตั้งค่าระบบ (Admin Console) ═════════════════════
-   สถาปัตยกรรมเดียวกับส่วนอื่นของแอป: ไม่มี state ซ้อน ไม่มีระบบใหม่
-   — ทุกหมวดมี "ร่าง" (draft) ของตัวเอง แก้ในร่างก่อน แล้วกดบันทึกจึงมีผลกับข้อมูลจริง
-   — ปุ่มยกเลิกทิ้งร่างนั้นทิ้ง ค่ากลับไปเท่ากับที่บันทึกล่าสุด
-   — บันทึกแล้วผลจะไปถึงหน้าอื่นทันที (ชิปบริษัท / ฟอร์มแจ้งเรื่อง / แถบ SLA / Auto Routing)
-   ═══════════════════════════════════════════════════════════════════════════════ */
 
 const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -2652,7 +2796,7 @@ function secDel(sec, what, i) {
   else if (sec === 'noti') d.rules.splice(i, 1);
 }
 
-/* ─────────── ตัวช่วยวาดฟอร์ม — สไตล์เดียวกันทั้ง 12 หมวด ─────────── */
+/* ─────────── ตัวช่วยวาดฟอร์ม — สไตล์เดียวกันทั้ง 10 หมวด ─────────── */
 const fid = (sec, path) => 'st-' + sec + '-' + path.replace(/[^a-zA-Z0-9]/g, '_');
 
 function setHead(t, d) {
@@ -2951,158 +3095,6 @@ function secCat(perm) {
     '</div>');
 }
 
-/* ─────────── 5. SLA และเวลาทำการ ─────────── */
-function secSla(perm) {
-  const d = viewOf('sla');
-  const ro = perm !== 'edit';
-
-  const slaRows = d.p.map((x, i) => {
-    const p = PRIO(x.key);
-    const biz = x.mode === 'business';
-    return '<tr>' +
-      '<td><div>' + prioTag(x.key) + '</div>' +
-        '<div class="text-[11.5px] text-faint leading-snug mt-1 max-w-[230px]">' + esc(p.desc) + '</div></td>' +
-      '<td>' + fIn('sla', 'p.' + i + '.respMin', 'เวลาตอบรับของ ' + x.key + ' (นาที)', x.respMin, { num:true, ro:ro, bare:'w-[102px]' }) +
-        '<span class="block text-[11.5px] text-faint mt-1">' + esc(slaLabel(x.respMin, biz)) + '</span></td>' +
-      '<td>' + fIn('sla', 'p.' + i + '.resMin', 'เวลาแก้ไขของ ' + x.key + ' (นาที)', x.resMin, { num:true, ro:ro, bare:'w-[102px]' }) +
-        '<span class="block text-[11.5px] text-faint mt-1">' + esc(slaLabel(x.resMin, biz)) + '</span></td>' +
-      '<td>' + fSel('sla', 'p.' + i + '.mode', 'โหมดนาฬิกาของ ' + x.key, x.mode,
-          [['business', 'เวลาทำการ (business)'], ['calendar', 'ต่อเนื่อง 24×7 (calendar)']], { ro:ro, bare:'min-w-[196px]' }) + '</td>' +
-      '<td>' + fIn('sla', 'p.' + i + '.report', 'รอบรายงานสถานะของ ' + x.key, x.report, { ro:ro, bare:'min-w-[196px]' }) + '</td>' +
-    '</tr>';
-  }).join('');
-
-  const dayRow = DAYKEYS.map(k =>
-    '<label class="check"><input type="checkbox" data-act="setsw" data-sec="sla" data-path="cal.' + k[0] + '"' +
-      (d.cal[k[0]] ? ' checked' : '') + (ro ? ' disabled' : '') + '><i aria-hidden="true"></i><span>' + k[1] + '</span></label>').join('');
-
-  const holRows = d.hol.map((h, i) =>
-    '<tr>' +
-      '<td>' + fIn('sla', 'hol.' + i + '.d', 'วันที่', h.d, { ro:ro, bare:'w-[152px]' }) + '</td>' +
-      '<td>' + fIn('sla', 'hol.' + i + '.n', 'ชื่อวันหยุด', h.n, { ro:ro, bare:'min-w-[230px]' }) + '</td>' +
-      '<td>' + delBtn('sla', '', i, h.n, ro) + '</td>' +
-    '</tr>').join('');
-
-  const matrixTbl =
-    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr><th class="min-w-[200px]">ผลกระทบ \\ ความเร่งด่วน</th>' +
-      MATRIX.cols.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' +
-      MATRIX.rows.map(r => '<tr><td class="font-medium">' + esc(r.label) + '</td>' +
-        r.cells.map(p => '<td>' + prioTag(p) + '</td>').join('') + '</tr>').join('') +
-    '</tbody></table></div>';
-
-  return setBlock('เป้าหมาย SLA ตามระดับความสำคัญ',
-    'อ้างอิง AIDC-IT-SLA-001 v1.1 ข้อ 5.1 · กรอกเป็น "นาที" ระบบจะแปลงเป็นชั่วโมง/วันทำการให้เอง · ' +
-    'เมื่อบันทึก เวลาคงเหลือและแถบ SLA ของ Ticket ที่ยังเปิดอยู่จะถูกคำนวณใหม่จากเวลาที่ใช้ไปแล้ว',
-    '<div class="tbl-wrap"><table class="tbl tbl-tight tbl-sticky"><thead><tr>' +
-      '<th class="min-w-[230px]">ระดับและนิยาม</th><th>เวลาตอบรับ (นาที)</th><th>เวลาแก้ไข (นาที)</th>' +
-      '<th class="min-w-[196px]">โหมดนาฬิกา</th><th class="min-w-[196px]">รอบรายงานสถานะ</th>' +
-    '</tr></thead><tbody>' + slaRows + '</tbody></table></div>' + tblHint() +
-    '<p class="mt-3 text-[11.5px] text-faint leading-relaxed">1 วันทำการ = ' + BIZ_DAY_MIN + ' นาที (9 ชั่วโมง) · ' +
-      'P1 ต้องใช้โหมดนาฬิกาต่อเนื่อง 24×7 เสมอตามเอกสารควบคุม</p>')
-
-  + setBlock('Priority Matrix — ผลกระทบ × ความเร่งด่วน',
-    'Service Desk กำหนดระดับเบื้องต้นจากเมทริกซ์นี้ ผู้รับบริการขอทบทวนระดับได้โดยระบุเหตุผลทางธุรกิจ (AIDC-IT-SLA-001 ข้อ 4)',
-    matrixTbl + tblHint(true))
-
-  + setBlock('ปฏิทินเวลาทำการ',
-    'ใช้เป็นฐานการนับเวลาของทุกระดับที่ตั้งโหมดนาฬิกาเป็น "เวลาทำการ" — บริษัทที่ตั้งเวลาต่างจากนี้ใช้ค่าของตัวเองในหมวดบริษัทในเครือ',
-    '<div class="setgrid setgrid-2">' +
-      fIn('sla', 'cal.from', 'เวลาเริ่มงาน', d.cal.from, { ro:ro }) +
-      fIn('sla', 'cal.to', 'เวลาเลิกงาน', d.cal.to, { ro:ro }) +
-      fIn('sla', 'cal.tz', 'เขตเวลา', d.cal.tz, { ro:ro }) +
-      roBox('ชั่วโมงทำการต่อวัน', (BIZ_DAY_MIN / 60).toFixed(1) + ' ชั่วโมง', 'คำนวณจากเวลาเริ่ม–เลิกงานมาตรฐาน') +
-      '<div class="field span2"><span class="lbl">วันทำการ</span>' +
-        '<div class="flex flex-wrap gap-x-5 gap-y-1">' + dayRow + '</div></div>' +
-    '</div>')
-
-  + setBlock('วันหยุดประจำปี 2569',
-    'วันในตารางนี้ไม่ถูกนับเป็นเวลาทำการ — ใช้กับทุกบริษัทในเครือ ยกเว้นวันหยุดเฉพาะกิจของแต่ละบริษัท',
-    '<div class="tbl-wrap"><table class="tbl tbl-tight"><thead><tr>' +
-      '<th class="min-w-[152px]">วันที่</th><th class="min-w-[230px]">ชื่อวันหยุด</th><th>ลบ</th>' +
-    '</tr></thead><tbody>' + holRows + '</tbody></table></div>' +
-    '<div class="mt-4 flex flex-wrap items-center gap-3">' +
-      addBtn('sla', '', 'เพิ่มวันหยุด', ro) +
-      '<span class="text-[11.5px] text-faint">มี ' + d.hol.length + ' วันหยุดในปฏิทินปีนี้</span>' +
-    '</div>')
-
-  + setBlock('กฎการหยุดนับเวลา (SLA pause)',
-    'ตาม AIDC-IT-SLA-001 ข้อ 5.4 — เวลาตอบรับไม่หยุดนับในทุกกรณี วัดถึงการตอบครั้งแรกเท่านั้น',
-    d.pause.map((p, i) => fSw('sla', 'pause.' + i + '.on', p.t, p.d, p.on, ro)).join(''))
-
-  + setBlock('ช่วงปิดปรับปรุงตามแผน',
-    'เวลาในช่วงนี้ไม่ถือเป็นการผิด SLA (ข้อยกเว้นตาม AIDC-IT-SLA-001 ข้อ 9) และต้องแจ้งล่วงหน้าตามจำนวนวันทำการที่กำหนด',
-    '<div class="setgrid setgrid-2">' +
-      fSel('sla', 'mw.day', 'วันในสัปดาห์', d.mw.day, DAYKEYS.map(k => k[1]), { ro:ro }) +
-      fIn('sla', 'mw.notice', 'แจ้งล่วงหน้า (วันทำการ)', d.mw.notice, { num:true, ro:ro }) +
-      fIn('sla', 'mw.from', 'เริ่มปิดปรับปรุง', d.mw.from, { ro:ro }) +
-      fIn('sla', 'mw.to', 'สิ้นสุด', d.mw.to, { ro:ro }) +
-    '</div>');
-}
-
-/* ─────────── 6. กฎการมอบหมาย (Routing) ─────────── */
-function secRt(perm) {
-  const d = viewOf('rt');
-  const catNames = ['ทุกหมวดหมู่'].concat(
-    Object.keys(CATS).reduce((a, k) => a.concat(CATS[k].map(x => x.n)), []).filter((v, i, a) => a.indexOf(v) === i));
-  const teamNames = TEAMS.map(t => t.name).concat(['Central IT — Identity', 'Cosi IT + Vendor POS', 'ดันขึ้นหัวหน้าทีม + Central IT'])
-    .filter((v, i, a) => a.indexOf(v) === i);
-
-  /* ตัวสร้างเงื่อนไขมี 7 ฟิลด์ต่อกฎ — ถ้าทำเป็นตารางจะกว้างเกินแผงเสมอและปุ่มเปิด/ปิดจะหลุดออกนอกจอ
-     จึงวางเป็นบล็อกต่อกฎ คั่นด้วยเส้นภายใน แล้วใช้ฟอร์มสามคอลัมน์บนจอกว้าง */
-  const rows = d.list.map((r, i) => {
-    const ro = !rowEditable(perm);
-    return '<article class="rule-in pt-5 mt-5 first:border-t-0 first:pt-0 first:mt-0' + (r.on ? '' : ' opacity-60') + '">' +
-      '<div class="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3.5">' +
-        '<span class="tag tag-outline num flex-none">กฎข้อ ' + String(i + 1).padStart(2, '0') + '</span>' +
-        '<span class="text-[12.5px] text-muted leading-snug flex-1 min-w-[200px]">' +
-          esc(condText(r)) + ' → ' + esc(r.team) + (r.on ? '' : ' · ปิดใช้อยู่') + '</span>' +
-        '<div class="flex items-center gap-1.5 flex-none">' +
-          swCell('rt', 'list.' + i + '.on', r.on, ro, (r.on ? 'ปิดใช้' : 'เปิดใช้') + 'กฎข้อ ' + (i + 1)) +
-          '<button data-act="setmove" data-sec="rt" data-path="list" data-i="' + i + '" data-dir="up" class="btn btn-secondary btn-sm" ' +
-            'title="เพิ่มลำดับความสำคัญ" aria-label="เพิ่มลำดับความสำคัญของกฎข้อ ' + (i + 1) + '"' +
-            (ro || i === 0 ? ' disabled' : '') + '>' + ic('up', 'w-4 h-4') + '</button>' +
-          '<button data-act="setmove" data-sec="rt" data-path="list" data-i="' + i + '" data-dir="down" class="btn btn-secondary btn-sm" ' +
-            'title="ลดลำดับความสำคัญ" aria-label="ลดลำดับความสำคัญของกฎข้อ ' + (i + 1) + '"' +
-            (ro || i === d.list.length - 1 ? ' disabled' : '') + '>' + ic('down', 'w-4 h-4') + '</button>' +
-          delBtn('rt', '', i, 'กฎข้อ ' + (i + 1), ro) +
-        '</div>' +
-      '</div>' +
-      '<div class="setgrid setgrid-3">' +
-        fSel('rt', 'list.' + i + '.co', 'บริษัท', r.co, [['ALL', 'ทุกบริษัท']].concat(CO.map(c => [c.code, c.name])), { ro:ro }) +
-        fIn('rt', 'list.' + i + '.dept', 'แผนก', r.dept, { ro:ro }) +
-        fSel('rt', 'list.' + i + '.cat', 'หมวดหมู่', r.cat, catNames, { ro:ro }) +
-        fSel('rt', 'list.' + i + '.urg', 'ความเร่งด่วนที่เข้าเงื่อนไข', r.urg, MATRIX.cols.concat(['ทุกระดับ']), { ro:ro }) +
-        fSel('rt', 'list.' + i + '.team', 'ทีมผู้รับ', r.team, teamNames, { ro:ro }) +
-        fSel('rt', 'list.' + i + '.mode', 'วิธีกระจายงาน', r.mode, ROUTE_MODES, { ro:ro }) +
-        fSel('rt', 'list.' + i + '.prio', 'ระดับที่บังคับใช้', r.prio, PRIOS.map(p => [p.key, p.key + ' · ' + p.th]), { ro:ro }) +
-      '</div>' +
-    '</article>';
-  }).join('');
-
-  const escRows = ESCALATION.map(e =>
-    '<tr>' +
-      '<td><span class="tag ' + (e.kind === 'hier' ? 'tag-solid' : 'tag-outline') + '">' + esc(e.tier) + '</span></td>' +
-      '<td class="font-medium min-w-[190px]">' + esc(e.who) + '</td>' +
-      '<td class="text-[12.5px] text-muted leading-relaxed min-w-[300px]">' + esc(e.when) + '</td>' +
-      '<td class="text-[12.5px] text-faint whitespace-nowrap">' + (e.kind === 'hier' ? 'Hierarchical' : 'Functional') + '</td>' +
-    '</tr>').join('');
-
-  return setBlock('กฎการมอบหมายอัตโนมัติ',
-    'ระบบไล่กฎจากบนลงล่างและใช้กฎแรกที่ตรงเงื่อนไข — เลื่อนลำดับเพื่อเปลี่ยนความสำคัญ · ' +
-    'ปิดกฎแล้วแผง Auto Routing ในฟอร์มแจ้งเรื่องจะตกไปใช้ทีมตั้งต้นของ Service Desk ทันทีที่กดบันทึก',
-    rows +
-    '<div class="mt-5 pt-5 rule-in flex flex-wrap items-center gap-3">' +
-      addBtn('rt', '', 'เพิ่มกฎการมอบหมาย', perm !== 'edit') +
-      '<span class="text-[11.5px] text-faint">เปิดใช้อยู่ ' + d.list.filter(r => r.on).length + ' จาก ' + d.list.length + ' กฎ</span>' +
-    '</div>')
-
-  + setBlock('กฎการยกระดับ (Escalation)',
-    'อ้างอิง AIDC-IT-SLA-001 ข้อ 6 — Functional ไล่ตามระดับทีมสนับสนุน Hierarchical ยกระดับสู่ผู้บริหาร เงื่อนไขเหล่านี้กำหนดในเอกสารควบคุมและปรับได้เฉพาะเมื่อทบทวนเอกสาร',
-    '<div class="tbl-wrap"><table class="tbl tbl-tight"><thead><tr>' +
-      '<th>ระดับ</th><th class="min-w-[190px]">ผู้รับผิดชอบ</th><th class="min-w-[300px]">เงื่อนไขการยกระดับ</th><th>ประเภท</th>' +
-    '</tr></thead><tbody>' + escRows + '</tbody></table></div>' + tblHint());
-}
-
 /* ─────────── 7. ทีมและเจ้าหน้าที่ ─────────── */
 function secTeam(perm) {
   const d = viewOf('team');
@@ -3348,7 +3340,6 @@ function secIntg(perm) {
     '<p class="mt-3 text-[11.5px] text-faint">แสดง ' + logs.length + ' จาก ' + AUDIT.length + ' รายการล่าสุด</p>');
 }
 
-/* ─────────── 12. ระบบและการสำรองข้อมูล ─────────── */
 function secSys(perm) {
   const d = viewOf('sys');
   const ro = perm !== 'edit';
@@ -3407,7 +3398,7 @@ function secSys(perm) {
     '</ul>');
 }
 
-const SECBODY = { co:secCo, user:secUser, role:secRole, cat:secCat, sla:secSla, rt:secRt,
+const SECBODY = { co:secCo, user:secUser, role:secRole, cat:secCat,
                   team:secTeam, noti:secNoti, chan:secChan, sec:secSecu, intg:secIntg, sys:secSys };
 
 /* ─────────── กล่องยืนยันก่อนทำสิ่งที่ย้อนกลับไม่ได้ ─────────── */
@@ -3457,7 +3448,7 @@ function settingsView() {
     '<div class="setwarn mt-4">' + ic('lock', 'w-[18px] h-[18px] flex-none mt-0.5') +
       '<div><p class="text-[13.5px] font-semibold">' + esc(NO_EDIT_WHY) + '</p>' +
       '<p class="text-[12.5px] leading-relaxed mt-1">' +
-        'Team Helpdesk เปิดดูการตั้งค่าได้ครบทั้ง 12 หมวดเพื่อใช้อ้างอิงระหว่างทำงาน — ' +
+        'Team Helpdesk เปิดดูการตั้งค่าได้ครบทั้ง 10 หมวดเพื่อใช้อ้างอิงระหว่างทำงาน — ' +
         'ช่องกรอก สวิตช์ และปุ่มเพิ่ม/แก้/ลบ/บันทึกทั้งหมดถูกปิดไว้ · ' +
         'งานประจำวันกับ Ticket (รับเรื่อง มอบหมาย เปลี่ยนสถานะ ตอบกลับ ส่งต่อ ปิดงาน) ยังทำได้เต็มที่ตามปกติ</p></div>' +
     '</div>') +
@@ -3517,43 +3508,6 @@ function settingsView() {
   '</div>';
 }
 
-/* ─────────────────────────── 13. หน้า: คลังความรู้ ─────────────────────────── */
-function kbView() {
-  const r = S.fresh ? ' rise' : '';
-  if (S.kbId) {
-    const a = KB.find(x => x.id === S.kbId) || KB[0];
-    return '<div class="max-w-[68ch]' + r + '">' +
-      '<button data-act="kbclose" class="btn btn-secondary btn-sm">' + ic('arrowL', 'w-4 h-4') + 'กลับไปคลังความรู้</button>' +
-      '<div class="eyebrow eyebrow-accent mt-6">' + a.id + ' · ' + a.cat + '</div>' +
-      '<h2 class="display-lg mt-2.5">' + esc(a.title) + '</h2>' +
-      '<p class="text-[12.5px] text-faint mt-3 num">อัปเดต ' + esc(a.updated) + ' · เปิดอ่าน ' + a.views + ' ครั้ง · ลด Ticket ได้ ' + a.deflect + '</p>' +
-      '<div class="rule-accent mt-5 mb-6"></div>' +
-      '<ol class="flex flex-col gap-px bg-hair border border-hair">' +
-        a.steps.map((s, i) =>
-          '<li class="bg-card p-4 flex gap-3.5">' +
-            '<span class="flex-none w-7 h-7 grid place-items-center font-display font-bold text-[12.5px] bg-ink text-canvas num">' + (i + 1) + '</span>' +
-            '<span class="text-[15px] leading-relaxed pt-0.5">' + esc(s) + '</span>' +
-          '</li>').join('') +
-      '</ol>' +
-      '<div class="mt-6 panel-flat p-4 flex flex-wrap items-center gap-3">' +
-        '<p class="text-[12.5px] flex-1 min-w-[180px]">ทำตามขั้นตอนแล้วยังไม่หาย?</p>' +
-        '<button data-act="nav" data-view="new" class="btn btn-primary btn-sm">' + ic('plus', 'w-4 h-4') + 'แจ้งเรื่องใหม่</button>' +
-      '</div>' +
-    '</div>';
-  }
-  return '<div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-5' + r + '">' +
-    KB.map(a =>
-      '<button data-act="kbopen" data-id="' + a.id + '" class="panel hovercard p-5 text-left flex flex-col gap-2.5 h-full">' +
-        '<div class="eyebrow">' + a.id + ' · ' + a.cat + '</div>' +
-        '<h3 class="display-md leading-snug">' + esc(a.title) + '</h3>' +
-        '<p class="text-[12.5px] text-muted leading-relaxed line-clamp-3">' + esc(a.steps[0]) + '</p>' +
-        '<div class="mt-auto pt-3.5 rule-in flex items-center justify-between gap-2">' +
-          '<span class="num text-[11.5px] text-faint">อ่าน ' + a.views + ' · ลด Ticket ได้ ' + a.deflect + '</span>' +
-          '<span class="text-accent-text">' + ic('arrowR', 'w-4 h-4') + '</span>' +
-        '</div>' +
-      '</button>').join('') +
-  '</div>';
-}
 
 /* ─────────────────────────── 14. แผงรายละเอียด Ticket (drawer) ─────────────────────────── */
 
@@ -3561,7 +3515,6 @@ function kbView() {
 function timelineOf(t) {
   const base = [
     { what:'สร้าง Ticket ผ่าน ' + t.channel + ' — ' + t.cat, who:t.requester, when:'วันนี้ 06:42', hot:false },
-    { what:'AI Assistant เสนอคู่มือที่เกี่ยวข้อง 2 บทความ ผู้แจ้งเลือกส่ง Ticket ต่อ', who:'Knowledge Assistant', when:'วันนี้ 06:43', hot:false },
     { what:'Auto Routing มอบหมายตามกฎ ' + CONAME(t.company) + ' + ' + t.cat, who:'Routing Engine', when:'วันนี้ 06:43', hot:false }
   ];
   if (t.assignee !== '—') base.push({ what:'รับเรื่องและเริ่มตรวจสอบ', who:t.assignee, when:'วันนี้ 07:05', hot:false });
@@ -3617,18 +3570,6 @@ function drawerHtml(t) {
       '<p class="text-[12.5px] text-muted leading-relaxed mt-3">' + esc(s.note) + '</p>' +
       '<p class="text-[11.5px] text-faint leading-relaxed mt-1.5">เป้าหมายตอบรับ ' + esc(p.resp) + ' · ' + esc(p.clock) + ' · ' + esc(p.report) + '</p>' +
     '</section>' +
-
-    // ทรัพย์สินที่ผูก
-    (a ?
-    '<section class="p-5 hair-b flex flex-wrap items-center gap-3">' +
-      '<div class="min-w-0 flex-1">' +
-        '<div class="eyebrow">ผูกกับทรัพย์สิน (ITAM)</div>' +
-        '<div class="text-[13.5px] font-semibold mt-1.5 num">' + esc(a.code) + ' — ' + esc(a.name) + '</div>' +
-        '<div class="text-[12.5px] text-faint mt-0.5">Ticket สะสม ' + a.tickets + ' รายการ · ซ่อมล่าสุด ' + esc(a.history[0].date) + '</div>' +
-      '</div>' +
-      '<button data-act="viewasset" data-code="' + esc(a.code) + '" class="btn btn-secondary btn-sm flex-none">' +
-        ic('ext', 'w-4 h-4') + 'ดูประวัติซ่อมบำรุง</button>' +
-    '</section>' : '') +
 
     // รายละเอียด + audit trail
     '<section class="p-5">' +
@@ -3833,7 +3774,6 @@ function paint() {
 }
 
 // สลับหน้าพร้อม skeleton สั้น ๆ เพื่อให้รู้สึกว่าระบบกำลังโหลดข้อมูลจริง
-// keepKb = true เมื่อผู้เรียกตั้ง S.kbId ไว้แล้ว (เช่น Ticket Deflection ที่ต้องเปิดบทความนั้นเลย)
 let loadTimer = null;
 function goView(v, keepKb) {
   if (v === S.view && !S.loading) { if (!keepKb) S.kbId = null; paint(); return; }
@@ -4036,14 +3976,6 @@ const ACTIONS = {
     goView('track');
     say('เปิด ' + t.id + ' ขึ้นมาใหม่แล้ว — ประวัติเดิมถูกคงไว้ทั้งหมด และนาฬิกา SLA เริ่มนับใหม่ตามระดับ ' + t.prio);
   },
-  viewasset(el) {
-    const i = ASSETS.findIndex(a => a.code === el.dataset.code);
-    closeDrawer();
-    S.assetIdx = i < 0 ? 0 : i;
-    goView('assets');
-    say('เปิดประวัติซ่อมบำรุงของ ' + el.dataset.code + ' แล้ว');
-  },
-
   // — ส่งต่อข้ามบริษัท —
   escopen() { S.escOpen = true; S.escWhy = ''; openModal(escModal()); },
   escto(el) { S.escTo = el.value; },
@@ -4110,30 +4042,16 @@ const ACTIONS = {
     say('สร้าง ' + id + ' แล้ว · กฎที่ตรง: ' + rule.team + ' · มอบหมายให้ ' + agent + ' (' + rule.mode + ') · เป้าหมายแก้ไข ' + p.res);
   },
 
-  // — ผู้ช่วย AI —
-  deflect() {
-    const h = aiHits();
-    S.deflected = true;
-    S.kbId = h[0] ? h[0].id : KB[0].id;
-    goView('kb', true);   // คงบทความที่เลือกไว้ ไม่ให้ถูกล้างตอนสลับหน้า
-    say('ยอดเยี่ยม — บันทึกเป็น Ticket Deflection แล้ว ช่วยลดปริมาณ Ticket ซ้ำซ้อนของกลุ่มบริษัท');
-  },
-  keepgoing() { S.deflected = true; paint(); say('ปิดคำแนะนำแล้ว — กรอกฟอร์มต่อได้เลย'); },
-
-  // — คลังความรู้ —
-  kbopen(el) { S.kbId = el.dataset.id; S.view = 'kb'; S.fresh = true; paint(); window.scrollTo(0, 0); },
-  kbclose() { S.kbId = null; S.fresh = true; paint(); },
-
-  // — ทรัพย์สิน / กฎ —
-  asset(el) { S.assetIdx = +el.dataset.i; paint(); },
-  rule(el) {
-    if (!canEditData()) { say(NO_EDIT_WHY); return; }
-    const i = +el.dataset.i;
-    const off = !RULES[i].on;
-    RULES[i].on = off;
+  /* ─────────── Executive Dashboard ─────────── */
+  // เปลี่ยนช่วงเวลา — prototype ใช้ชุดตัวเลขเดียว จึงบอกผู้ใช้ตรง ๆ ว่าของจริงจะดึงใหม่จาก API
+  range(el) {
+    if (S.range === el.dataset.r) return;
+    S.range = el.dataset.r;
+    S.fresh = true;
     paint();
-    say((off ? 'เปิดใช้' : 'ปิดใช้') + 'กฎข้อ ' + (i + 1) + ' แล้ว — บันทึกใน Audit Log พร้อมผู้แก้ไขและเวลา');
+    say('เปลี่ยนช่วงเวลาเป็น ' + S.range + ' วันล่าสุด — ระบบจริงจะดึงตัวเลขใหม่จากคลังข้อมูล Ticket');
   },
+  export() { say('กำลังจัดทำรายงาน Executive ' + S.range + ' วัน — ไฟล์ Excel และ PDF จะส่งเข้าอีเมลของคุณเมื่อเสร็จ'); },
 
   /* ─────────── หน้าตั้งค่าระบบ ─────────── */
   settab(el) {
