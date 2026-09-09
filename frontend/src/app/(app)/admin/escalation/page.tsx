@@ -4,6 +4,11 @@ import { AlertOctagon, Moon, Plus, Repeat, UserPlus } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
+import {
+  RecordFormDialog,
+  type FieldSpec,
+  type FieldValue,
+} from '@/components/admin/record-form-dialog';
 import { PriorityBadge } from '@/components/common/badges';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +18,13 @@ import { QueryBoundary } from '@/components/ui/query-boundary';
 import { BLOCKING_CONTACT_KEYS, CONTACT_KEY, TRIGGER_TYPE, type ContactKey } from '@/config/admin';
 import { cn } from '@/lib/cn';
 import { formatMinutes } from '@/lib/format';
-import { useEscalationContacts, useEscalationRules } from '@/lib/queries/master-data';
+import {
+  useCompanies,
+  useCreateMaster,
+  useEscalationContacts,
+  useEscalationRules,
+  useUpdateMaster,
+} from '@/lib/queries/master-data';
 import type { EscalationContact, EscalationRule } from '@/lib/types';
 
 /**
@@ -39,6 +50,102 @@ export default function EscalationPage(): React.JSX.Element {
   );
   const missingKeys = BLOCKING_CONTACT_KEYS.filter((k) => !activeKeys.has(k));
 
+  const companies = useCompanies();
+  const createRule = useCreateMaster('/escalation-rules');
+  const updateRule = useUpdateMaster('/escalation-rules');
+  const [creating, setCreating] = React.useState(false);
+
+  /** เปิด/ปิดกฎจากปุ่มในตาราง — กฎที่ปิดยังอยู่ในระบบ แค่ไม่ถูกประเมิน */
+  const toggleRule = async (rule: EscalationRule): Promise<void> => {
+    try {
+      await updateRule.mutateAsync({ id: rule.id, is_active: !rule.is_active });
+      toast.success(`${rule.is_active ? 'ປິດ' : 'ເປີດ'}ກົດ ${rule.code} ແລ້ວ`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'ບັນທຶກບໍ່ສຳເລັດ');
+    }
+  };
+
+  const ruleFields: FieldSpec[] = [
+    { kind: 'text', name: 'code', label: 'ລະຫັດກົດ', required: true, placeholder: 'ES_13' },
+    {
+      kind: 'select',
+      name: 'trigger_type',
+      label: 'ເງື່ອນໄຂກະຕຸ້ນ',
+      required: true,
+      options: Object.entries(TRIGGER_TYPE).map(([value, label]) => ({
+        value,
+        label: String(label),
+      })),
+    },
+    {
+      kind: 'select',
+      name: 'priority',
+      label: 'ໃຊ້ກັບລະດັບ',
+      hint: 'ວ່າງໄວ້ = ທຸກລະດັບ',
+      options: [
+        { value: 'P1', label: 'P1' },
+        { value: 'P2', label: 'P2' },
+        { value: 'P3', label: 'P3' },
+        { value: 'P4', label: 'P4' },
+      ],
+    },
+    { kind: 'number', name: 'threshold_minutes', label: 'ເກນເວລາ (ນາທີ)' },
+    {
+      kind: 'select',
+      name: 'threshold_clock_mode',
+      label: 'ນັບເວລາແບບ',
+      options: [
+        { value: 'business_hours', label: 'ນາທີເຮັດວຽກ' },
+        { value: 'calendar_24x7', label: 'ນາທີປະຕິທິນ (24x7)' },
+      ],
+    },
+    {
+      kind: 'text',
+      name: 'notify_contact_keys',
+      label: 'ຜູ້ຮັບແຈ້ງ',
+      required: true,
+      placeholder: 'head_of_it,incident_manager',
+      hint: `ຄັ່ນດ້ວຍ , — ໃຊ້ໄດ້: ${Object.keys(CONTACT_KEY).join(', ')}`,
+    },
+    { kind: 'text', name: 'notify_roles', label: 'ບົດບາດທີ່ແຈ້ງເພີ່ມ', placeholder: 'agent,company_admin' },
+    { kind: 'number', name: 'repeat_interval_minutes', label: 'ແຈ້ງຊ້ຳທຸກ (ນາທີ)' },
+    {
+      kind: 'checkbox',
+      name: 'notify_outside_business_hours',
+      label: 'ແຈ້ງນອກເວລາເຮັດວຽກໄດ້',
+      hint: 'SLA 3.1 ໃຫ້ On-call ຄຸ້ມສະເພາະ P1',
+    },
+    {
+      kind: 'select',
+      name: 'company_id',
+      label: 'ຂອບເຂດ',
+      options: [
+        { value: '', label: 'ທັງກຸ່ມ' },
+        ...(companies.data ?? []).map((c) => ({ value: String(c.id), label: c.code })),
+      ],
+    },
+    { kind: 'checkbox', name: 'is_active', label: 'ເປີດໃຊ້ງານ' },
+  ];
+
+  const handleRuleSubmit = async (values: Record<string, FieldValue>): Promise<void> => {
+    const num = (v: FieldValue | undefined): number | null =>
+      v === '' || v === null || v === undefined ? null : Number(v);
+    await createRule.mutateAsync({
+      code: String(values.code ?? ''),
+      trigger_type: String(values.trigger_type ?? ''),
+      notify_contact_keys: String(values.notify_contact_keys ?? ''),
+      notify_roles: String(values.notify_roles ?? ''),
+      priority: String(values.priority ?? ''),
+      threshold_minutes: num(values.threshold_minutes),
+      threshold_clock_mode: String(values.threshold_clock_mode ?? 'business_hours'),
+      repeat_interval_minutes: num(values.repeat_interval_minutes),
+      notify_outside_business_hours: values.notify_outside_business_hours === true,
+      company_id: values.company_id ? Number(values.company_id) : null,
+      is_active: values.is_active === true,
+    });
+    toast.success(`ເພີ່ມກົດ ${values.code} ແລ້ວ`);
+  };
+
   /*
    * กฎที่อ้างผู้รับแจ้งที่ยังไม่มีตัวตน — ส่งแจ้งเตือนไม่ถึงใครเลย
    *
@@ -58,6 +165,12 @@ export default function EscalationPage(): React.JSX.Element {
       <PageHeader
         title="ກົດຍົກລະດັບ ແລະ ຜູ້ຮັບແຈ້ງ"
         description="ES-01…ES-12 ຕາມ AIDC-IT-SLA-001 — ແກ້ໄດ້ໂດຍບໍ່ຕ້ອງ deploy ໃໝ່"
+        actions={
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            ເພີ່ມກົດ
+          </Button>
+        }
       />
 
       {missingKeys.length > 0 && (
@@ -89,7 +202,11 @@ export default function EscalationPage(): React.JSX.Element {
         <CardBody className="p-0">
           {tab === 'rules' ? (
             <QueryBoundary query={rulesQuery}>
-              <RulesTable activeKeys={activeKeys} rules={rules} />
+              <RulesTable
+                activeKeys={activeKeys}
+                rules={rules}
+                onToggle={(r) => void toggleRule(r)}
+              />
             </QueryBoundary>
           ) : (
             <QueryBoundary query={contactsQuery}>
@@ -118,6 +235,28 @@ export default function EscalationPage(): React.JSX.Element {
           </p>
         </CardBody>
       </Card>
+      <RecordFormDialog
+        open={creating}
+        title="ເພີ່ມກົດຍົກລະດັບ"
+        description="ກົດເກັບໃນຕາຕະລາງ ບໍ່ໄດ້ຝັງໃນໂຄດ ຈຶ່ງແກ້ໄດ້ໂດຍບໍ່ຕ້ອງ deploy ໃໝ່"
+        fields={ruleFields}
+        initial={{
+          code: '',
+          trigger_type: '',
+          priority: '',
+          threshold_minutes: null,
+          threshold_clock_mode: 'business_hours',
+          notify_contact_keys: '',
+          notify_roles: '',
+          repeat_interval_minutes: null,
+          notify_outside_business_hours: false,
+          company_id: '',
+          is_active: true,
+        }}
+        onClose={() => setCreating(false)}
+        onSubmit={handleRuleSubmit}
+      />
+
     </div>
   );
 }
@@ -125,7 +264,9 @@ export default function EscalationPage(): React.JSX.Element {
 function RulesTable({
   activeKeys,
   rules,
+  onToggle,
 }: {
+  onToggle: (rule: EscalationRule) => void;
   activeKeys: Set<string>;
   rules: EscalationRule[];
 }): React.JSX.Element {
@@ -231,7 +372,7 @@ function RulesTable({
       render: (r) => (
         <button
           type="button"
-          onClick={() => toast.success(`${r.is_active ? 'ປິດ' : 'ເປີດ'}ກົດ ${r.code} ແລ້ວ`)}
+          onClick={() => onToggle(r)}
           className={cn(
             // เป็นปุ่มกดจริง ไม่ใช่ป้ายสถานะ จึงต้องสูงพอให้แตะด้วยนิ้วได้ (กฎ M-1)
             'inline-flex min-h-[36px] items-center rounded-full px-3 text-caption font-semibold',
@@ -319,7 +460,9 @@ function ContactsTable({
                 </span>
                 <Button
                   size="sm"
-                  onClick={() => toast.info(`ເລືອກຜູ້ໃຊ້ເພື່ອຜູກເປັນ ${CONTACT_KEY[key]}`)}
+                  disabled
+                  title="ຍັງບໍ່ມີ endpoint ສຳລັບຜູກຜູ້ຮັບແຈ້ງ"
+                  onClick={() => undefined}
                 >
                   <UserPlus className="h-4 w-4" aria-hidden="true" />
                   ຜູກຄົນ
@@ -331,7 +474,12 @@ function ContactsTable({
       )}
 
       <div className="flex justify-end border-b border-hair px-4 py-3 lg:px-5">
-        <Button size="sm" variant="secondary" onClick={() => toast.info('ຟອມເພີ່ມຜູ້ຮັບແຈ້ງ')}>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled
+          title="ຍັງບໍ່ມີ endpoint ສຳລັບຜູກຜູ້ຮັບແຈ້ງ"
+        >
           <Plus className="h-4 w-4" aria-hidden="true" />
           ເພີ່ມຜູ້ຮັບແຈ້ງ
         </Button>

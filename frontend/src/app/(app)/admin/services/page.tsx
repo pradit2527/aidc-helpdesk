@@ -5,6 +5,11 @@ import { AlertTriangle, CalendarClock, Plus, Send } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
+import {
+  RecordFormDialog,
+  type FieldSpec,
+  type FieldValue,
+} from '@/components/admin/record-form-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -14,6 +19,8 @@ import { SERVICE_GROUP, SERVICE_TIER, type ServiceGroup, type ServiceTier } from
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatMinutes, formatPercent } from '@/lib/format';
 import {
+  useCompanies,
+  useCreateMaster,
   useMaintenanceWindows,
   useServiceOutages,
   useServices,
@@ -40,6 +47,64 @@ export default function ServicesPage(): React.JSX.Element {
 
   const openOutages = outages.filter((o) => o.ended_at === null);
   const unnotified = windows.filter((w) => w.notified_at === null);
+
+  const companies = useCompanies();
+  const createService = useCreateMaster('/services');
+  const [creating, setCreating] = React.useState(false);
+
+  const serviceFields: FieldSpec[] = [
+    { kind: 'text', name: 'code', label: 'ລະຫັດ', required: true, placeholder: 'SRV_ERP' },
+    { kind: 'text', name: 'name_th', label: 'ຊື່ລະບົບງານ', required: true },
+    {
+      kind: 'select',
+      name: 'service_group',
+      label: 'ກຸ່ມ',
+      required: true,
+      options: Object.entries(SERVICE_GROUP).map(([value, label]) => ({
+        value,
+        label: String(label),
+      })),
+    },
+    {
+      kind: 'select',
+      name: 'service_tier',
+      label: 'ລະດັບຄວາມພ້ອມໃຊ້ງານ',
+      required: true,
+      options: Object.entries(SERVICE_TIER).map(([value, tier]) => ({
+        value,
+        label: `${tier.label} · ≥ ${tier.uptime}`,
+      })),
+    },
+    {
+      kind: 'select',
+      name: 'company_id',
+      label: 'ຂອບເຂດ',
+      options: [
+        { value: '', label: 'ທັງກຸ່ມ' },
+        ...(companies.data ?? []).map((c) => ({ value: String(c.id), label: c.code })),
+      ],
+    },
+    {
+      kind: 'checkbox',
+      name: 'is_24x7',
+      label: 'ໃຫ້ບໍລິການ 24x7',
+      hint: 'ຕິກແລ້ວຕົວຫານຂອງ Uptime ເປັນ 43,200 ນາທີ/ເດືອນ',
+    },
+    { kind: 'checkbox', name: 'is_active', label: 'ເປີດໃຊ້ງານ' },
+  ];
+
+  const handleServiceSubmit = async (values: Record<string, FieldValue>): Promise<void> => {
+    await createService.mutateAsync({
+      code: String(values.code ?? ''),
+      name_th: String(values.name_th ?? ''),
+      service_group: String(values.service_group ?? ''),
+      service_tier: String(values.service_tier ?? 'standard'),
+      company_id: values.company_id ? Number(values.company_id) : null,
+      is_24x7: values.is_24x7 === true,
+      is_active: values.is_active === true,
+    });
+    toast.success(`ເພີ່ມ ${values.name_th} ແລ້ວ`);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -74,7 +139,16 @@ export default function ServicesPage(): React.JSX.Element {
         </div>
 
         <div className="flex justify-end border-b border-hair px-4 py-3 lg:px-5">
-          <Button size="sm" onClick={() => toast.info('ຟອມເພີ່ມລາຍການໃໝ່')}>
+          {/*
+            สองแท็บขวายังไม่มี endpoint เขียนรองรับ จึงปิดปุ่มพร้อมบอกเหตุผล
+            แทนที่จะเปิดฟอร์มที่กดบันทึกแล้วไม่เกิดอะไรขึ้น
+          */}
+          <Button
+            size="sm"
+            onClick={() => setCreating(true)}
+            disabled={tab !== 'registry'}
+            {...(tab !== 'registry' ? { title: 'ຍັງບໍ່ຮອງຮັບການບັນທຶກຈາກໜ້ານີ້' } : {})}
+          >
             <Plus className="h-4 w-4" aria-hidden="true" />
             {tab === 'registry' ? 'ເພີ່ມລະບົບງານ' : tab === 'outages' ? 'ບັນທຶກເຫດຂັດຂ້ອງ' : 'ວາງແຜນບຳລຸງຮັກສາ'}
           </Button>
@@ -98,6 +172,23 @@ export default function ServicesPage(): React.JSX.Element {
           )}
         </CardBody>
       </Card>
+      <RecordFormDialog
+        open={creating}
+        title="ເພີ່ມລະບົບງານ"
+        fields={serviceFields}
+        initial={{
+          code: '',
+          name_th: '',
+          service_group: 'infrastructure',
+          service_tier: 'standard',
+          company_id: '',
+          is_24x7: false,
+          is_active: true,
+        }}
+        onClose={() => setCreating(false)}
+        onSubmit={handleServiceSubmit}
+      />
+
     </div>
   );
 }

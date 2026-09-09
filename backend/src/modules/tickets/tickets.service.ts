@@ -4,6 +4,7 @@ import type { Impact, Priority, TicketStatus, Urgency } from '../../common/const
 import type { AccessScope } from '../../common/scope';
 import { elapsedMinutes, slaStatus } from '../../common/sla/business-time';
 import { CreateTicketUseCase } from '../../application/use-cases/create-ticket.use-case';
+import { SuperworkService } from '../../integrations/superwork/superwork.service';
 import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
 import { ReassessTicketPriorityUseCase } from '../../application/use-cases/reassess-ticket-priority.use-case';
 import { SlaConfigRepository } from '../../db/repositories/sla-config.repository';
@@ -55,6 +56,7 @@ export class TicketsService {
     private readonly changeTicketStatus: ChangeTicketStatusUseCase,
     private readonly reassessPriority: ReassessTicketPriorityUseCase,
     private readonly writes: TicketWriteRepository,
+    private readonly superwork: SuperworkService,
   ) {}
 
   async list(scope: AccessScope, query: Record<string, string>): Promise<TicketListResponseDto> {
@@ -204,7 +206,19 @@ export class TicketsService {
       ...(dto.source_device !== undefined ? { sourceDevice: dto.source_device } : {}),
       ...(dto.asset_tag !== undefined ? { assetTag: dto.asset_tag } : {}),
     });
-    return this.detail(scope, id);
+
+    const ticket = await this.detail(scope, id);
+
+    /*
+     * ส่งขึ้นบอร์ด Super Work แบบไม่รอผล
+     *
+     * ไม่ await โดยตั้งใจ — ผู้ใช้กดแจ้งเรื่องเพื่อขอความช่วยเหลือ ไม่ใช่เพื่อ
+     * ลงบอร์ดโครงการ ถ้า Super Work ช้าหรือล่ม การแจ้งเรื่องต้องไม่ช้าหรือล้มตาม
+     * ตัว service กลืนข้อผิดพลาดทั้งหมดลง log อยู่แล้ว
+     */
+    this.superwork.mirrorTicketInBackground(ticket);
+
+    return ticket;
   }
 
   async changeStatus(

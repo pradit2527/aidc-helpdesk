@@ -8,6 +8,12 @@ import {
   NotFoundError,
   ValidationError,
 } from '../../common/errors/domain-error';
+import {
+  CLOCK_START_EVENT,
+  SERVICE_GROUP,
+  SERVICE_TIER,
+  TARGET_MODE,
+} from '../../common/constants';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
@@ -820,6 +826,1092 @@ export class MasterDataService {
       throw new NotFoundError('CATEGORY_NOT_FOUND', 'ບໍ່ພົບໝວດໝູ່ທີ່ລະບຸ', { id });
     }
     return found;
+  }
+
+
+  /* ══════════════════════════════════════════════════════════════════════════
+   * การเขียนข้อมูลหลัก
+   *
+   * ทุกเมธอดในส่วนนี้ใช้กติกาเดียวกันสี่ข้อ เขียนไว้ตรงนี้ครั้งเดียว
+   * แทนที่จะย้ำซ้ำในทุกตัว
+   *
+   *  1. ไม่มีการลบ มีแต่ปิดด้วย is_active = false
+   *     ticket และรายงานย้อนหลังอ้างถึงแถวเหล่านี้ด้วย id การลบทำให้ประวัติ
+   *     ชี้ไปที่ความว่างเปล่า และ FK ก็ปฏิเสธอยู่ดีด้วยข้อความที่ผู้ใช้อ่านไม่รู้เรื่อง
+   *     (ตารางที่ไม่มี is_active เช่น holiday จึงแก้ได้อย่างเดียว)
+   *
+   *  2. company_id = null คือ "ใช้ร่วมกันทั้งกลุ่ม" ซึ่งมีแต่ super_admin สร้างได้
+   *     ผู้ดูแลของบริษัทเดียวไม่ควรสร้างของที่บังคับใช้กับอีก 6 บริษัท
+   *
+   *  3. แถวนอกขอบเขตตอบ 404 ไม่ใช่ 403 — การตอบ 403 ยืนยันว่าแถวนั้นมีอยู่จริง
+   *     ซึ่งเป็นข้อมูลที่ไม่ควรบอก (กฎเดียวกับ US-07 AC-2)
+   *     ทำได้ด้วยการอ่านผ่านเมธอดอ่านปกติที่กรองขอบเขตอยู่แล้ว
+   *
+   *  4. code แก้ไม่ได้หลังสร้าง — รายงาน กฎ routing และไฟล์นำเข้าอ้างถึง code
+   *     ไม่ใช่ id การเปลี่ยนทีหลังทำให้ของเหล่านั้นชี้ผิดโดยไม่มีอะไรฟ้อง
+   * ══════════════════════════════════════════════════════════════════════════ */
+
+  /** null = ระดับกลุ่ม (เฉพาะ super_admin) · มีค่า = ต้องอยู่ในขอบเขต */
+  private assertCanWrite(scope: AccessScope, companyId: number | null): void {
+    if (companyId === null) {
+      if (!scope.isSuperAdmin) {
+        throw new ForbiddenError(
+          'FORBIDDEN',
+          'ມີແຕ່ຜູ້ດູແລລະບົບເທົ່ານັ້ນທີ່ສ້າງລາຍການລະດັບກຸ່ມໄດ້',
+        );
+      }
+      return;
+    }
+    if (!scope.inScope(companyId)) {
+      throw new ForbiddenError('FORBIDDEN', 'ບໍລິສັດນີ້ຢູ່ນອກຂອບເຂດຂອງທ່ານ');
+    }
+  }
+
+  private static text(value: unknown, field: string, min: number, label: string): string {
+    const v = typeof value === 'string' ? value.trim() : '';
+    if (v.length < min) {
+      throw new ValidationError('VALIDATION_ERROR', label, [{ field, message: label }]);
+    }
+    return v;
+  }
+
+  /** ช่องที่ปล่อยว่างได้ — สตริงว่างเก็บเป็น null ไม่ใช่ '' เพื่อให้ค้นหาง่าย */
+  private static optional(value: unknown): string | null {
+    const v = typeof value === 'string' ? value.trim() : '';
+    return v.length === 0 ? null : v;
+  }
+
+  private static codeOf(value: unknown, field = 'code'): string {
+    const v = typeof value === 'string' ? value.trim().toUpperCase() : '';
+    if (!/^[A-Z0-9_]{2,40}$/.test(v)) {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'ລະຫັດຕ້ອງເປັນ A–Z, 0–9 ຫຼື _ ຄວາມຍາວ 2–40 ຕົວ',
+        [{ field, message: 'ຮູບແບບລະຫັດບໍ່ຖືກຕ້ອງ' }],
+      );
+    }
+    return v;
+  }
+
+  /** ค่าที่ฐานข้อมูลมี CHECK คุมอยู่ — ดักที่นี่ให้ได้ข้อความที่อ่านรู้เรื่องแทน 500 */
+  private static oneOf<T extends string>(
+    value: unknown,
+    allowed: readonly T[],
+    field: string,
+  ): T {
+    if (typeof value !== 'string' || !allowed.includes(value as T)) {
+      throw new ValidationError('VALIDATION_ERROR', `ຄ່າຂອງ ${field} ບໍ່ຖືກຕ້ອງ`, [
+        { field, message: `ຕ້ອງເປັນໜຶ່ງໃນ ${allowed.join(', ')}` },
+      ]);
+    }
+    return value as T;
+  }
+
+  /**
+   * แปลงการชนคีย์ซ้ำของ Postgres เป็นข้อความที่ผู้ใช้เข้าใจ
+   *
+   * คืน Error ให้ผู้เรียก throw เอง แทนที่จะ throw ในนี้ เพื่อให้ TypeScript
+   * เห็นได้ชัดว่าเส้นทางนั้นจบแน่ ๆ ไม่ต้องพึ่งการอนุมานชนิด never
+   */
+  private static conflictError(
+    err: unknown,
+    constraint: string,
+    code: string,
+    message: string,
+  ): Error {
+    if (err instanceof Error && err.message.includes(constraint)) {
+      return new ConflictError(code, message);
+    }
+    return err instanceof Error ? err : new Error(String(err));
+  }
+
+  private static pick<T extends { id: number }>(
+    rows: readonly T[],
+    id: number,
+    code: string,
+    message: string,
+  ): T {
+    const found = rows.find((r) => r.id === id);
+    if (!found) throw new NotFoundError(code, message, { id });
+    return found;
+  }
+
+  private static requireCompanyId(value: unknown): number {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຕ້ອງລະບຸບໍລິສັດ', [
+        { field: 'company_id', message: 'ຕ້ອງລະບຸບໍລິສັດ' },
+      ]);
+    }
+    return n;
+  }
+
+  // ── บริษัท ────────────────────────────────────────────────────────────────
+
+  /**
+   * สร้างบริษัทใหม่ในกลุ่ม
+   *
+   * จำกัดที่ super_admin เท่านั้น ไม่ใช่แค่ company.manage — การเพิ่มบริษัท
+   * เปลี่ยนรูปของทั้งกลุ่ม ไม่ใช่การแก้ข้อมูลภายในบริษัทใดบริษัทหนึ่ง
+   */
+  async createCompany(
+    scope: AccessScope,
+    input: {
+      code: string;
+      name_th: string;
+      name_en?: string | null;
+      contact_email?: string | null;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('company.manage');
+    if (!scope.isSuperAdmin) {
+      throw new ForbiddenError('FORBIDDEN', 'ມີແຕ່ຜູ້ດູແລລະບົບເທົ່ານັ້ນທີ່ເພີ່ມບໍລິສັດໄດ້');
+    }
+
+    const code = MasterDataService.codeOf(input.code);
+    const nameTh = MasterDataService.text(input.name_th, 'name_th', 2, 'ຊື່ບໍລິສັດສັ້ນເກີນໄປ');
+
+    try {
+      const [row] = await this.db
+        .insert(company)
+        .values({
+          code,
+          nameTh,
+          nameEn: MasterDataService.optional(input.name_en),
+          contactEmail: MasterDataService.optional(input.contact_email),
+          isActive: input.is_active ?? true,
+        })
+        .returning({ id: company.id });
+      return MasterDataService.pick(
+        await this.companies(scope),
+        row!.id,
+        'COMPANY_NOT_FOUND',
+        'ບໍ່ພົບບໍລິສັດ',
+      );
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'company_code_key',
+        'COMPANY_CODE_EXISTS',
+        `ມີລະຫັດບໍລິສັດ ${code} ຢູ່ແລ້ວ`,
+      );
+    }
+  }
+
+  async updateCompany(
+    scope: AccessScope,
+    id: number,
+    input: {
+      name_th?: string;
+      name_en?: string | null;
+      contact_email?: string | null;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('company.manage');
+    const current = MasterDataService.pick(
+      await this.companies(scope),
+      id,
+      'COMPANY_NOT_FOUND',
+      'ບໍ່ພົບບໍລິສັດ',
+    );
+
+    const patch: Record<string, unknown> = {};
+    if (input.name_th !== undefined) {
+      patch.nameTh = MasterDataService.text(input.name_th, 'name_th', 2, 'ຊື່ບໍລິສັດສັ້ນເກີນໄປ');
+    }
+    if (input.name_en !== undefined) patch.nameEn = MasterDataService.optional(input.name_en);
+    if (input.contact_email !== undefined) {
+      patch.contactEmail = MasterDataService.optional(input.contact_email);
+    }
+    if (input.is_active !== undefined) patch.isActive = input.is_active;
+    if (Object.keys(patch).length === 0) return current;
+
+    await this.db.update(company).set(patch).where(eq(company.id, id));
+    return MasterDataService.pick(
+      await this.companies(scope),
+      id,
+      'COMPANY_NOT_FOUND',
+      'ບໍ່ພົບບໍລິສັດ',
+    );
+  }
+
+  // ── แผนก ──────────────────────────────────────────────────────────────────
+
+  /**
+   * สร้างแผนก
+   *
+   * department.company_id เป็น NOT NULL — ไม่มีแนวคิด "แผนกระดับกลุ่ม"
+   * ต่างจากตารางอื่นในไฟล์นี้ที่ null แปลว่าใช้ร่วมกันทั้งกลุ่ม
+   */
+  async createDepartment(
+    scope: AccessScope,
+    input: { company_id: number; name: string; is_active?: boolean },
+  ) {
+    scope.require('department.manage');
+    const companyId = MasterDataService.requireCompanyId(input.company_id);
+    const name = MasterDataService.text(input.name, 'name', 2, 'ຊື່ພະແນກສັ້ນເກີນໄປ');
+    this.assertCanWrite(scope, companyId);
+
+    try {
+      const [row] = await this.db
+        .insert(department)
+        .values({ companyId, name, isActive: input.is_active ?? true })
+        .returning({ id: department.id });
+      return MasterDataService.pick(
+        await this.departments(scope),
+        row!.id,
+        'DEPARTMENT_NOT_FOUND',
+        'ບໍ່ພົບພະແນກ',
+      );
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_department_company_name',
+        'DEPARTMENT_EXISTS',
+        `ມີພະແນກຊື່ ${name} ໃນບໍລິສັດນີ້ຢູ່ແລ້ວ`,
+      );
+    }
+  }
+
+  async updateDepartment(
+    scope: AccessScope,
+    id: number,
+    input: { name?: string; is_active?: boolean },
+  ) {
+    scope.require('department.manage');
+    const current = MasterDataService.pick(
+      await this.departments(scope),
+      id,
+      'DEPARTMENT_NOT_FOUND',
+      'ບໍ່ພົບພະແນກ',
+    );
+
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) {
+      patch.name = MasterDataService.text(input.name, 'name', 2, 'ຊື່ພະແນກສັ້ນເກີນໄປ');
+    }
+    if (input.is_active !== undefined) patch.isActive = input.is_active;
+    if (Object.keys(patch).length === 0) return current;
+
+    try {
+      await this.db.update(department).set(patch).where(eq(department.id, id));
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_department_company_name',
+        'DEPARTMENT_EXISTS',
+        'ມີພະແນກຊື່ນີ້ໃນບໍລິສັດນີ້ຢູ່ແລ້ວ',
+      );
+    }
+    return MasterDataService.pick(
+      await this.departments(scope),
+      id,
+      'DEPARTMENT_NOT_FOUND',
+      'ບໍ່ພົບພະແນກ',
+    );
+  }
+
+  // ── ทะเบียนระบบงาน ────────────────────────────────────────────────────────
+
+  async createService(
+    scope: AccessScope,
+    input: {
+      code: string;
+      name_th: string;
+      service_group: string;
+      service_tier?: string;
+      company_id?: number | null;
+      owner_user_id?: number | null;
+      is_24x7?: boolean;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('service.manage');
+    const code = MasterDataService.codeOf(input.code);
+    const nameTh = MasterDataService.text(input.name_th, 'name_th', 2, 'ຊື່ລະບົບງານສັ້ນເກີນໄປ');
+    const serviceGroup = MasterDataService.oneOf(
+      input.service_group,
+      SERVICE_GROUP,
+      'service_group',
+    );
+    const serviceTier = MasterDataService.oneOf(
+      input.service_tier ?? 'standard',
+      SERVICE_TIER,
+      'service_tier',
+    );
+    const companyId = input.company_id ?? null;
+    this.assertCanWrite(scope, companyId);
+
+    try {
+      const [row] = await this.db
+        .insert(service)
+        .values({
+          companyId,
+          code,
+          nameTh,
+          serviceGroup,
+          serviceTier,
+          ownerUserId: input.owner_user_id ?? null,
+          is24x7: input.is_24x7 ?? false,
+          isActive: input.is_active ?? true,
+        })
+        .returning({ id: service.id });
+      return MasterDataService.pick(
+        await this.services(scope),
+        row!.id,
+        'SERVICE_NOT_FOUND',
+        'ບໍ່ພົບລະບົບງານ',
+      );
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_service_company_code',
+        'SERVICE_CODE_EXISTS',
+        `ມີລະຫັດ ${code} ຢູ່ແລ້ວ`,
+      );
+    }
+  }
+
+  async updateService(
+    scope: AccessScope,
+    id: number,
+    input: {
+      name_th?: string;
+      service_group?: string;
+      service_tier?: string;
+      owner_user_id?: number | null;
+      is_24x7?: boolean;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('service.manage');
+    const current = MasterDataService.pick(
+      await this.services(scope),
+      id,
+      'SERVICE_NOT_FOUND',
+      'ບໍ່ພົບລະບົບງານ',
+    );
+
+    const patch: Record<string, unknown> = {};
+    if (input.name_th !== undefined) {
+      patch.nameTh = MasterDataService.text(input.name_th, 'name_th', 2, 'ຊື່ລະບົບງານສັ້ນເກີນໄປ');
+    }
+    if (input.service_group !== undefined) {
+      patch.serviceGroup = MasterDataService.oneOf(
+        input.service_group,
+        SERVICE_GROUP,
+        'service_group',
+      );
+    }
+    if (input.service_tier !== undefined) {
+      patch.serviceTier = MasterDataService.oneOf(input.service_tier, SERVICE_TIER, 'service_tier');
+    }
+    if (input.owner_user_id !== undefined) patch.ownerUserId = input.owner_user_id;
+    if (input.is_24x7 !== undefined) patch.is24x7 = input.is_24x7;
+    if (input.is_active !== undefined) patch.isActive = input.is_active;
+    if (Object.keys(patch).length === 0) return current;
+
+    await this.db.update(service).set(patch).where(eq(service.id, id));
+    return MasterDataService.pick(
+      await this.services(scope),
+      id,
+      'SERVICE_NOT_FOUND',
+      'ບໍ່ພົບລະບົບງານ',
+    );
+  }
+
+  // ── ซอฟต์แวร์ที่อนุมัติ ────────────────────────────────────────────────────
+
+  async createApprovedSoftware(
+    scope: AccessScope,
+    input: {
+      name: string;
+      version?: string | null;
+      license_type?: string | null;
+      note?: string | null;
+      company_id?: number | null;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('service.manage');
+    const name = MasterDataService.text(input.name, 'name', 2, 'ຊື່ຊອບແວສັ້ນເກີນໄປ');
+    const companyId = input.company_id ?? null;
+    this.assertCanWrite(scope, companyId);
+
+    try {
+      const [row] = await this.db
+        .insert(approvedSoftware)
+        .values({
+          companyId,
+          name,
+          version: MasterDataService.optional(input.version),
+          licenseType: MasterDataService.optional(input.license_type),
+          note: MasterDataService.optional(input.note),
+          isActive: input.is_active ?? true,
+        })
+        .returning({ id: approvedSoftware.id });
+      return MasterDataService.pick(
+        await this.approvedSoftwareList(scope),
+        row!.id,
+        'SOFTWARE_NOT_FOUND',
+        'ບໍ່ພົບຊອບແວ',
+      );
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_approved_software',
+        'SOFTWARE_EXISTS',
+        `ມີ ${name} ລຸ້ນນີ້ຢູ່ແລ້ວ`,
+      );
+    }
+  }
+
+  async updateApprovedSoftware(
+    scope: AccessScope,
+    id: number,
+    input: {
+      name?: string;
+      version?: string | null;
+      license_type?: string | null;
+      note?: string | null;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('service.manage');
+    const current = MasterDataService.pick(
+      await this.approvedSoftwareList(scope),
+      id,
+      'SOFTWARE_NOT_FOUND',
+      'ບໍ່ພົບຊອບແວ',
+    );
+
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) {
+      patch.name = MasterDataService.text(input.name, 'name', 2, 'ຊື່ຊອບແວສັ້ນເກີນໄປ');
+    }
+    if (input.version !== undefined) patch.version = MasterDataService.optional(input.version);
+    if (input.license_type !== undefined) {
+      patch.licenseType = MasterDataService.optional(input.license_type);
+    }
+    if (input.note !== undefined) patch.note = MasterDataService.optional(input.note);
+    if (input.is_active !== undefined) patch.isActive = input.is_active;
+    if (Object.keys(patch).length === 0) return current;
+
+    await this.db.update(approvedSoftware).set(patch).where(eq(approvedSoftware.id, id));
+    return MasterDataService.pick(
+      await this.approvedSoftwareList(scope),
+      id,
+      'SOFTWARE_NOT_FOUND',
+      'ບໍ່ພົບຊອບແວ',
+    );
+  }
+
+  // ── วันหยุด ───────────────────────────────────────────────────────────────
+
+  /**
+   * เพิ่มวันหยุด
+   *
+   * ตารางนี้ว่างมาตลอด (Q-03) และตราบใดที่ยังว่าง เครื่องคำนวณ SLA จะนับ
+   * วันหยุดเป็นวันทำการ ทำให้กำหนดเวลาที่คำนวณได้เร็วกว่าความจริง —
+   * หน้าจอนี้จึงเป็นทางแก้ประเด็นนั้นโดยตรง ไม่ใช่แค่ตารางอ้างอิงอีกอัน
+   */
+  async createHoliday(
+    scope: AccessScope,
+    input: { holiday_date: string; name: string; company_id?: number | null },
+  ) {
+    scope.require('business_hours.manage');
+    const name = MasterDataService.text(input.name, 'name', 2, 'ຊື່ວັນພັກສັ້ນເກີນໄປ');
+    const holidayDate = MasterDataService.text(
+      input.holiday_date,
+      'holiday_date',
+      10,
+      'ຕ້ອງລະບຸວັນທີ',
+    );
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(holidayDate)) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຮູບແບບວັນທີບໍ່ຖືກຕ້ອງ', [
+        { field: 'holiday_date', message: 'ຕ້ອງເປັນ YYYY-MM-DD' },
+      ]);
+    }
+    const companyId = input.company_id ?? null;
+    this.assertCanWrite(scope, companyId);
+
+    try {
+      const [row] = await this.db
+        .insert(holiday)
+        .values({ companyId, holidayDate, name })
+        .returning({ id: holiday.id });
+      return MasterDataService.pick(
+        await this.holidays(scope),
+        row!.id,
+        'HOLIDAY_NOT_FOUND',
+        'ບໍ່ພົບວັນພັກ',
+      );
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_holiday_company_date',
+        'HOLIDAY_EXISTS',
+        `ມີວັນພັກວັນທີ ${holidayDate} ຢູ່ແລ້ວ`,
+      );
+    }
+  }
+
+  async updateHoliday(
+    scope: AccessScope,
+    id: number,
+    input: { name?: string; holiday_date?: string },
+  ) {
+    scope.require('business_hours.manage');
+    const current = MasterDataService.pick(
+      await this.holidays(scope),
+      id,
+      'HOLIDAY_NOT_FOUND',
+      'ບໍ່ພົບວັນພັກ',
+    );
+
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) {
+      patch.name = MasterDataService.text(input.name, 'name', 2, 'ຊື່ວັນພັກສັ້ນເກີນໄປ');
+    }
+    if (input.holiday_date !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.holiday_date)) {
+        throw new ValidationError('VALIDATION_ERROR', 'ຮູບແບບວັນທີບໍ່ຖືກຕ້ອງ', [
+          { field: 'holiday_date', message: 'ຕ້ອງເປັນ YYYY-MM-DD' },
+        ]);
+      }
+      patch.holidayDate = input.holiday_date;
+    }
+    if (Object.keys(patch).length === 0) return current;
+
+    try {
+      await this.db.update(holiday).set(patch).where(eq(holiday.id, id));
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_holiday_company_date',
+        'HOLIDAY_EXISTS',
+        'ມີວັນພັກວັນທີນີ້ຢູ່ແລ້ວ',
+      );
+    }
+    return MasterDataService.pick(
+      await this.holidays(scope),
+      id,
+      'HOLIDAY_NOT_FOUND',
+      'ບໍ່ພົບວັນພັກ',
+    );
+  }
+
+  // ── เวลาทำการ ─────────────────────────────────────────────────────────────
+
+  /**
+   * แก้เวลาทำการรายวัน
+   *
+   * มีแต่แก้ ไม่มีสร้าง — seed วางไว้ครบ 7 วันต่อบริษัทอยู่แล้ว การเพิ่มแถว
+   * ใหม่มีแต่จะชนคีย์ (company_id, day_of_week) ที่ unique อยู่
+   */
+  async updateBusinessHours(
+    scope: AccessScope,
+    id: number,
+    input: { start_time?: string; end_time?: string; is_working_day?: boolean },
+  ) {
+    scope.require('business_hours.manage');
+    const current = MasterDataService.pick(
+      await this.businessHours(scope),
+      id,
+      'BUSINESS_HOURS_NOT_FOUND',
+      'ບໍ່ພົບເວລາເຮັດວຽກ',
+    );
+
+    const time = (value: string, field: string): string => {
+      if (!/^\d{2}:\d{2}(:\d{2})?$/.test(value)) {
+        throw new ValidationError('VALIDATION_ERROR', 'ຮູບແບບເວລາບໍ່ຖືກຕ້ອງ', [
+          { field, message: 'ຕ້ອງເປັນ HH:MM' },
+        ]);
+      }
+      return value.length === 5 ? `${value}:00` : value;
+    };
+
+    const patch: Record<string, unknown> = {};
+    if (input.start_time !== undefined) patch.startTime = time(input.start_time, 'start_time');
+    if (input.end_time !== undefined) patch.endTime = time(input.end_time, 'end_time');
+    if (input.is_working_day !== undefined) patch.isWorkingDay = input.is_working_day;
+    if (Object.keys(patch).length === 0) return current;
+
+    /*
+     * ฐานข้อมูลมี CHECK ว่า start_time < end_time อยู่แล้ว แต่ดักที่นี่ก่อน
+     * เพื่อให้ได้ 422 พร้อมชื่อช่องที่ผิด แทน 500 ที่บอกแค่ชื่อ constraint
+     */
+    const start = (patch.startTime as string | undefined) ?? `${current.start_time}`;
+    const end = (patch.endTime as string | undefined) ?? `${current.end_time}`;
+    if (start >= end) {
+      throw new ValidationError('VALIDATION_ERROR', 'ເວລາເລີ່ມຕ້ອງກ່ອນເວລາເລີກ', [
+        { field: 'end_time', message: 'ຕ້ອງຫຼັງເວລາເລີ່ມ' },
+      ]);
+    }
+
+    await this.db.update(businessHours).set(patch).where(eq(businessHours.id, id));
+    return MasterDataService.pick(
+      await this.businessHours(scope),
+      id,
+      'BUSINESS_HOURS_NOT_FOUND',
+      'ບໍ່ພົບເວລາເຮັດວຽກ',
+    );
+  }
+
+  // ── แม่แบบรายการตรวจ ──────────────────────────────────────────────────────
+
+  async createChecklistTemplate(
+    scope: AccessScope,
+    input: {
+      code: string;
+      name_th: string;
+      doc_ref?: string | null;
+      company_id?: number | null;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('category.manage');
+    const code = MasterDataService.codeOf(input.code);
+    const nameTh = MasterDataService.text(input.name_th, 'name_th', 2, 'ຊື່ແມ່ແບບສັ້ນເກີນໄປ');
+    const companyId = input.company_id ?? null;
+    this.assertCanWrite(scope, companyId);
+
+    try {
+      const [row] = await this.db
+        .insert(checklistTemplate)
+        .values({
+          companyId,
+          code,
+          nameTh,
+          docRef: MasterDataService.optional(input.doc_ref),
+          isActive: input.is_active ?? true,
+        })
+        .returning({ id: checklistTemplate.id });
+      return MasterDataService.pick(
+        await this.checklistTemplates(scope),
+        row!.id,
+        'CHECKLIST_TEMPLATE_NOT_FOUND',
+        'ບໍ່ພົບແມ່ແບບ',
+      );
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_checklist_template_company_code',
+        'CHECKLIST_TEMPLATE_EXISTS',
+        `ມີລະຫັດ ${code} ຢູ່ແລ້ວ`,
+      );
+    }
+  }
+
+  /**
+   * แก้แม่แบบรายการตรวจ
+   *
+   * ⚠️ ไม่แตะ version ให้อัตโนมัติ — ticket เก่าอ้างเวอร์ชันเดิมผ่านสแนปช็อต
+   *    การเลื่อนเวอร์ชันเป็นการตัดสินใจของผู้ดูแล ไม่ใช่ผลข้างเคียงของการแก้ชื่อ
+   */
+  async updateChecklistTemplate(
+    scope: AccessScope,
+    id: number,
+    input: { name_th?: string; doc_ref?: string | null; version?: number; is_active?: boolean },
+  ) {
+    scope.require('category.manage');
+    const current = MasterDataService.pick(
+      await this.checklistTemplates(scope),
+      id,
+      'CHECKLIST_TEMPLATE_NOT_FOUND',
+      'ບໍ່ພົບແມ່ແບບ',
+    );
+
+    const patch: Record<string, unknown> = {};
+    if (input.name_th !== undefined) {
+      patch.nameTh = MasterDataService.text(input.name_th, 'name_th', 2, 'ຊື່ແມ່ແບບສັ້ນເກີນໄປ');
+    }
+    if (input.doc_ref !== undefined) patch.docRef = MasterDataService.optional(input.doc_ref);
+    if (input.version !== undefined) patch.version = input.version;
+    if (input.is_active !== undefined) patch.isActive = input.is_active;
+    if (Object.keys(patch).length === 0) return current;
+
+    await this.db.update(checklistTemplate).set(patch).where(eq(checklistTemplate.id, id));
+    return MasterDataService.pick(
+      await this.checklistTemplates(scope),
+      id,
+      'CHECKLIST_TEMPLATE_NOT_FOUND',
+      'ບໍ່ພົບແມ່ແບບ',
+    );
+  }
+
+  /** เพิ่มรายการย่อยในแม่แบบ — ตรวจขอบเขตผ่านแม่แบบที่เป็นเจ้าของ */
+  async createChecklistItem(
+    scope: AccessScope,
+    input: {
+      template_id: number;
+      title_th: string;
+      description?: string | null;
+      sort_order?: number;
+      is_required?: boolean;
+      evidence_required?: boolean;
+    },
+  ) {
+    scope.require('category.manage');
+    const template = MasterDataService.pick(
+      await this.checklistTemplates(scope),
+      Number(input.template_id),
+      'CHECKLIST_TEMPLATE_NOT_FOUND',
+      'ບໍ່ພົບແມ່ແບບ',
+    );
+    const titleTh = MasterDataService.text(input.title_th, 'title_th', 2, 'ຊື່ລາຍການສັ້ນເກີນໄປ');
+
+    /*
+     * ลำดับซ้ำไม่ได้ (unique template_id + sort_order) — เติมท้ายให้เองเมื่อ
+     * ไม่ได้ระบุมา ไม่งั้นการเพิ่มรายการที่สองจะชนกับรายการแรกที่ลำดับ 0
+     */
+    const items = (template as { items?: { sort_order: number }[] }).items ?? [];
+    const sortOrder =
+      input.sort_order ?? items.reduce((max, i) => Math.max(max, i.sort_order), 0) + 10;
+
+    try {
+      await this.db.insert(checklistItem).values({
+        templateId: template.id,
+        titleTh,
+        description: MasterDataService.optional(input.description),
+        sortOrder,
+        isRequired: input.is_required ?? true,
+        evidenceRequired: input.evidence_required ?? false,
+        isActive: true,
+      });
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_checklist_item_template_order',
+        'CHECKLIST_ITEM_ORDER_EXISTS',
+        `ມີລາຍການລຳດັບ ${sortOrder} ຢູ່ແລ້ວ`,
+      );
+    }
+
+    return MasterDataService.pick(
+      await this.checklistTemplates(scope),
+      template.id,
+      'CHECKLIST_TEMPLATE_NOT_FOUND',
+      'ບໍ່ພົບແມ່ແບບ',
+    );
+  }
+
+  // ── รายการในแคตตาล็อกบริการ ───────────────────────────────────────────────
+
+  /**
+   * สร้างรายการแคตตาล็อก
+   *
+   * ฐานข้อมูลมี CHECK สองข้อที่ต้องดักไว้ก่อน ไม่งั้นผู้ใช้จะได้ 500
+   * ที่บอกแค่ชื่อ constraint คือ
+   *   · target_mode = duration ต้องมี target_minutes
+   *   · requires_approval = true ต้องมี approval_chain
+   */
+  async createCatalogItem(
+    scope: AccessScope,
+    input: {
+      code: string;
+      name_th: string;
+      category_id?: number | null;
+      company_id?: number | null;
+      default_impact?: string;
+      default_urgency?: string;
+      default_priority?: string;
+      target_mode?: string;
+      target_minutes?: number | null;
+      clock_start_event?: string;
+      requires_approval?: boolean;
+      approval_chain?: string | null;
+      checklist_template_id?: number | null;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('category.manage');
+    const code = MasterDataService.codeOf(input.code);
+    const nameTh = MasterDataService.text(input.name_th, 'name_th', 2, 'ຊື່ລາຍການສັ້ນເກີນໄປ');
+    const targetMode = MasterDataService.oneOf(
+      input.target_mode ?? 'duration',
+      TARGET_MODE,
+      'target_mode',
+    );
+    const clockStart = MasterDataService.oneOf(
+      input.clock_start_event ?? 'on_create',
+      CLOCK_START_EVENT,
+      'clock_start_event',
+    );
+    const requiresApproval = input.requires_approval ?? false;
+    const approvalChain = MasterDataService.optional(input.approval_chain);
+    const targetMinutes = input.target_minutes ?? null;
+
+    if (targetMode === 'duration' && targetMinutes === null) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຕ້ອງລະບຸເວລາເປົ້າໝາຍ', [
+        { field: 'target_minutes', message: 'ຈຳເປັນເມື່ອໂໝດເປັນ duration' },
+      ]);
+    }
+    if (requiresApproval && approvalChain === null) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຕ້ອງລະບຸລຳດັບຜູ້ອະນຸມັດ', [
+        { field: 'approval_chain', message: 'ຈຳເປັນເມື່ອຕ້ອງຜ່ານການອະນຸມັດ' },
+      ]);
+    }
+
+    const companyId = input.company_id ?? null;
+    this.assertCanWrite(scope, companyId);
+
+    try {
+      const [row] = await this.db
+        .insert(serviceCatalogItem)
+        .values({
+          companyId,
+          code,
+          nameTh,
+          categoryId: input.category_id ?? null,
+          defaultImpact: input.default_impact ?? 'individual',
+          defaultUrgency: input.default_urgency ?? 'low',
+          defaultPriority: input.default_priority ?? 'P4',
+          targetMode,
+          targetMinutes,
+          clockStartEvent: clockStart,
+          requiresApproval,
+          approvalChain,
+          checklistTemplateId: input.checklist_template_id ?? null,
+          isActive: input.is_active ?? true,
+        })
+        .returning({ id: serviceCatalogItem.id });
+      return MasterDataService.pick(
+        await this.catalogItems(scope),
+        row!.id,
+        'CATALOG_ITEM_NOT_FOUND',
+        'ບໍ່ພົບລາຍການ',
+      );
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_catalog_item_company_code',
+        'CATALOG_ITEM_CODE_EXISTS',
+        `ມີລະຫັດ ${code} ຢູ່ແລ້ວ`,
+      );
+    }
+  }
+
+  async updateCatalogItem(
+    scope: AccessScope,
+    id: number,
+    input: {
+      name_th?: string;
+      category_id?: number | null;
+      default_impact?: string;
+      default_urgency?: string;
+      default_priority?: string;
+      target_minutes?: number | null;
+      requires_approval?: boolean;
+      approval_chain?: string | null;
+      checklist_template_id?: number | null;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('category.manage');
+    const current = MasterDataService.pick(
+      await this.catalogItems(scope),
+      id,
+      'CATALOG_ITEM_NOT_FOUND',
+      'ບໍ່ພົບລາຍການ',
+    );
+
+    const patch: Record<string, unknown> = {};
+    if (input.name_th !== undefined) {
+      patch.nameTh = MasterDataService.text(input.name_th, 'name_th', 2, 'ຊື່ລາຍການສັ້ນເກີນໄປ');
+    }
+    if (input.category_id !== undefined) patch.categoryId = input.category_id;
+    if (input.default_impact !== undefined) patch.defaultImpact = input.default_impact;
+    if (input.default_urgency !== undefined) patch.defaultUrgency = input.default_urgency;
+    if (input.default_priority !== undefined) patch.defaultPriority = input.default_priority;
+    if (input.target_minutes !== undefined) patch.targetMinutes = input.target_minutes;
+    if (input.requires_approval !== undefined) patch.requiresApproval = input.requires_approval;
+    if (input.approval_chain !== undefined) {
+      patch.approvalChain = MasterDataService.optional(input.approval_chain);
+    }
+    if (input.checklist_template_id !== undefined) {
+      patch.checklistTemplateId = input.checklist_template_id;
+    }
+    if (input.is_active !== undefined) patch.isActive = input.is_active;
+    if (Object.keys(patch).length === 0) return current;
+
+    /*
+     * ตรวจ CHECK ทั้งสองข้อกับ "ค่าหลังแก้" ไม่ใช่แค่ค่าที่ส่งมา
+     * การเปิด requires_approval โดยไม่ส่ง approval_chain มาด้วย ต้องล้มที่นี่
+     * ไม่ใช่ไปล้มที่ฐานข้อมูลด้วยข้อความที่อ่านไม่รู้เรื่อง
+     */
+    const nextRequiresApproval =
+      (patch.requiresApproval as boolean | undefined) ?? current.requires_approval;
+    const nextChain =
+      input.approval_chain !== undefined
+        ? (patch.approvalChain as string | null)
+        : (current.approval_chain ?? null);
+    if (nextRequiresApproval && nextChain === null) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຕ້ອງລະບຸລຳດັບຜູ້ອະນຸມັດ', [
+        { field: 'approval_chain', message: 'ຈຳເປັນເມື່ອຕ້ອງຜ່ານການອະນຸມັດ' },
+      ]);
+    }
+    const nextMinutes =
+      input.target_minutes !== undefined
+        ? (patch.targetMinutes as number | null)
+        : (current.target_minutes ?? null);
+    /*
+     * target_mode ไม่ได้อยู่ในผลลัพธ์ที่หน้าจอใช้ จึงต้องอ่านจากตารางตรง ๆ
+     * แก้ไม่ได้จากที่นี่อยู่แล้ว แต่ต้องรู้ค่าเพื่อตัดสินว่าจำเป็นต้องมีนาทีไหม
+     */
+    const [modeRow] = await this.db
+      .select({ targetMode: serviceCatalogItem.targetMode })
+      .from(serviceCatalogItem)
+      .where(eq(serviceCatalogItem.id, id));
+    if (modeRow?.targetMode === 'duration' && nextMinutes === null) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຕ້ອງລະບຸເວລາເປົ້າໝາຍ', [
+        { field: 'target_minutes', message: 'ຈຳເປັນເມື່ອໂໝດເປັນ duration' },
+      ]);
+    }
+
+    await this.db.update(serviceCatalogItem).set(patch).where(eq(serviceCatalogItem.id, id));
+    return MasterDataService.pick(
+      await this.catalogItems(scope),
+      id,
+      'CATALOG_ITEM_NOT_FOUND',
+      'ບໍ່ພົບລາຍການ',
+    );
+  }
+
+  // ── กฎการยกระดับ ──────────────────────────────────────────────────────────
+
+  async createEscalationRule(
+    scope: AccessScope,
+    input: {
+      code: string;
+      trigger_type: string;
+      notify_contact_keys: string;
+      company_id?: number | null;
+      priority?: string | null;
+      threshold_minutes?: number | null;
+      threshold_clock_mode?: string;
+      notify_roles?: string | null;
+      repeat_interval_minutes?: number | null;
+      notify_outside_business_hours?: boolean;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('escalation.manage');
+    const code = MasterDataService.codeOf(input.code);
+    const triggerType = MasterDataService.text(
+      input.trigger_type,
+      'trigger_type',
+      2,
+      'ຕ້ອງລະບຸເງື່ອນໄຂກະຕຸ້ນ',
+    );
+    const notifyContactKeys = MasterDataService.text(
+      input.notify_contact_keys,
+      'notify_contact_keys',
+      2,
+      'ຕ້ອງລະບຸຜູ້ຮັບການແຈ້ງ',
+    );
+    const companyId = input.company_id ?? null;
+    this.assertCanWrite(scope, companyId);
+
+    try {
+      const [row] = await this.db
+        .insert(slaEscalationRule)
+        .values({
+          companyId,
+          code,
+          triggerType,
+          priority: MasterDataService.optional(input.priority),
+          thresholdMinutes: input.threshold_minutes ?? null,
+          thresholdClockMode: input.threshold_clock_mode ?? 'business_hours',
+          notifyContactKeys,
+          notifyRoles: MasterDataService.optional(input.notify_roles),
+          repeatIntervalMinutes: input.repeat_interval_minutes ?? null,
+          notifyOutsideBusinessHours: input.notify_outside_business_hours ?? false,
+          isActive: input.is_active ?? true,
+        })
+        .returning({ id: slaEscalationRule.id });
+      return MasterDataService.pick(
+        await this.escalationRules(scope),
+        row!.id,
+        'ESCALATION_RULE_NOT_FOUND',
+        'ບໍ່ພົບກົດການຍົກລະດັບ',
+      );
+    } catch (err) {
+      throw MasterDataService.conflictError(
+        err,
+        'uq_escalation_rule_company_code',
+        'ESCALATION_RULE_CODE_EXISTS',
+        `ມີລະຫັດ ${code} ຢູ່ແລ້ວ`,
+      );
+    }
+  }
+
+  async updateEscalationRule(
+    scope: AccessScope,
+    id: number,
+    input: {
+      trigger_type?: string;
+      priority?: string | null;
+      threshold_minutes?: number | null;
+      threshold_clock_mode?: string;
+      notify_contact_keys?: string;
+      notify_roles?: string | null;
+      repeat_interval_minutes?: number | null;
+      notify_outside_business_hours?: boolean;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('escalation.manage');
+    const current = MasterDataService.pick(
+      await this.escalationRules(scope),
+      id,
+      'ESCALATION_RULE_NOT_FOUND',
+      'ບໍ່ພົບກົດການຍົກລະດັບ',
+    );
+
+    const patch: Record<string, unknown> = {};
+    if (input.trigger_type !== undefined) {
+      patch.triggerType = MasterDataService.text(
+        input.trigger_type,
+        'trigger_type',
+        2,
+        'ຕ້ອງລະບຸເງື່ອນໄຂກະຕຸ້ນ',
+      );
+    }
+    if (input.priority !== undefined) patch.priority = MasterDataService.optional(input.priority);
+    if (input.threshold_minutes !== undefined) patch.thresholdMinutes = input.threshold_minutes;
+    if (input.threshold_clock_mode !== undefined) {
+      patch.thresholdClockMode = input.threshold_clock_mode;
+    }
+    if (input.notify_contact_keys !== undefined) {
+      patch.notifyContactKeys = MasterDataService.text(
+        input.notify_contact_keys,
+        'notify_contact_keys',
+        2,
+        'ຕ້ອງລະບຸຜູ້ຮັບການແຈ້ງ',
+      );
+    }
+    if (input.notify_roles !== undefined) {
+      patch.notifyRoles = MasterDataService.optional(input.notify_roles);
+    }
+    if (input.repeat_interval_minutes !== undefined) {
+      patch.repeatIntervalMinutes = input.repeat_interval_minutes;
+    }
+    if (input.notify_outside_business_hours !== undefined) {
+      patch.notifyOutsideBusinessHours = input.notify_outside_business_hours;
+    }
+    if (input.is_active !== undefined) patch.isActive = input.is_active;
+    if (Object.keys(patch).length === 0) return current;
+
+    await this.db.update(slaEscalationRule).set(patch).where(eq(slaEscalationRule.id, id));
+    return MasterDataService.pick(
+      await this.escalationRules(scope),
+      id,
+      'ESCALATION_RULE_NOT_FOUND',
+      'ບໍ່ພົບກົດການຍົກລະດັບ',
+    );
   }
 
 }

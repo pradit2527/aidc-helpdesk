@@ -1,4 +1,10 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type {
@@ -48,6 +54,38 @@ function useMaster<T>(name: string, path: string): UseQueryResult<T[], Error> {
     staleTime: MASTER_DATA_STALE_MS,
   });
 }
+
+/**
+ * สร้างและแก้ข้อมูลหลัก
+ *
+ * ล้างแคชทั้งก้อน ['master'] ไม่ใช่เฉพาะคีย์ที่เพิ่งเขียน — ตารางเหล่านี้อ้างถึงกันเอง
+ * อยู่ตลอด เช่น หมวดหมู่มีสองคีย์ (ทั้งหมด / เฉพาะที่เปิดใช้) และรายการแคตตาล็อก
+ * อ้างถึงแม่แบบรายการตรวจ การล้างเฉพาะคีย์เดียวจะเหลือหน้าอื่นที่แสดงค่าเก่า
+ * โดยไม่มีอะไรบอก ข้อมูลชุดนี้เล็กและเปลี่ยนน้อย ต้นทุนการโหลดใหม่จึงต่ำกว่าความสับสน
+ */
+type MasterBody = Record<string, unknown>;
+
+function useMasterWrite<TBody extends MasterBody>(
+  path: string,
+  method: 'post' | 'patch',
+): UseMutationResult<unknown, Error, TBody & { id?: number }> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: TBody & { id?: number }) => {
+      if (method === 'patch') {
+        const { id, ...rest } = body;
+        return api.patch<unknown>(`${path}/${id}`, rest);
+      }
+      return api.post<unknown>(path, body);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: masterKeys.all }),
+  });
+}
+
+export const useCreateMaster = <TBody extends MasterBody = MasterBody>(path: string) =>
+  useMasterWrite<TBody>(path, 'post');
+export const useUpdateMaster = <TBody extends MasterBody = MasterBody>(path: string) =>
+  useMasterWrite<TBody>(path, 'patch');
 
 export const useCompanies = () => useMaster<Company>('companies', '/companies');
 export const useDepartments = () => useMaster<Department>('departments', '/departments');

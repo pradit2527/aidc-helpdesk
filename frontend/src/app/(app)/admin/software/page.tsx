@@ -4,13 +4,23 @@ import { Ban, CheckCircle2, Pencil, Plus } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
+import {
+  RecordFormDialog,
+  type FieldSpec,
+  type FieldValue,
+} from '@/components/admin/record-form-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
-import { useApprovedSoftware } from '@/lib/queries/master-data';
+import {
+  useApprovedSoftware,
+  useCompanies,
+  useCreateMaster,
+  useUpdateMaster,
+} from '@/lib/queries/master-data';
 import type { ApprovedSoftware } from '@/lib/types';
 
 /**
@@ -22,9 +32,78 @@ import type { ApprovedSoftware } from '@/lib/types';
  */
 export default function SoftwarePage(): React.JSX.Element {
   const query = useApprovedSoftware();
+  const companies = useCompanies();
   const software = query.data ?? [];
   const allowed = software.filter((s) => s.is_active);
   const blocked = software.filter((s) => !s.is_active);
+
+  const create = useCreateMaster('/approved-software');
+  const update = useUpdateMaster('/approved-software');
+
+  const [editing, setEditing] = React.useState<ApprovedSoftware | null>(null);
+  const [creating, setCreating] = React.useState(false);
+
+  const fields: FieldSpec[] = [
+    { kind: 'text', name: 'name', label: 'ຊື່ຊອບແວ', required: true },
+    { kind: 'text', name: 'version', label: 'ເວີຊັນ', placeholder: 'ວ່າງໄວ້ = ທຸກເວີຊັນ' },
+    { kind: 'text', name: 'license_type', label: 'ປະເພດ License', placeholder: 'freeware / volume' },
+    {
+      kind: 'select',
+      name: 'company_id',
+      label: 'ຂອບເຂດ',
+      options: [
+        { value: '', label: 'ທັງກຸ່ມ' },
+        ...(companies.data ?? []).map((c) => ({ value: String(c.id), label: c.code })),
+      ],
+      lockedOnEdit: true,
+    },
+    { kind: 'textarea', name: 'note', label: 'ໝາຍເຫດ' },
+    {
+      kind: 'checkbox',
+      name: 'is_active',
+      label: 'ຕິດຕັ້ງໄດ້',
+      // ตารางนี้เก็บทั้งของที่อนุญาตและของต้องห้าม การปิดจึงไม่ใช่ "ลบ" แต่คือ "ห้าม"
+      hint: 'ປິດ = ຢູ່ໃນລາຍການຫ້າມຕິດຕັ້ງ ບໍ່ແມ່ນລຶບອອກ',
+    },
+  ];
+
+  const initial: Record<string, FieldValue> = editing
+    ? {
+        name: editing.name,
+        version: editing.version ?? '',
+        license_type: editing.license_type ?? '',
+        company_id: editing.company ? String(editing.company.id) : '',
+        note: editing.note ?? '',
+        is_active: editing.is_active,
+      }
+    : {
+        name: '',
+        version: '',
+        license_type: '',
+        company_id: '',
+        note: '',
+        is_active: true,
+      };
+
+  const handleSubmit = async (values: Record<string, FieldValue>): Promise<void> => {
+    const body = {
+      name: String(values.name ?? ''),
+      version: String(values.version ?? ''),
+      license_type: String(values.license_type ?? ''),
+      note: String(values.note ?? ''),
+      is_active: values.is_active === true,
+    };
+    if (editing) {
+      await update.mutateAsync({ id: editing.id, ...body });
+      toast.success(`ບັນທຶກ ${values.name} ແລ້ວ`);
+      return;
+    }
+    await create.mutateAsync({
+      ...body,
+      company_id: values.company_id ? Number(values.company_id) : null,
+    });
+    toast.success(`ເພີ່ມ ${values.name} ແລ້ວ`);
+  };
 
   const columns: Column<ApprovedSoftware>[] = [
     {
@@ -80,7 +159,7 @@ export default function SoftwarePage(): React.JSX.Element {
       header: '',
       align: 'right',
       render: (s) => (
-        <Button variant="ghost" size="sm" onClick={() => toast.info(`ແກ້ໄຂ ${s.name}`)}>
+        <Button variant="ghost" size="sm" onClick={() => setEditing(s)}>
           <Pencil className="h-4 w-4" aria-hidden="true" />
           <span className="sr-only">ແກ້ໄຂ {s.name}</span>
         </Button>
@@ -95,7 +174,7 @@ export default function SoftwarePage(): React.JSX.Element {
         title="ຊອບແວທີ່ອະນຸມັດ"
         description={`ຕິດຕັ້ງໄດ້ ${allowed.length} ລາຍການ · ຫ້າມຕິດຕັ້ງ ${blocked.length} ລາຍການ`}
         actions={
-          <Button onClick={() => toast.info('ຟອມເພີ່ມຊອບແວ')}>
+          <Button onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             ເພີ່ມຊອບແວ
           </Button>
@@ -119,6 +198,19 @@ export default function SoftwarePage(): React.JSX.Element {
           </QueryBoundary>
         </CardBody>
       </Card>
+
+      <RecordFormDialog
+        open={creating || editing !== null}
+        title={editing ? `ແກ້ໄຂ ${editing.name}` : 'ເພີ່ມຊອບແວ'}
+        fields={fields}
+        initial={initial}
+        editing={editing !== null}
+        onClose={() => {
+          setCreating(false);
+          setEditing(null);
+        }}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }

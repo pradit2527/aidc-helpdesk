@@ -4,6 +4,11 @@ import { CalendarOff, Plus } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
+import {
+  RecordFormDialog,
+  type FieldSpec,
+  type FieldValue,
+} from '@/components/admin/record-form-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/data-table';
@@ -12,7 +17,13 @@ import { Alert, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { weekdayName } from '@/lib/format';
-import { useBusinessHours, useHolidays } from '@/lib/queries/master-data';
+import {
+  useBusinessHours,
+  useCompanies,
+  useCreateMaster,
+  useHolidays,
+  useUpdateMaster,
+} from '@/lib/queries/master-data';
 
 /**
  * เวลาทำการและวันหยุด (FR-36)
@@ -46,6 +57,76 @@ export default function BusinessHoursPage(): React.JSX.Element {
 
   const holidays = holidaysQuery.data ?? [];
   const workingDays = rows.filter((r) => r.is_working_day).length;
+
+  const companies = useCompanies();
+  const updateHours = useUpdateMaster('/business-hours');
+  const createHoliday = useCreateMaster('/holidays');
+  const [addingHoliday, setAddingHoliday] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  /**
+   * บันทึกเฉพาะวันที่ถูกแก้จริง
+   *
+   * ยิงทั้ง 7 วันทุกครั้งก็ได้ผลเหมือนกัน แต่จะเขียน audit log 7 บรรทัด
+   * ทุกครั้งที่กดบันทึก ทั้งที่ผู้ใช้แก้วันเดียว ทำให้ตามหาว่าใครแก้อะไร
+   * ในภายหลังยากขึ้นโดยไม่ได้อะไรกลับมา
+   */
+  const saveHours = async (): Promise<void> => {
+    const changed = rows.filter((row) => {
+      const before = groupHours.find((g) => g.id === row.id);
+      return (
+        before &&
+        (before.is_working_day !== row.is_working_day ||
+          before.start_time !== row.start_time ||
+          before.end_time !== row.end_time)
+      );
+    });
+
+    if (changed.length === 0) {
+      toast.info('ບໍ່ມີການປ່ຽນແປງ');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      for (const row of changed) {
+        await updateHours.mutateAsync({
+          id: row.id,
+          is_working_day: row.is_working_day,
+          ...(row.start_time ? { start_time: row.start_time.slice(0, 5) } : {}),
+          ...(row.end_time ? { end_time: row.end_time.slice(0, 5) } : {}),
+        });
+      }
+      toast.success(`ບັນທຶກແລ້ວ ${changed.length} ມື້`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'ບັນທຶກບໍ່ສຳເລັດ');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const holidayFields: FieldSpec[] = [
+    { kind: 'date', name: 'holiday_date', label: 'ວັນທີ', required: true },
+    { kind: 'text', name: 'name', label: 'ຊື່ວັນພັກ', required: true, placeholder: 'ວັນຊາດ' },
+    {
+      kind: 'select',
+      name: 'company_id',
+      label: 'ຂອບເຂດ',
+      options: [
+        { value: '', label: 'ທັງກຸ່ມ' },
+        ...(companies.data ?? []).map((c) => ({ value: String(c.id), label: c.code })),
+      ],
+    },
+  ];
+
+  const handleHolidaySubmit = async (values: Record<string, FieldValue>): Promise<void> => {
+    await createHoliday.mutateAsync({
+      holiday_date: String(values.holiday_date ?? ''),
+      name: String(values.name ?? ''),
+      company_id: values.company_id ? Number(values.company_id) : null,
+    });
+    toast.success(`ເພີ່ມ ${values.name} ແລ້ວ`);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -137,14 +218,16 @@ export default function BusinessHoursPage(): React.JSX.Element {
           </QueryBoundary>
         </CardBody>
         <CardFooter className="justify-end">
-          <Button onClick={() => toast.success('ບັນທຶກເວລາເຮັດວຽກແລ້ວ')}>ບັນທຶກ</Button>
+          <Button onClick={() => void saveHours()} disabled={saving}>
+            {saving ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກ'}
+          </Button>
         </CardFooter>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>ວັນພັກປະຈຳປີ</CardTitle>
-          <Button size="sm" onClick={() => toast.info('ຟອມເພີ່ມວັນພັກ')}>
+          <Button size="sm" onClick={() => setAddingHoliday(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             ເພີ່ມວັນພັກ
           </Button>
@@ -177,6 +260,16 @@ export default function BusinessHoursPage(): React.JSX.Element {
           </CardBody>
         )}
       </Card>
+
+      <RecordFormDialog
+        open={addingHoliday}
+        title="ເພີ່ມວັນພັກ"
+        description="ວັນພັກທີ່ໃສ່ຈະຖືກຕັດອອກຈາກການນັບນາທີເຮັດວຽກທັນທີ"
+        fields={holidayFields}
+        initial={{ holiday_date: '', name: '', company_id: '' }}
+        onClose={() => setAddingHoliday(false)}
+        onSubmit={handleHolidaySubmit}
+      />
     </div>
   );
 }

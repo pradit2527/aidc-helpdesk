@@ -1,0 +1,2913 @@
+{
+  "info": {
+    "_postman_id": "aidc-helpdesk-api-v1",
+    "name": "AIDC Helpdesk API",
+    "description": "API ของ AIDC Service Desk (7 บริษัทในเครือ AIDC)\n\n## เริ่มใช้งาน\n1. ตั้ง `baseUrl` ให้ตรงกับที่รันอยู่ (ค่าเริ่มต้นคือเครื่องตัวเอง)\n2. ตั้ง `username` / `password`\n3. รัน **1 · ເຂົ້າສູ່ລະບົບ → ເຂົ້າສູ່ລະບົບ** ก่อนเสมอ\n4. จากนั้นรันคำขออื่นได้ทั้งหมด\n\n## การยืนยันตัวตน\nใช้คุกกี้ httpOnly ไม่ใช่ Bearer token — Postman เก็บคุกกี้ให้เอง\nส่วน CSRF สคริปต์ในแท็บ Tests ของคำขอล็อกอินจะเก็บค่าไว้ในตัวแปร\n`csrfToken` ให้อัตโนมัติ และทุกคำขอที่เปลี่ยนข้อมูลส่งเป็น header\n`X-CSRF-Token` ให้แล้ว\n\n## รูปแบบคำตอบ\nทุก endpoint ตอบซองเดียวกัน: `{ success, data, error, meta }`\nรายการที่แบ่งหน้าจะมี `meta` เป็น `{ page, page_size, total, total_pages }`\n\n## สองข้อที่ทำให้งงบ่อย\n- **นอกขอบเขตสิทธิ์ตอบ 404 ไม่ใช่ 403** การตอบ 403 ยืนยันว่าของนั้นมีจริง\n- **ไม่มี endpoint ลบข้อมูลหลักสักตัว** ปิดด้วย `is_active: false` เท่านั้น\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1 · ເຂົ້າສູ່ລະບົບ",
+      "item": [
+        {
+          "name": "ເຂົ້າສູ່ລະບົບ (ຣັນອັນນີ້ກ່ອນສະເໝີ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "ต้องรันก่อนทุกครั้ง\n\nระบบใช้คุกกี้ httpOnly สามตัว — aidc_at (access), aidc_rt (refresh)\nและ aidc_csrf ที่ต้องส่งกลับเป็น header X-CSRF-Token ทุกคำขอที่เปลี่ยนข้อมูล\n\nPostman เก็บคุกกี้ให้เอง ส่วน header สคริปต์ในแท็บ Tests จัดการให้แล้ว",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// เก็บ CSRF ไว้ให้ทุกคำขอที่เปลี่ยนข้อมูลใช้ต่อ",
+                  "//",
+                  "// ระบบใช้ double-submit: คุกกี้ aidc_csrf ต้องตรงกับ header X-CSRF-Token",
+                  "// Postman เก็บคุกกี้ให้เองอยู่แล้ว แต่ header ต้องใส่เอง จึงต้องคัดค่าออกมาก่อน",
+                  "let csrf = null;",
+                  "try { csrf = pm.cookies.get('aidc_csrf'); } catch (e) { /* โดเมนยังไม่อยู่ในรายการอนุญาต */ }",
+                  "",
+                  "if (!csrf) {",
+                  "  // ทางสำรอง: อ่านจาก Set-Cookie ตรง ๆ เผื่อ cookie jar ยังไม่พร้อม",
+                  "  const raw = pm.response.headers.all()",
+                  "    .filter(h => h.key.toLowerCase() === 'set-cookie')",
+                  "    .map(h => h.value);",
+                  "  for (const line of raw) {",
+                  "    const m = /(?:^|;\\s*)aidc_csrf=([^;]+)/.exec(line);",
+                  "    if (m) csrf = decodeURIComponent(m[1]);",
+                  "  }",
+                  "}",
+                  "",
+                  "if (csrf) {",
+                  "  pm.collectionVariables.set('csrfToken', csrf);",
+                  "  console.log('เก็บ csrfToken แล้ว');",
+                  "} else {",
+                  "  console.warn('หา aidc_csrf ไม่เจอ — คำขอที่เปลี่ยนข้อมูลจะได้ 403');",
+                  "}",
+                  "",
+                  "pm.test('ล็อกอินสำเร็จ', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ຂ້ອຍເປັນໃຜ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຕໍ່ອາຍຸ session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ປ່ຽນລະຫັດຜ່ານ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "หน้าจอถูกถอดออกแล้ว แต่ endpoint ยังใช้ได้\n\nสำเร็จแล้วระบบล้างคุกกี้ทั้งหมด ต้องล็อกอินใหม่",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"{{password}}\",\n  \"new_password\": \"ຕັ້ງລະຫັດໃໝ່ຢ່າງໜ້ອຍ12ຕົວ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ອອກຈາກລະບົບ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "ล็อกอินหนึ่งครั้งแล้วใช้ได้ทั้ง collection"
+    },
+    {
+      "name": "2 · ເລື່ອງແຈ້ງ",
+      "item": [
+        {
+          "name": "ລາຍການ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tickets?page=1&page_size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ລາຍການ — ກັ່ນຕອງ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tickets?status=in_progress&priority=P2&company_id=1&q=ສະແກນ&page=1&page_size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "in_progress"
+                },
+                {
+                  "key": "priority",
+                  "value": "P2"
+                },
+                {
+                  "key": "company_id",
+                  "value": "1"
+                },
+                {
+                  "key": "q",
+                  "value": "ສະແກນ"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "ตัวกรองทุกตัวเป็นทางเลือก · ค่าที่อยู่นอกขอบเขตสิทธิ์ถูกตัดทิ้งเงียบ ๆ ไม่ตอบ 403"
+          },
+          "response": []
+        },
+        {
+          "name": "ສ້າງເລື່ອງແຈ້ງ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tickets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tickets"
+              ]
+            },
+            "description": "ส่ง priority มาเองไม่ได้ — ระบบคำนวณจาก impact × urgency เสมอ\n\nหลังสร้างสำเร็จ ระบบจะส่งขึ้นบอร์ด Super Work ให้อัตโนมัติ\n(เมื่อ SUPERWORK_ENABLED=true) แบบไม่รอผล ถ้า Super Work ล่ม\nการแจ้งเรื่องยังสำเร็จตามปกติ",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticket_type\": \"incident\",\n  \"subject\": \"ເຄື່ອງສະແກນບາໂຄດອ່ານບໍ່ຕິດ\",\n  \"description\": \"ເຄື່ອງສະແກນ 3 ໜ່ວຍທີ່ໂຊນຮັບສິນຄ້າອ່ານບໍ່ຕິດຕັ້ງແຕ່ເຊົ້າ\",\n  \"category_id\": \"{{categoryId}}\",\n  \"impact\": \"department\",\n  \"urgency\": \"high\",\n  \"channel\": \"portal\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('ticketId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ລາຍລະອຽດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tickets/{{ticketId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tickets",
+                "{{ticketId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມຄຳເຫັນ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tickets/{{ticketId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tickets",
+                "{{ticketId}}",
+                "comments"
+              ]
+            },
+            "description": "คำตอบแรกที่ไม่ใช่คำตอบของผู้แจ้งเอง จะไปตั้ง first_response_at ให้ KPI-2",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"ກວດແລ້ວພົບວ່າສາຍແລນຫຼຸດ\",\n  \"is_internal\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ປ່ຽນສະຖານະ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tickets/{{ticketId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tickets",
+                "{{ticketId}}",
+                "status"
+              ]
+            },
+            "description": "reason บังคับทุกครั้ง — บันทึกลง ticket_status_history",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to_status\": \"in_progress\",\n  \"reason\": \"ຮັບເລື່ອງແລ້ວ ກຳລັງກວດສອບ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ປະເມີນລະດັບໃໝ່",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tickets/{{ticketId}}/priority",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tickets",
+                "{{ticketId}}",
+                "priority"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"impact\": \"org_wide\",\n  \"urgency\": \"high\",\n  \"reason\": \"ກະທົບທັງອົງກອນແລ້ວ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3 · ຂໍ້ມູນຫຼັກ — ອ່ານ",
+      "item": [
+        {
+          "name": "ບໍລິສັດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/companies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "companies"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ພະແນກ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ໝວດໝູ່ (ທັງໝົດ)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ໝວດໝູ່ (ສະເພາະທີ່ເປີດໃຊ້)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories?active_only=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ],
+              "query": [
+                {
+                  "key": "active_only",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ແຄັດຕາລັອກບໍລິການ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/catalog-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalog-items"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ທະບຽນລະບົບງານ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຊອບແວທີ່ອະນຸມັດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/approved-software",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "approved-software"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ນະໂຍບາຍ SLA",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sla-policies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sla-policies"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເວລາເຮັດວຽກ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/business-hours",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "business-hours"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ວັນພັກ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/holidays",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "holidays"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ກົດການຍົກລະດັບ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/escalation-rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "escalation-rules"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຜູ້ຮັບການຍົກລະດັບ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/escalation-contacts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "escalation-contacts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເຫດຂັດຂ້ອງ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/service-outages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service-outages"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ໜ້າຕ່າງບຳລຸງຮັກສາ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/maintenance-windows",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "maintenance-windows"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ແມ່ແບບລາຍການກວດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/checklist-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "checklist-templates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ບົດບາດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ສິດທັງໝົດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "permissions"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "ทุกตัวกรองตามขอบเขตบริษัทของผู้เรียก · company_id เป็น null แปลว่าใช้ร่วมกันทั้งกลุ่ม"
+    },
+    {
+      "name": "4 · ຂໍ້ມູນຫຼັກ — ເພີ່ມ / ແກ້ໄຂ",
+      "item": [
+        {
+          "name": "ເພີ່ມໝວດໝູ່",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "company_id: null = ระดับกลุ่ม ซึ่งมีแต่ super_admin สร้างได้",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_CAT\",\n  \"name_th\": \"ໝວດທົດສອບຈາກ Postman\",\n  \"company_id\": null,\n  \"default_impact\": \"individual\",\n  \"default_urgency\": \"medium\",\n  \"sort_order\": 900,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('categoryId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂໝວດໝູ່",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "code แก้ไม่ได้ · ไม่มี endpoint ลบ — ปิดด้วย is_active: false",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name_th\": \"ໝວດທົດສອບ (ແກ້ໄຂແລ້ວ)\",\n  \"default_urgency\": \"high\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມບໍລິສັດ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/companies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "companies"
+              ]
+            },
+            "description": "เฉพาะ super_admin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN-CO\",\n  \"name_th\": \"ບໍລິສັດທົດສອບ\",\n  \"name_en\": \"Postman Co\",\n  \"contact_email\": \"test@aidctech.com.la\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('companyId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂບໍລິສັດ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/companies/{{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "companies",
+                "{{companyId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name_th\": \"ບໍລິສັດທົດສອບ (ແກ້ໄຂ)\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມພະແນກ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            },
+            "description": "company_id บังคับ — ไม่มีแผนกระดับกลุ่ม",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": 1,\n  \"name\": \"ພະແນກທົດສອບ Postman\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('departmentId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂພະແນກ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{departmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{departmentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ພະແນກທົດສອບ (ແກ້ໄຂ)\",\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມລະບົບງານ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services"
+              ]
+            },
+            "description": "service_group: core_business · infrastructure · communication · file_storage · endpoint · service_request\nservice_tier: critical · high · standard",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_SRV\",\n  \"name_th\": \"ລະບົບທົດສອບ\",\n  \"service_group\": \"infrastructure\",\n  \"service_tier\": \"standard\",\n  \"company_id\": null,\n  \"is_24x7\": false,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('serviceId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂລະບົບງານ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/services/{{serviceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                "{{serviceId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_tier\": \"high\",\n  \"is_24x7\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມຊອບແວທີ່ອະນຸມັດ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/approved-software",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "approved-software"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman\",\n  \"version\": \"11\",\n  \"license_type\": \"freeware\",\n  \"note\": \"ເພີ່ມຈາກ Postman\",\n  \"company_id\": null,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('softwareId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂຊອບແວ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/approved-software/{{softwareId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "approved-software",
+                "{{softwareId}}"
+              ]
+            },
+            "description": "is_active: false ที่นี่ไม่ได้แปลว่าลบ แต่แปลว่า 'ห้ามติดตั้ง'",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false,\n  \"note\": \"ຍ້າຍໄປລາຍການຫ້າມຕິດຕັ້ງ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມວັນພັກ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/holidays",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "holidays"
+              ]
+            },
+            "description": "ตารางวันหยุดยังว่าง (Q-03) ตราบใดที่ยังว่าง เครื่องคำนวณ SLA จะนับวันหยุดเป็นวันทำการ",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"holiday_date\": \"2026-12-02\",\n  \"name\": \"ວັນຊາດ\",\n  \"company_id\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('holidayId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂວັນພັກ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/holidays/{{holidayId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "holidays",
+                "{{holidayId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ວັນຊາດ (ແກ້ໄຂ)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ແກ້ໄຂເວລາເຮັດວຽກ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/business-hours/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "business-hours",
+                "1"
+              ]
+            },
+            "description": "ไม่มี POST — seed วางไว้ครบ 7 วันต่อบริษัทแล้ว\n\nเปลี่ยน id ในเส้นทางให้ตรงกับแถวที่ต้องการ ดูได้จาก GET /business-hours",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_time\": \"08:30\",\n  \"end_time\": \"17:30\",\n  \"is_working_day\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມແມ່ແບບລາຍການກວດ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/checklist-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "checklist-templates"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_CL\",\n  \"name_th\": \"ແມ່ແບບທົດສອບ\",\n  \"doc_ref\": \"AIDC-IT-SOP-001 ກ.1\",\n  \"company_id\": null,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('templateId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂແມ່ແບບ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/checklist-templates/{{templateId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "checklist-templates",
+                "{{templateId}}"
+              ]
+            },
+            "description": "version ไม่ขยับให้เอง — ticket เก่าอ้างเวอร์ชันเดิมผ่านสแนปช็อต",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name_th\": \"ແມ່ແບບທົດສອບ (ແກ້ໄຂ)\",\n  \"doc_ref\": \"AIDC-IT-SOP-001 ກ.2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມຂໍ້ໃນແມ່ແບບ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/checklist-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "checklist-items"
+              ]
+            },
+            "description": "ไม่ส่ง sort_order = ต่อท้ายให้เอง · คืนแม่แบบทั้งอันพร้อมข้อย่อยที่อัปเดตแล้ว",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_id\": \"{{templateId}}\",\n  \"title_th\": \"ກວດສອບສິດການເຂົ້າເຖິງ\",\n  \"description\": \"ຢືນຢັນວ່າປິດສິດຄົບທຸກລະບົບ\",\n  \"is_required\": true,\n  \"evidence_required\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມລາຍການແຄັດຕາລັອກ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/catalog-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalog-items"
+              ]
+            },
+            "description": "target_mode: duration ต้องมี target_minutes\nrequires_approval: true ต้องมี approval_chain",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_REQ\",\n  \"name_th\": \"ຄຳຂໍທົດສອບ\",\n  \"company_id\": null,\n  \"target_mode\": \"duration\",\n  \"target_minutes\": 30,\n  \"clock_start_event\": \"on_create\",\n  \"requires_approval\": false,\n  \"default_impact\": \"individual\",\n  \"default_urgency\": \"low\",\n  \"default_priority\": \"P4\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('catalogItemId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂລາຍການແຄັດຕາລັອກ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/catalog-items/{{catalogItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalog-items",
+                "{{catalogItemId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_minutes\": 60,\n  \"requires_approval\": true,\n  \"approval_chain\": \"line_manager,system_owner\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ເພີ່ມກົດການຍົກລະດັບ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/escalation-rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "escalation-rules"
+              ]
+            },
+            "description": "notify_contact_keys คั่นด้วย , จาก head_of_it · ceo · dpo · incident_manager · tier2_group · tier3_group",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_ES\",\n  \"trigger_type\": \"resolution_breach\",\n  \"notify_contact_keys\": \"head_of_it,incident_manager\",\n  \"priority\": \"P2\",\n  \"threshold_minutes\": 60,\n  \"threshold_clock_mode\": \"business_hours\",\n  \"notify_outside_business_hours\": false,\n  \"company_id\": null,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.id) pm.collectionVariables.set('escalationRuleId', d.id);",
+                  "pm.test('สำเร็จ', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ໄຂກົດການຍົກລະດັບ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/escalation-rules/{{escalationRuleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "escalation-rules",
+                "{{escalationRuleId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"repeat_interval_minutes\": 30,\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "ไม่มี endpoint ลบสักตัวโดยตั้งใจ — ปิดด้วย is_active: false\nticket และรายงานย้อนหลังอ้างถึงแถวเหล่านี้ด้วย id การลบทำให้ประวัติชี้ไปที่ความว่างเปล่า"
+    },
+    {
+      "name": "5 · ຜູ້ໃຊ້ ແລະ ສິດ",
+      "item": [
+        {
+          "name": "ລາຍການຜູ້ໃຊ້",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&page_size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຄົ້ນຫາຜູ້ໃຊ້",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users?q=demo&is_active=true&page=1&page_size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "demo"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ລາຍລະອຽດຜູ້ໃຊ້",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ແກ້ໂປຣໄຟລ໌ຕົນເອງ",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"ຊື່ໃໝ່\",\n  \"phone\": \"020 5555 0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ມອບບົດບາດ",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/1/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "1",
+                "roles"
+              ]
+            },
+            "description": "มีด่านกันการยกระดับสิทธิ์ตัวเอง — มอบบทบาทที่แรงกว่าที่ตัวเองมีไม่ได้",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\n    \"agent\"\n  ],\n  \"scoped_company_ids\": [\n    1\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ປົດລັອກບັນຊີ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/1/unlock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "1",
+                "unlock"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ນຳເຂົ້າຜູ້ໃຊ້ (CSV)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "import"
+              ]
+            },
+            "description": "ส่งเป็น multipart/form-data ช่อง file\n\nหัวคอลัมน์ที่ต้องมี: username, full_name, company_code"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6 · ແດຊບອດ ແລະ ລາຍງານ",
+      "item": [
+        {
+          "name": "ສະຫຼຸບແດຊບອດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard",
+                "summary"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "KPI",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/kpi?from=2026-09-01&to=2026-09-30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "kpi"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-09-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-09-30"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ການປະຕິບັດຕາມ SLA",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/sla-compliance?from=2026-09-01&to=2026-09-30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "sla-compliance"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-09-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-09-30"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7 · ອື່ນໆ",
+      "item": [
+        {
+          "name": "ສຸຂະພາບລະບົບ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "ไม่ต้องล็อกอิน · degraded แปลว่าทำงานต่อได้แต่มีส่วนที่ไม่พร้อม"
+          },
+          "response": []
+        },
+        {
+          "name": "ພ້ອມຮັບຄຳຂໍ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/readyz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "readyz"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຍັງມີຊີວິດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/livez",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "livez"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຂໍ້ມູນລະບົບ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/system/info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "info"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຄວາມພ້ອມ (ຜູ້ດູແລ)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/readiness",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "readiness"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ບັນທຶກການກະທຳ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs?page=1&page_size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຕົວເລືອກຂອງບັນທຶກ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs/facets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "audit-logs",
+                "facets"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ການແຈ້ງເຕືອນ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຊ່ອງທາງແຈ້ງເຕືອນ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/channels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "channels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ໝາຍວ່າອ່ານແລ້ວ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "read"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    1,\n    2\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຄຳຂໍອະນຸມັດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/approvals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "approvals"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ບັນຫາ (Problem)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/problems",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "problems"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຄັງຄວາມຮູ້ — ໝວດ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/kb/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kb",
+                "categories"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ຄັງຄວາມຮູ້ — ບົດຄວາມ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/kb/articles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kb",
+                "articles"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "8 · ສິ່ງທີ່ຕ້ອງຖືກປະຕິເສດ",
+      "item": [
+        {
+          "name": "ລະຫັດຊ້ຳ → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "รันหลัง 'เพิ่มหมวดหมู่' — ต้องได้ 409 CATEGORY_CODE_EXISTS",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_CAT\",\n  \"name_th\": \"ຊ້ຳ\",\n  \"company_id\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ต้องได้ 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ລະຫັດຜິດຮູບແບບ → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "code รับแค่ A–Z, 0–9, _ ยาว 2–40",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"ບໍ່ແມ່ນລະຫັດ\",\n  \"name_th\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ต้องได้ 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "duration ທີ່ບໍ່ມີ target_minutes → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/catalog-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalog-items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_BAD\",\n  \"name_th\": \"ຂາດເວລາ\",\n  \"target_mode\": \"duration\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ต้องได้ 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ຕ້ອງອະນຸມັດແຕ່ບໍ່ມີສາຍອະນຸມັດ → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/catalog-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalog-items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_BAD2\",\n  \"name_th\": \"ຂາດສາຍອະນຸມັດ\",\n  \"target_mode\": \"duration\",\n  \"target_minutes\": 10,\n  \"requires_approval\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ต้องได้ 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ແກ້ແຖວທີ່ບໍ່ມີ → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments/99999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "99999999"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ບໍ່ມີຈິງ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ต้องได้ 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ນອກຂອບເຂດ → 404 ບໍ່ແມ່ນ 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tickets/99999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tickets",
+                "99999999"
+              ]
+            },
+            "description": "ตอบ 404 โดยตั้งใจ — การตอบ 403 ยืนยันว่าเรื่องนั้นมีอยู่จริง ซึ่งไม่ควรบอก"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ต้องได้ 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ບໍ່ມີ CSRF → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "ลบค่าใน header X-CSRF-Token ออกก่อนรัน — ทุกคำขอที่เปลี่ยนข้อมูลต้องมี",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_NOCSRF\",\n  \"name_th\": \"ບໍ່ມີ CSRF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ต้องได้ 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "ชุดนี้ทดสอบว่าระบบ 'ปฏิเสธถูกเรื่อง' ซึ่งสำคัญพอ ๆ กับการทำงานถูก"
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000/api/v1",
+      "description": "production: https://aidc-helpdesk.vercel.app/api/v1"
+    },
+    {
+      "key": "username",
+      "value": "demo.superadmin"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "description": "รหัสของบัญชีเดโม — ถามผู้ดูแลระบบ"
+    },
+    {
+      "key": "csrfToken",
+      "value": "",
+      "description": "สคริปต์ตอนล็อกอินเติมให้เอง"
+    },
+    {
+      "key": "ticketId",
+      "value": ""
+    },
+    {
+      "key": "categoryId",
+      "value": ""
+    },
+    {
+      "key": "companyId",
+      "value": ""
+    },
+    {
+      "key": "departmentId",
+      "value": ""
+    },
+    {
+      "key": "serviceId",
+      "value": ""
+    },
+    {
+      "key": "softwareId",
+      "value": ""
+    },
+    {
+      "key": "holidayId",
+      "value": ""
+    },
+    {
+      "key": "templateId",
+      "value": ""
+    },
+    {
+      "key": "catalogItemId",
+      "value": ""
+    },
+    {
+      "key": "escalationRuleId",
+      "value": ""
+    }
+  ]
+}

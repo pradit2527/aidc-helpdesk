@@ -1,4 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+
+import { SuperworkModule } from './integrations/superwork/superwork.module';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -61,6 +63,7 @@ import { UsersService } from './modules/users/users.service';
     DbModule,
     RedisModule,
     JobsModule,
+    SuperworkModule,
   ],
   controllers: [
     ApprovalsController,

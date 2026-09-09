@@ -4,6 +4,11 @@ import { FileText, Paperclip, Pencil, Plus } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
+import {
+  RecordFormDialog,
+  type FieldSpec,
+  type FieldValue,
+} from '@/components/admin/record-form-dialog';
 import { ROLE_LABEL_KEY } from '@/components/layout/app-shell';
 import { useT } from '@/components/layout/preference-controls';
 import { Button } from '@/components/ui/button';
@@ -11,8 +16,13 @@ import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
-import { useChecklistTemplates } from '@/lib/queries/master-data';
-import type { RoleCode } from '@/lib/types';
+import {
+  useChecklistTemplates,
+  useCompanies,
+  useCreateMaster,
+  useUpdateMaster,
+} from '@/lib/queries/master-data';
+import type { ChecklistTemplate, RoleCode } from '@/lib/types';
 
 /**
  * แม่แบบรายการตรวจตาม SOP
@@ -24,7 +34,107 @@ import type { RoleCode } from '@/lib/types';
 export default function ChecklistsPage(): React.JSX.Element {
   const t = useT();
   const query = useChecklistTemplates();
+  const companies = useCompanies();
   const templates = query.data ?? [];
+
+  const createTemplate = useCreateMaster('/checklist-templates');
+  const updateTemplate = useUpdateMaster('/checklist-templates');
+  const createItem = useCreateMaster('/checklist-items');
+
+  const [editing, setEditing] = React.useState<ChecklistTemplate | null>(null);
+  const [creating, setCreating] = React.useState(false);
+  /** แม่แบบที่กำลังเพิ่มข้อย่อยให้ — คนละฟอร์มกับการแก้ตัวแม่แบบเอง */
+  const [addingItemTo, setAddingItemTo] = React.useState<ChecklistTemplate | null>(null);
+
+  const templateFields: FieldSpec[] = [
+    {
+      kind: 'text',
+      name: 'code',
+      label: 'ລະຫັດ',
+      required: true,
+      placeholder: 'SOP04_ONBOARD',
+      lockedOnEdit: true,
+    },
+    { kind: 'text', name: 'name_th', label: 'ຊື່ແມ່ແບບ', required: true },
+    { kind: 'text', name: 'doc_ref', label: 'ອ້າງອີງເອກະສານ', placeholder: 'AIDC-IT-SOP-001 ກ.1' },
+    {
+      kind: 'select',
+      name: 'company_id',
+      label: 'ຂອບເຂດ',
+      options: [
+        { value: '', label: 'ທັງກຸ່ມ' },
+        ...(companies.data ?? []).map((c) => ({ value: String(c.id), label: c.code })),
+      ],
+      lockedOnEdit: true,
+    },
+    { kind: 'checkbox', name: 'is_active', label: 'ເປີດໃຊ້ງານ' },
+  ];
+
+  /*
+   * เวอร์ชันแก้ได้เฉพาะตอนแก้แม่แบบเดิม และไม่ขยับให้เอง
+   * ticket เก่าอ้างเวอร์ชันเดิมผ่านสแนปช็อต การเลื่อนเวอร์ชันจึงต้องเป็น
+   * การตัดสินใจของผู้ดูแล ไม่ใช่ผลข้างเคียงของการแก้ชื่อ
+   */
+  const editFields: FieldSpec[] = [
+    ...templateFields,
+    { kind: 'number', name: 'version', label: 'ເວີຊັນ', hint: 'ຂຶ້ນເອງບໍ່ໄດ້ — ຕັ້ງເມື່ອຕັ້ງໃຈເທົ່ານັ້ນ' },
+  ];
+
+  const itemFields: FieldSpec[] = [
+    { kind: 'text', name: 'title_th', label: 'ຊື່ຂໍ້', required: true },
+    { kind: 'textarea', name: 'description', label: 'ຄຳອະທິບາຍ' },
+    { kind: 'number', name: 'sort_order', label: 'ລຳດັບ', hint: 'ວ່າງໄວ້ = ຕໍ່ທ້າຍໃຫ້ເອງ' },
+    { kind: 'checkbox', name: 'is_required', label: 'ບັງຄັບ', hint: 'ຕິກບໍ່ຄົບແລ້ວປິດເລື່ອງບໍ່ໄດ້' },
+    { kind: 'checkbox', name: 'evidence_required', label: 'ຕ້ອງແນບຫຼັກຖານ' },
+  ];
+
+  const templateInitial: Record<string, FieldValue> = editing
+    ? {
+        code: editing.code,
+        name_th: editing.name_th,
+        doc_ref: editing.doc_ref ?? '',
+        company_id: editing.company ? String(editing.company.id) : '',
+        is_active: editing.is_active,
+        version: editing.version,
+      }
+    : { code: '', name_th: '', doc_ref: '', company_id: '', is_active: true };
+
+  const handleTemplateSubmit = async (values: Record<string, FieldValue>): Promise<void> => {
+    if (editing) {
+      await updateTemplate.mutateAsync({
+        id: editing.id,
+        name_th: String(values.name_th ?? ''),
+        doc_ref: String(values.doc_ref ?? ''),
+        version: Number(values.version ?? editing.version),
+        is_active: values.is_active === true,
+      });
+      toast.success(`ບັນທຶກ ${values.name_th} ແລ້ວ`);
+      return;
+    }
+    await createTemplate.mutateAsync({
+      code: String(values.code ?? ''),
+      name_th: String(values.name_th ?? ''),
+      doc_ref: String(values.doc_ref ?? ''),
+      company_id: values.company_id ? Number(values.company_id) : null,
+      is_active: values.is_active === true,
+    });
+    toast.success(`ສ້າງແມ່ແບບ ${values.name_th} ແລ້ວ`);
+  };
+
+  const handleItemSubmit = async (values: Record<string, FieldValue>): Promise<void> => {
+    if (!addingItemTo) return;
+    await createItem.mutateAsync({
+      template_id: addingItemTo.id,
+      title_th: String(values.title_th ?? ''),
+      description: String(values.description ?? ''),
+      ...(values.sort_order === null || values.sort_order === ''
+        ? {}
+        : { sort_order: Number(values.sort_order) }),
+      is_required: values.is_required === true,
+      evidence_required: values.evidence_required === true,
+    });
+    toast.success(`ເພີ່ມຂໍ້ “${values.title_th}” ແລ້ວ`);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -33,7 +143,7 @@ export default function ChecklistsPage(): React.JSX.Element {
         title="ແມ່ແບບລາຍການກວດ"
         description="ຂັ້ນຕອນທີ່ຕ້ອງເຮັດຄົບຕາມ SOP ກ່ອນປິດຄຳຂໍ"
         actions={
-          <Button onClick={() => toast.info('ຟອມສ້າງແມ່ແບບໃໝ່')}>
+          <Button onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             ສ້າງແມ່ແບບ
           </Button>
@@ -66,14 +176,16 @@ export default function ChecklistsPage(): React.JSX.Element {
                     )}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toast.info(`ແກ້ໄຂ ${template.name_th}`)}
-                >
-                  <Pencil className="h-4 w-4" aria-hidden="true" />
-                  ແກ້ໄຂ
-                </Button>
+                <span className="inline-flex flex-none gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => setAddingItemTo(template)}>
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    ເພີ່ມຂໍ້
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditing(template)}>
+                    <Pencil className="h-4 w-4" aria-hidden="true" />
+                    ແກ້ໄຂ
+                  </Button>
+                </span>
               </CardHeader>
 
               <CardBody className="p-0">
@@ -120,6 +232,34 @@ export default function ChecklistsPage(): React.JSX.Element {
           })}
         </div>
       </QueryBoundary>
+
+      <RecordFormDialog
+        open={creating || editing !== null}
+        title={editing ? `ແກ້ໄຂ ${editing.name_th}` : 'ສ້າງແມ່ແບບໃໝ່'}
+        fields={editing ? editFields : templateFields}
+        initial={templateInitial}
+        editing={editing !== null}
+        onClose={() => {
+          setCreating(false);
+          setEditing(null);
+        }}
+        onSubmit={handleTemplateSubmit}
+      />
+
+      <RecordFormDialog
+        open={addingItemTo !== null}
+        title={addingItemTo ? `ເພີ່ມຂໍ້ໃນ ${addingItemTo.name_th}` : ''}
+        fields={itemFields}
+        initial={{
+          title_th: '',
+          description: '',
+          sort_order: null,
+          is_required: true,
+          evidence_required: false,
+        }}
+        onClose={() => setAddingItemTo(null)}
+        onSubmit={handleItemSubmit}
+      />
     </div>
   );
 }
