@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Input, Select, Textarea } from '@/components/ui/field';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
-import { CHANNEL, IMPACT_OPTIONS, TICKET_TYPE, URGENCY_OPTIONS, previewPriority } from '@/config/enums';
+import { CHANNEL, IMPACT_OPTIONS, URGENCY_OPTIONS, previewPriority } from '@/config/enums';
 import { ApiError } from '@/lib/api';
 import { formatFileSize } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -18,6 +18,19 @@ import { useCategories } from '@/lib/queries/master-data';
 import { useCreateTicket, useUploadAttachments } from '@/lib/queries/tickets';
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+/**
+ * ฟอร์มนี้สร้าง "เหตุขัดข้อง" เสมอ
+ *
+ * เอาช่องเลือกประเภทออกเพราะผู้แจ้งตอบไม่ได้จริง — คำว่า "เหตุขัดข้อง"
+ * กับ "คำขอบริการ" เป็นศัพท์ ITIL ที่คนนอกทีมไอทีแยกไม่ออก แล้วเลือกผิด
+ * บ่อยกว่าเลือกถูก ซึ่งทำให้ SLA ที่คำนวณได้ผิดตั้งแต่ต้น
+ *
+ * การแยกสองอย่างนี้อยู่ที่ "ทางเข้า" ไม่ใช่ที่ช่องกรอก —
+ * เหตุขัดข้องมาจากหน้านี้ (เลือกหมวดหมู่ปัญหา) ส่วนคำขอบริการมาจาก
+ * แคตตาล็อกบริการ ซึ่งมีเป้าหมายเวลาและสายอนุมัติของตัวเอง
+ */
+const TICKET_TYPE_FOR_THIS_FORM = 'incident';
 
 /**
  * แจ้งปัญหา (US-01)
@@ -34,7 +47,6 @@ export default function NewTicketPage(): React.JSX.Element {
   const { user } = useSession();
 
   const [form, setForm] = React.useState({
-    ticket_type: 'incident' as keyof typeof TICKET_TYPE,
     subject: '',
     description: '',
     category_id: '',
@@ -99,7 +111,7 @@ export default function NewTicketPage(): React.JSX.Element {
       const uploaded = files.length > 0 ? await uploadFiles.mutateAsync(files) : [];
 
       const ticket = await createTicket.mutateAsync({
-        ticket_type: form.ticket_type,
+        ticket_type: TICKET_TYPE_FOR_THIS_FORM,
         subject: form.subject.trim(),
         description: form.description.trim(),
         category_id: Number(form.category_id),
@@ -135,14 +147,29 @@ export default function NewTicketPage(): React.JSX.Element {
             <CardTitle>ເລື່ອງທີ່ຕ້ອງການແຈ້ງ</CardTitle>
           </CardHeader>
           <CardBody className="space-y-4">
-            <Field label="ປະເພດ" htmlFor="ticket_type">
+            <Field label="ໝວດໝູ່" htmlFor="category_id" required error={errors.category_id}>
               <Select
-                value={form.ticket_type}
-                onChange={(e) => set('ticket_type', e.target.value as keyof typeof TICKET_TYPE)}
+                value={form.category_id}
+                onChange={(e) => {
+                  const category = (categories.data ?? []).find(
+                    (c) => String(c.id) === e.target.value,
+                  );
+                  set('category_id', e.target.value);
+                  // เติมค่าตั้งต้นของหมวดหมู่ให้ แต่ผู้แจ้งแก้ได้เสมอ
+                  if (category) {
+                    setForm((prev) => ({
+                      ...prev,
+                      category_id: e.target.value,
+                      impact: category.default_impact,
+                      urgency: category.default_urgency,
+                    }));
+                  }
+                }}
               >
-                {Object.entries(TICKET_TYPE).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
+                <option value="">— ເລືອກໝວດໝູ່ —</option>
+                {(categories.data ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name_th}
                   </option>
                 ))}
               </Select>
@@ -176,34 +203,6 @@ export default function NewTicketPage(): React.JSX.Element {
                 onChange={(e) => set('description', e.target.value)}
                 placeholder="ອະທິບາຍບັນຫາ"
               />
-            </Field>
-
-            <Field label="ໝວດໝູ່" htmlFor="category_id" required error={errors.category_id}>
-              <Select
-                value={form.category_id}
-                onChange={(e) => {
-                  const category = (categories.data ?? []).find(
-                    (c) => String(c.id) === e.target.value,
-                  );
-                  set('category_id', e.target.value);
-                  // เติมค่าตั้งต้นของหมวดหมู่ให้ แต่ผู้แจ้งแก้ได้เสมอ
-                  if (category) {
-                    setForm((prev) => ({
-                      ...prev,
-                      category_id: e.target.value,
-                      impact: category.default_impact,
-                      urgency: category.default_urgency,
-                    }));
-                  }
-                }}
-              >
-                <option value="">— ເລືອກໝວດໝູ່ —</option>
-                {(categories.data ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name_th}
-                  </option>
-                ))}
-              </Select>
             </Field>
 
           </CardBody>
