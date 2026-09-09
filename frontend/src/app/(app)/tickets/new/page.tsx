@@ -41,7 +41,6 @@ export default function NewTicketPage(): React.JSX.Element {
     impact: 'individual',
     urgency: 'medium',
     channel: 'portal' as keyof typeof CHANNEL,
-    asset_tag: '',
   });
   const [files, setFiles] = React.useState<File[]>([]);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
@@ -107,7 +106,6 @@ export default function NewTicketPage(): React.JSX.Element {
         impact: form.impact,
         urgency: form.urgency,
         channel: form.channel,
-        ...(form.asset_tag.trim() ? { asset_tag: form.asset_tag.trim() } : {}),
         ...(uploaded.length > 0 ? { attachment_ids: uploaded.map((a) => a.id) } : {}),
       });
 
@@ -208,17 +206,6 @@ export default function NewTicketPage(): React.JSX.Element {
               </Select>
             </Field>
 
-            <Field
-              label="ລະຫັດຊັບສິນ (ຖ້າມີ)"
-              htmlFor="asset_tag"
-              hint="ສະຕິກເກີເລກຊັບສິນທີ່ຕິດຢູ່ເຄື່ອງ"
-            >
-              <Input
-                value={form.asset_tag}
-                onChange={(e) => set('asset_tag', e.target.value)}
-                placeholder="ເຊັ່ນ LOG-PC-0142"
-              />
-            </Field>
           </CardBody>
         </Card>
 

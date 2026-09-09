@@ -98,7 +98,6 @@ export interface CreateTicketInput {
   impact: string;
   urgency: string;
   channel?: string | undefined;
-  asset_tag?: string | undefined;
   attachment_ids?: number[] | undefined;
 }
 
