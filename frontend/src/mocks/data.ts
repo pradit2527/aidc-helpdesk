@@ -92,6 +92,8 @@ export const TICKETS: TicketListItem[] = [
     reopen_count: 0,
     comment_count: 1,
     attachment_count: 0,
+    closed_at: null,
+    satisfaction_score: null,
     updated_at: at(-3),
   },
   {
@@ -112,6 +114,8 @@ export const TICKETS: TicketListItem[] = [
     reopen_count: 0,
     comment_count: 3,
     attachment_count: 2,
+    closed_at: null,
+    satisfaction_score: null,
     updated_at: at(-88),
   },
   {
@@ -132,6 +136,8 @@ export const TICKETS: TicketListItem[] = [
     reopen_count: 0,
     comment_count: 2,
     attachment_count: 1,
+    closed_at: null,
+    satisfaction_score: null,
     updated_at: at(-DAY),
   },
   {
@@ -152,6 +158,8 @@ export const TICKETS: TicketListItem[] = [
     reopen_count: 0,
     comment_count: 4,
     attachment_count: 1,
+    closed_at: null,
+    satisfaction_score: null,
     updated_at: at(-2 * DAY),
   },
   {
@@ -172,6 +180,8 @@ export const TICKETS: TicketListItem[] = [
     reopen_count: 0,
     comment_count: 6,
     attachment_count: 2,
+    closed_at: null,
+    satisfaction_score: null,
     updated_at: at(-3 * DAY),
   },
   {
@@ -192,6 +202,8 @@ export const TICKETS: TicketListItem[] = [
     reopen_count: 1,
     comment_count: 8,
     attachment_count: 0,
+    closed_at: null,
+    satisfaction_score: null,
     updated_at: at(-4 * DAY),
   },
   {
@@ -212,6 +224,8 @@ export const TICKETS: TicketListItem[] = [
     reopen_count: 0,
     comment_count: 1,
     attachment_count: 0,
+    closed_at: null,
+    satisfaction_score: null,
     updated_at: at(-5 * DAY),
   },
   {
@@ -232,6 +246,8 @@ export const TICKETS: TicketListItem[] = [
     reopen_count: 0,
     comment_count: 5,
     attachment_count: 3,
+    closed_at: null,
+    satisfaction_score: null,
     updated_at: at(-7 * DAY),
   },
 ];

@@ -66,6 +66,7 @@ const TICKET_COLUMNS = {
   workaroundNote: ticket.workaroundNote,
   resolvedAt: ticket.resolvedAt,
   resolutionNote: ticket.resolutionNote,
+  closedAt: ticket.closedAt,
   isResponseBreached: ticket.isResponseBreached,
   isResolutionBreached: ticket.isResolutionBreached,
   slaExclusionCode: ticket.slaExclusionCode,

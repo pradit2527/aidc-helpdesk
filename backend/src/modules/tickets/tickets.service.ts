@@ -317,6 +317,15 @@ export class TicketsService {
       reopen_count: row.reopenCount,
       comment_count: 0,
       attachment_count: 0,
+      /*
+       * สองฟิลด์นี้มีความหมายเฉพาะกับเรื่องที่ปิดแล้ว
+       *
+       * หน้าประวัติการแจ้งต้องใช้ทั้งคู่ — วันที่ปิดเพื่อเรียงและบอกว่ายัง
+       * เปิดซ้ำได้ไหม (ภายใน 7 วัน) ส่วนคะแนนเพื่อบอกว่าเคยประเมินหรือยัง
+       * ถ้าไม่คืนมาในรายการ หน้าจอต้องยิงรายละเอียดทีละใบเพื่อรู้แค่สองค่านี้
+       */
+      closed_at: row.closedAt?.toISOString() ?? null,
+      satisfaction_score: row.satisfactionScore,
       created_at: row.createdAt.toISOString(),
       updated_at: row.updatedAt.toISOString(),
     };

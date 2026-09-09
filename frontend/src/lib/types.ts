@@ -71,6 +71,10 @@ export interface TicketListItem {
   reopen_count: number;
   comment_count: number;
   attachment_count: number;
+  /** null = ยังไม่ปิด · ใช้ในหน้าประวัติการแจ้ง */
+  closed_at: string | null;
+  /** 1–5 · null = ยังไม่ได้ประเมิน */
+  satisfaction_score: number | null;
   updated_at: string;
 }
 
@@ -151,7 +155,6 @@ export interface TicketDetail extends TicketListItem {
   vendor_ref: string | null;
   is_major_incident: boolean;
   is_security_incident: boolean;
-  satisfaction_score: number | null;
   can: TicketCan;
   comments: TicketComment[];
   history: TicketHistoryEntry[];

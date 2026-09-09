@@ -250,6 +250,10 @@ export class TicketListItemDto {
   @ApiProperty({ example: 0 }) reopen_count!: number;
   @ApiProperty({ example: 3 }) comment_count!: number;
   @ApiProperty({ example: 2 }) attachment_count!: number;
+  /** null = ยังไม่ปิด · ใช้ในหน้าประวัติการแจ้ง */
+  @ApiPropertyOptional({ example: null, nullable: true }) closed_at!: string | null;
+  /** 1–5 · null = ยังไม่ได้ประเมิน */
+  @ApiPropertyOptional({ example: null, nullable: true }) satisfaction_score!: number | null;
   @ApiProperty({ example: '2026-08-31T09:15:00+07:00' }) created_at!: string;
   @ApiProperty({ example: '2026-08-31T11:02:00+07:00' }) updated_at!: string;
 }
@@ -355,9 +359,6 @@ export class TicketDetailDto extends TicketListItemDto {
     description: 'true = ใช้ขอบเขตการมองเห็นที่แคบกว่าบริษัท (SOP-10 ข้อ 2)',
   })
   is_security_incident!: boolean;
-
-  @ApiProperty({ nullable: true, minimum: 1, maximum: 5, example: null })
-  satisfaction_score!: number | null;
 
   @ApiProperty({
     type: TicketCanDto,

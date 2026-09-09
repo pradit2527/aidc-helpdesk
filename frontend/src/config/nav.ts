@@ -13,28 +13,13 @@
  */
 
 import {
-  Bell,
-  BookOpen,
-  Building2,
-  CalendarClock,
-  CheckSquare,
-  ClipboardCheck,
-  ClipboardList,
-  FileBarChart,
-  FolderTree,
+  Clock,
+  Gauge,
   Inbox,
-  LayoutDashboard,
-  ListChecks,
-  Package,
-  ScrollText,
-  Server,
-  ShieldCheck,
-  Siren,
+  Layers,
+  Plus,
   SlidersHorizontal,
-  Timer,
   User,
-  Users,
-  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -72,8 +57,6 @@ const ALL_ROLES = [
   'super_admin',
 ] as const satisfies readonly RoleCode[];
 
-const STAFF = ['agent', 'company_admin', 'super_admin'] as const satisfies readonly RoleCode[];
-
 const STAFF_AND_VIEWER = [
   'agent',
   'company_admin',
@@ -81,199 +64,97 @@ const STAFF_AND_VIEWER = [
   'super_admin',
 ] as const satisfies readonly RoleCode[];
 
-const ADMIN = ['company_admin', 'super_admin'] as const satisfies readonly RoleCode[];
+/*
+ * พนักงานทั่วไปเท่านั้น — เมนูติดตาม/ประวัติเป็นมุมมอง "เรื่องที่ฉันแจ้ง"
+ * เจ้าหน้าที่ไม่ต้องใช้ เพราะมีคิวงานที่ครอบคลุมกว่าอยู่แล้ว
+ */
+const EMPLOYEE_ONLY = ['end_user'] as const satisfies readonly RoleCode[];
 
-const SUPER = ['super_admin'] as const satisfies readonly RoleCode[];
+/*
+ * ใครเปิดหน้าตั้งค่าได้บ้าง
+ *
+ * ⚠️ "เปิดดูได้" ไม่เท่ากับ "แก้ได้" — agent เปิดดูได้เพื่อใช้อ้างอิงระหว่าง
+ *    ทำงาน (เช่นดูเวลาทำการหรือกฎยกระดับ) แต่ทุกช่องถูกปิดไว้
+ *    การตัดสินว่าแก้ได้ไหมอยู่ที่ permission ฝั่ง backend ไม่ใช่ที่เมนูนี้
+ */
+const SETTINGS_VIEWERS = [
+  'agent',
+  'company_admin',
+  'super_admin',
+] as const satisfies readonly RoleCode[];
 
 export const NAV_SECTIONS: readonly NavSection[] = [
   {
     titleKey: null,
     items: [
+      /*
+       * ── พนักงานทั่วไป: 3 เมนู ──
+       *
+       * ต้นแบบแยกงานของพนักงานเป็นสามอย่างชัด ๆ คือ "แจ้ง" "ติดตามที่ยังไม่ปิด"
+       * และ "ประวัติที่ปิดแล้ว" — ไม่ใช่รายการเดียวที่มีตัวกรองสถานะ
+       * เพราะสองสถานะนี้ผู้ใช้มาด้วยเจตนาคนละอย่าง คนที่มาติดตามอยากรู้ว่า
+       * "อีกนานไหม" ส่วนคนที่เปิดประวัติอยากหาเรื่องเก่าเพื่ออ้างอิงหรือเปิดซ้ำ
+       */
       {
-        href: '/tickets/my',
-        labelKey: 'nav.myTickets',
-        shortKey: 'navShort.myTickets',
-        icon: ClipboardList,
+        href: '/tickets/new',
+        labelKey: 'nav.newTicket',
+        shortKey: 'navShort.newTicket',
+        icon: Plus,
         roles: ALL_ROLES,
       },
       {
-        href: '/queue',
-        labelKey: 'nav.queue',
-        shortKey: 'navShort.queue',
+        href: '/tickets/my',
+        labelKey: 'nav.track',
+        shortKey: 'navShort.track',
         icon: Inbox,
-        roles: STAFF,
+        roles: EMPLOYEE_ONLY,
+      },
+      {
+        href: '/tickets/history',
+        labelKey: 'nav.history',
+        shortKey: 'navShort.history',
+        icon: Clock,
+        roles: EMPLOYEE_ONLY,
+      },
+
+      /*
+       * ── เจ้าหน้าที่: 5 เมนู ──
+       * คิวของฉัน · ทั้งหมดในขอบเขต · แดชบอร์ด · แจ้งเรื่อง · ตั้งค่าระบบ
+       */
+      {
+        href: '/queue',
+        labelKey: 'nav.myQueue',
+        shortKey: 'navShort.myQueue',
+        icon: Inbox,
+        roles: STAFF_AND_VIEWER,
       },
       {
         href: '/tickets',
         labelKey: 'nav.allTickets',
         shortKey: 'navShort.allTickets',
-        icon: ListChecks,
+        icon: Layers,
         roles: STAFF_AND_VIEWER,
       },
-      {
-        href: '/approvals',
-        labelKey: 'nav.approvals',
-        shortKey: 'navShort.approvals',
-        icon: CheckSquare,
-        roles: ALL_ROLES,
-      },
-    ],
-  },
-  {
-    titleKey: 'navGroup.overview',
-    items: [
       {
         href: '/dashboard',
         labelKey: 'nav.dashboard',
         shortKey: 'navShort.dashboard',
-        icon: LayoutDashboard,
+        icon: Gauge,
         roles: STAFF_AND_VIEWER,
       },
-      {
-        href: '/reports',
-        labelKey: 'nav.reports',
-        shortKey: 'navShort.reports',
-        icon: FileBarChart,
-        roles: STAFF_AND_VIEWER,
-        matchPrefix: true,
-      },
-    ],
-  },
-  {
-    titleKey: 'navGroup.knowledge',
-    items: [
-      {
-        href: '/kb',
-        labelKey: 'nav.kb',
-        shortKey: 'navShort.kb',
-        icon: BookOpen,
-        roles: ALL_ROLES,
-        matchPrefix: true,
-      },
-      {
-        href: '/notifications',
-        labelKey: 'nav.notifications',
-        shortKey: 'navShort.notifications',
-        icon: Bell,
-        roles: ALL_ROLES,
-      },
-    ],
-  },
-  {
-    titleKey: 'navGroup.admin',
-    items: [
+      /*
+       * ตั้งค่าระบบเป็น "หน้าเดียว 10 แท็บ" ตามต้นแบบ ไม่ใช่ 16 หน้าแยกกัน
+       *
+       * matchPrefix เพื่อให้เมนูยังไฮไลต์อยู่เมื่อสลับแท็บ (/admin?tab=sla)
+       * และเมื่ออยู่ในหน้าลูกที่ยังไม่ได้ยุบ เช่น /admin/users/12
+       */
       {
         href: '/admin',
-        labelKey: 'nav.adminConsole',
-        shortKey: 'nav.adminConsole',
+        labelKey: 'nav.settings',
+        shortKey: 'navShort.settings',
         icon: SlidersHorizontal,
-        roles: ADMIN,
-      },
-      {
-        href: '/admin/users',
-        labelKey: 'nav.users',
-        shortKey: 'navShort.users',
-        icon: Users,
-        roles: ADMIN,
+        roles: SETTINGS_VIEWERS,
         matchPrefix: true,
-      },
-      {
-        href: '/admin/departments',
-        labelKey: 'nav.departments',
-        shortKey: 'nav.departments',
-        icon: FolderTree,
-        roles: ADMIN,
-      },
-      {
-        href: '/admin/categories',
-        labelKey: 'nav.categories',
-        shortKey: 'nav.categories',
-        icon: FolderTree,
-        roles: ADMIN,
-      },
-      {
-        href: '/admin/roles',
-        labelKey: 'nav.roles',
-        shortKey: 'nav.roles',
-        icon: ShieldCheck,
-        roles: ADMIN,
-      },
-      {
-        href: '/admin/catalog',
-        labelKey: 'nav.catalog',
-        shortKey: 'nav.catalog',
-        icon: Package,
-        roles: ADMIN,
-      },
-      {
-        href: '/admin/checklists',
-        labelKey: 'nav.checklists',
-        shortKey: 'nav.checklists',
-        icon: ClipboardCheck,
-        roles: ADMIN,
-      },
-      {
-        href: '/admin/services',
-        labelKey: 'nav.services',
-        shortKey: 'nav.services',
-        icon: Server,
-        roles: STAFF,
-      },
-      {
-        href: '/admin/problems',
-        labelKey: 'nav.problems',
-        shortKey: 'nav.problems',
-        icon: Wrench,
-        roles: STAFF,
-      },
-      {
-        href: '/admin/audit-logs',
-        labelKey: 'nav.auditLogs',
-        shortKey: 'nav.auditLogs',
-        icon: ScrollText,
-        roles: ADMIN,
-      },
-      {
-        href: '/admin/sla',
-        labelKey: 'nav.sla',
-        shortKey: 'nav.sla',
-        icon: Timer,
-        roles: SUPER,
-      },
-      {
-        href: '/admin/business-hours',
-        labelKey: 'nav.businessHours',
-        shortKey: 'nav.businessHours',
-        icon: CalendarClock,
-        roles: SUPER,
-      },
-      {
-        href: '/admin/escalation',
-        labelKey: 'nav.escalation',
-        shortKey: 'nav.escalation',
-        icon: Siren,
-        roles: SUPER,
-      },
-      {
-        href: '/admin/software',
-        labelKey: 'nav.software',
-        shortKey: 'nav.software',
-        icon: ListChecks,
-        roles: SUPER,
-      },
-      {
-        href: '/admin/companies',
-        labelKey: 'nav.companies',
-        shortKey: 'nav.companies',
-        icon: Building2,
-        roles: SUPER,
-      },
-      {
-        href: '/admin/system',
-        labelKey: 'nav.system',
-        shortKey: 'nav.system',
-        icon: Server,
-        roles: SUPER,
       },
     ],
   },
@@ -286,11 +167,11 @@ export const NAV_SECTIONS: readonly NavSection[] = [
  * ช่อง "ຂ້ອຍ" (โปรไฟล์) ถูกเติมเป็นช่องสุดท้ายเสมอในบาง role จึงเหลือ 3 ช่องแรก
  */
 export const BOTTOM_NAV: Record<RoleCode, readonly string[]> = {
-  end_user: ['/tickets/my', '/kb', '/notifications', '/profile'],
-  agent: ['/queue', '/tickets', '/kb', '/notifications'],
-  company_admin: ['/dashboard', '/tickets', '/admin/users', '/notifications'],
-  manager_viewer: ['/dashboard', '/reports', '/tickets', '/profile'],
-  super_admin: ['/dashboard', '/tickets', '/admin/users', '/notifications'],
+  end_user: ['/tickets/new', '/tickets/my', '/tickets/history', '/profile'],
+  agent: ['/queue', '/tickets', '/tickets/new', '/admin'],
+  company_admin: ['/queue', '/tickets', '/dashboard', '/admin'],
+  manager_viewer: ['/queue', '/tickets', '/dashboard', '/profile'],
+  super_admin: ['/queue', '/tickets', '/dashboard', '/admin'],
 };
 
 /** หน้าแรกหลังเข้าสู่ระบบ ต่างกันตาม role (หน้าจอ #3 ทางเข้าตามบทบาท) */
