@@ -12,6 +12,14 @@ export interface TicketCategorySeed {
   readonly defaultImpact: 'org_wide' | 'department' | 'individual';
   readonly defaultUrgency: 'high' | 'medium' | 'low';
   readonly sortOrder: number;
+  /**
+   * false = ยังอยู่ในฐานข้อมูลแต่ไม่ให้เลือกตอนแจ้งเรื่องใหม่
+   *
+   * ⚠️ หมวดที่เคยมี ticket ผูกอยู่ต้องปิดแบบนี้ ห้ามลบทิ้ง
+   *    ticket เก่าอ้างถึง category_id อยู่ ถ้าลบแถวไป ประวัติจะชี้ไปที่
+   *    ความว่างเปล่า และรายงานย้อนหลังจะนับหมวดนั้นไม่ได้อีกเลย
+   */
+  readonly isActive?: boolean;
 }
 
 /**
@@ -23,13 +31,17 @@ export const TICKET_CATEGORIES: readonly TicketCategorySeed[] = [
   { code: 'NETWORK', nameTh: 'ເຄືອຂ່າຍ ແລະ ອິນເຕີເນັດ', defaultImpact: 'department', defaultUrgency: 'high', sortOrder: 10 },
   { code: 'HARDWARE', nameTh: 'ອຸປະກອນຄອມພິວເຕີ', defaultImpact: 'individual', defaultUrgency: 'medium', sortOrder: 20 },
   { code: 'SOFTWARE', nameTh: 'ຊອບແວ ແລະ ແອັບພລິເຄຊັນ', defaultImpact: 'individual', defaultUrgency: 'medium', sortOrder: 30 },
-  { code: 'ERP', nameTh: 'ລະບົບ ERP', defaultImpact: 'department', defaultUrgency: 'high', sortOrder: 40 },
+  // ปิดใช้งานตามที่องค์กรแจ้ง — ไม่ลบเพราะยังมี ticket เก่าผูกอยู่
+  { code: 'ERP', nameTh: 'ລະບົບ ERP', defaultImpact: 'department', defaultUrgency: 'high', sortOrder: 40, isActive: false },
   { code: 'EMAIL', nameTh: 'ອີເມວ ແລະ ບັນຊີຜູ້ໃຊ້', defaultImpact: 'individual', defaultUrgency: 'medium', sortOrder: 50 },
   { code: 'PRINTER', nameTh: 'ເຄື່ອງພິມ ແລະ ເຄື່ອງສະແກນ', defaultImpact: 'individual', defaultUrgency: 'low', sortOrder: 60 },
   { code: 'ACCESS', nameTh: 'ສິດເຂົ້າເຖິງລະບົບ', defaultImpact: 'individual', defaultUrgency: 'medium', sortOrder: 70 },
   { code: 'SECURITY', nameTh: 'ຄວາມປອດໄພຂໍ້ມູນ', defaultImpact: 'org_wide', defaultUrgency: 'high', sortOrder: 80 },
   { code: 'CCTV', nameTh: 'ກ້ອງວົງຈອນປິດ', defaultImpact: 'individual', defaultUrgency: 'low', sortOrder: 90 },
   { code: 'MOBILE', nameTh: 'ໂທລະສັບ ແລະ ອຸປະກອນເຄື່ອນທີ່', defaultImpact: 'individual', defaultUrgency: 'low', sortOrder: 100 },
+  { code: 'AI_TOOLS', nameTh: 'ຂໍສິດໃຊ້ເຄື່ອງມື AI', defaultImpact: 'individual', defaultUrgency: 'medium', sortOrder: 110 },
+  // ชื่อผลิตภัณฑ์ ไม่แปล — ทีมเรียกทับศัพท์อยู่แล้วทั้งลาวและไทย
+  { code: 'SUPER_WORK', nameTh: 'Super Work', defaultImpact: 'department', defaultUrgency: 'medium', sortOrder: 120 },
   { code: 'OTHER', nameTh: 'ອື່ນ ໆ', defaultImpact: 'individual', defaultUrgency: 'low', sortOrder: 999 },
 ];
 

@@ -14,7 +14,7 @@ import { CHANNEL, IMPACT_OPTIONS, URGENCY_OPTIONS, previewPriority } from '@/con
 import { ApiError } from '@/lib/api';
 import { formatFileSize } from '@/lib/format';
 import { useSession } from '@/lib/session';
-import { useCategories } from '@/lib/queries/master-data';
+import { useActiveCategories } from '@/lib/queries/master-data';
 import { useCreateTicket, useUploadAttachments } from '@/lib/queries/tickets';
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -57,7 +57,8 @@ export default function NewTicketPage(): React.JSX.Element {
   const [files, setFiles] = React.useState<File[]>([]);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
-  const categories = useCategories();
+  // ฟอร์มนี้ต้องไม่เสนอหมวดที่ปิดใช้งานแล้ว
+  const categories = useActiveCategories();
   const createTicket = useCreateTicket();
   const uploadFiles = useUploadAttachments();
   const submitting = createTicket.isPending || uploadFiles.isPending;

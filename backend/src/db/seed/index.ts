@@ -300,7 +300,7 @@ async function seedCatalog(db: Db): Promise<void> {
         defaultImpact: c.defaultImpact,
         defaultUrgency: c.defaultUrgency,
         sortOrder: c.sortOrder,
-        isActive: true,
+        isActive: c.isActive ?? true,
       })),
     )
     .onConflictDoUpdate({
@@ -310,6 +310,8 @@ async function seedCatalog(db: Db): Promise<void> {
         defaultImpact: sql`excluded.default_impact`,
         defaultUrgency: sql`excluded.default_urgency`,
         sortOrder: sql`excluded.sort_order`,
+        // ต้องอัปเดตด้วย มิฉะนั้นการปิดหมวดใน seed จะไม่มีผลกับฐานข้อมูลที่มีอยู่แล้ว
+        isActive: sql`excluded.is_active`,
       },
     })
     .returning({ id: schema.ticketCategory.id, code: schema.ticketCategory.code });

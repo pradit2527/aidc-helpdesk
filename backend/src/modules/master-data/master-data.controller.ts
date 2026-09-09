@@ -1,5 +1,5 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
@@ -41,12 +41,15 @@ export class MasterDataController {
     summary: 'หมวดหมู่ปัญหา',
     description:
       'คืนแบนราบพร้อม `parent_id` ให้หน้าจอประกอบเป็นต้นไม้เอง — ' +
-      'บางหน้าต้องการรายการแบนสำหรับตัวเลือกในฟอร์ม บางหน้าต้องการต้นไม้',
+      'บางหน้าต้องการรายการแบนสำหรับตัวเลือกในฟอร์ม บางหน้าต้องการต้นไม้ · ' +
+      '`active_only=true` สำหรับฟอร์มแจ้งเรื่องใหม่ ที่ต้องไม่เสนอหมวดที่ปิดไปแล้ว ' +
+      '· ค่าเริ่มต้นคืนทั้งหมด เพราะหน้าผู้ดูแลต้องเห็นหมวดที่ปิดเพื่อเปิดกลับได้',
   })
-  categories(@CurrentScope() scope: AccessScope) {
+  @ApiQuery({ name: 'active_only', required: false, enum: ['true', 'false'] })
+  categories(@CurrentScope() scope: AccessScope, @Query('active_only') activeOnly?: string) {
     // ทุกคนที่แจ้งเรื่องได้ต้องเห็นหมวดหมู่ ไม่งั้นเลือกตอนแจ้งไม่ได้
     scope.require('ticket.create', 'category.manage');
-    return this.master.categories(scope);
+    return this.master.categories(scope, activeOnly === 'true');
   }
 
   @Get('catalog-items')

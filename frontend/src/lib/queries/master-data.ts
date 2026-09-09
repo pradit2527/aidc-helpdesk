@@ -51,7 +51,22 @@ function useMaster<T>(name: string, path: string): UseQueryResult<T[], Error> {
 
 export const useCompanies = () => useMaster<Company>('companies', '/companies');
 export const useDepartments = () => useMaster<Department>('departments', '/departments');
+/**
+ * หมวดหมู่ทั้งหมด รวมที่ปิดใช้งานแล้ว — สำหรับหน้าผู้ดูแล
+ *
+ * หน้าผู้ดูแลต้องเห็นหมวดที่ปิดไปแล้วเพื่อเปิดกลับหรือแก้ชื่อ
+ * ถ้ากรองออกตั้งแต่ตรงนี้ หมวดที่ปิดจะดูเหมือนหายไปจากระบบ
+ */
 export const useCategories = () => useMaster<TicketCategory>('categories', '/categories');
+
+/**
+ * เฉพาะหมวดที่ยังเปิดใช้ — สำหรับฟอร์มแจ้งเรื่องใหม่
+ *
+ * แยกคีย์แคชจากตัวข้างบน มิฉะนั้นสองหน้าจะใช้ผลลัพธ์ร่วมกัน
+ * แล้วหน้าไหนโหลดก่อนจะเป็นตัวกำหนดว่าอีกหน้าเห็นอะไร
+ */
+export const useActiveCategories = () =>
+  useMaster<TicketCategory>('categories-active', '/categories?active_only=true');
 export const useCatalogItems = () => useMaster<CatalogItem>('catalog-items', '/catalog-items');
 export const useServices = () => useMaster<ServiceRecord>('services', '/services');
 export const useApprovedSoftware = () =>

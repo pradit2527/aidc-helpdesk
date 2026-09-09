@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias, type PgColumn } from 'drizzle-orm/pg-core';
 
 import type { AccessScope } from '../../common/scope';
@@ -149,7 +149,16 @@ export class MasterDataService {
    * เพราะบางหน้าต้องการรายการแบน (ตัวเลือกในฟอร์ม) บางหน้าต้องการต้นไม้
    * การคืนแบนราบทำได้ทั้งสองแบบ ส่วนต้นไม้ทำให้แบนกลับยาก
    */
-  async categories(scope: AccessScope) {
+  /**
+   * @param activeOnly true = เฉพาะหมวดที่ยังเปิดใช้ (ฟอร์มแจ้งเรื่องใหม่)
+   *                   false = ทั้งหมดรวมที่ปิดแล้ว (หน้าผู้ดูแล)
+   *
+   * ⚠️ ค่าเริ่มต้นเป็น false โดยตั้งใจ
+   *    หน้าผู้ดูแลต้องเห็นหมวดที่ปิดไปแล้วเพื่อเปิดกลับหรือแก้ชื่อ
+   *    ส่วนฟอร์มแจ้งเรื่องต้องส่ง active_only=true มาเอง — ถ้าสลับค่าเริ่มต้น
+   *    หน้าผู้ดูแลจะมองไม่เห็นหมวดที่ปิดแล้วเลย และจะดูเหมือนข้อมูลหาย
+   */
+  async categories(scope: AccessScope, activeOnly = false) {
     const assignee = alias(appUser, 'default_assignee');
     const rows = await this.db
       .select({
@@ -169,7 +178,11 @@ export class MasterDataService {
       .from(ticketCategory)
       .leftJoin(company, eq(company.id, ticketCategory.companyId))
       .leftJoin(assignee, eq(assignee.id, ticketCategory.defaultAssigneeId))
-      .where(this.companyScope(scope, ticketCategory.companyId))
+      .where(
+        activeOnly
+          ? and(this.companyScope(scope, ticketCategory.companyId), eq(ticketCategory.isActive, true))
+          : this.companyScope(scope, ticketCategory.companyId),
+      )
       .orderBy(asc(ticketCategory.sortOrder), asc(ticketCategory.nameTh));
 
     return rows.map(({ company_id, company_code, assignee_id, assignee_name, ...r }) => ({
