@@ -2,6 +2,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias, type PgColumn } from 'drizzle-orm/pg-core';
 
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../../common/errors/domain-error';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
@@ -682,4 +688,138 @@ export class MasterDataService {
       .from(permission)
       .orderBy(asc(permission.code));
   }
+
+  /**
+   * สร้างหมวดหมู่ปัญหา
+   *
+   * ⚠️ code เป็นตัวระบุถาวร แก้ไม่ได้หลังสร้าง
+   *    รายงานย้อนหลัง กฎ routing และการนำเข้าข้อมูลอ้างถึง code ไม่ใช่ id
+   *    การเปลี่ยน code ภายหลังทำให้ของเหล่านั้นชี้ผิดโดยไม่มีอะไรฟ้อง
+   *    ถ้าตั้งผิดให้ปิดตัวเก่าแล้วสร้างใหม่
+   */
+  async createCategory(
+    scope: AccessScope,
+    input: {
+      code: string;
+      name_th: string;
+      company_id?: number | null;
+      default_impact?: string;
+      default_urgency?: string;
+      sort_order?: number;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('category.manage');
+
+    const code = input.code?.trim().toUpperCase() ?? '';
+    const nameTh = input.name_th?.trim() ?? '';
+
+    if (!/^[A-Z0-9_]{2,40}$/.test(code)) {
+      throw new ValidationError('VALIDATION_ERROR', 'ລະຫັດຕ້ອງເປັນ A–Z, 0–9 ຫຼື _ ຄວາມຍາວ 2–40 ຕົວ', [
+        { field: 'code', message: 'ຮູບແບບລະຫັດບໍ່ຖືກຕ້ອງ' },
+      ]);
+    }
+    if (nameTh.length < 2) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຊື່ໝວດໝູ່ສັ້ນເກີນໄປ', [
+        { field: 'name_th', message: 'ຕ້ອງຍາວຢ່າງໜ້ອຍ 2 ຕົວອັກສອນ' },
+      ]);
+    }
+
+    /*
+     * company_id = null คือหมวดระดับกลุ่มที่ทุกบริษัทใช้ร่วมกัน
+     * ซึ่งมีแต่ super_admin เท่านั้นที่สร้างได้ — ผู้ดูแลบริษัทเดียว
+     * ไม่ควรสร้างของที่บังคับใช้กับอีก 6 บริษัท
+     */
+    const companyId = input.company_id ?? null;
+    if (companyId === null && !scope.isSuperAdmin) {
+      throw new ForbiddenError(
+        'FORBIDDEN',
+        'ມີແຕ່ຜູ້ດູແລລະບົບເທົ່ານັ້ນທີ່ສ້າງໝວດໝູ່ລະດັບກຸ່ມໄດ້',
+      );
+    }
+    if (companyId !== null && !scope.inScope(companyId)) {
+      throw new ForbiddenError('FORBIDDEN', 'ບໍລິສັດນີ້ຢູ່ນອກຂອບເຂດຂອງທ່ານ');
+    }
+
+    try {
+      const [row] = await this.db
+        .insert(ticketCategory)
+        .values({
+          companyId,
+          code,
+          nameTh,
+          defaultImpact: input.default_impact ?? 'individual',
+          defaultUrgency: input.default_urgency ?? 'medium',
+          sortOrder: input.sort_order ?? 0,
+          isActive: input.is_active ?? true,
+        })
+        .returning({ id: ticketCategory.id });
+
+      return this.categoryById(scope, row!.id);
+    } catch (err) {
+      // unique (company_id, code) — บอกให้ชัดว่าซ้ำ ไม่ใช่ 500 ที่อ่านไม่รู้เรื่อง
+      if (err instanceof Error && err.message.includes('uq_ticket_category_company_code')) {
+        throw new ConflictError('CATEGORY_CODE_EXISTS', `ມີລະຫັດ ${code} ຢູ່ແລ້ວ`, { code });
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * แก้ไขหมวดหมู่
+   *
+   * ⚠️ ไม่มี endpoint ลบโดยตั้งใจ — ปิดด้วย is_active เท่านั้น
+   *    ticket เก่าอ้างถึง category_id อยู่ ถ้าลบแถวไป ประวัติจะชี้ไปที่
+   *    ความว่างเปล่า และรายงานย้อนหลังจะนับหมวดนั้นไม่ได้อีกเลย
+   *    ฐานข้อมูลก็ปฏิเสธการลบอยู่แล้วด้วย FK แต่ข้อความที่ได้อ่านไม่รู้เรื่อง
+   *
+   * ⚠️ code ไม่อยู่ในรายการที่แก้ได้ ด้วยเหตุผลเดียวกับตอนสร้าง
+   */
+  async updateCategory(
+    scope: AccessScope,
+    id: number,
+    input: {
+      name_th?: string;
+      default_impact?: string;
+      default_urgency?: string;
+      sort_order?: number;
+      is_active?: boolean;
+    },
+  ) {
+    scope.require('category.manage');
+
+    // อ่านก่อนเพื่อตรวจขอบเขต — นอกขอบเขตได้ 404 ไม่ใช่ 403
+    const current = await this.categoryById(scope, id);
+
+    const patch: Record<string, unknown> = {};
+    if (input.name_th !== undefined) {
+      const nameTh = input.name_th.trim();
+      if (nameTh.length < 2) {
+        throw new ValidationError('VALIDATION_ERROR', 'ຊື່ໝວດໝູ່ສັ້ນເກີນໄປ', [
+          { field: 'name_th', message: 'ຕ້ອງຍາວຢ່າງໜ້ອຍ 2 ຕົວອັກສອນ' },
+        ]);
+      }
+      patch.nameTh = nameTh;
+    }
+    if (input.default_impact !== undefined) patch.defaultImpact = input.default_impact;
+    if (input.default_urgency !== undefined) patch.defaultUrgency = input.default_urgency;
+    if (input.sort_order !== undefined) patch.sortOrder = input.sort_order;
+    if (input.is_active !== undefined) patch.isActive = input.is_active;
+
+    if (Object.keys(patch).length === 0) return current;
+
+    await this.db.update(ticketCategory).set(patch).where(eq(ticketCategory.id, id));
+    return this.categoryById(scope, id);
+  }
+
+  /** อ่านหมวดเดียวพร้อมตรวจขอบเขต — ใช้ยืนยันผลหลังเขียน */
+  private async categoryById(scope: AccessScope, id: number) {
+    const rows = await this.categories(scope);
+    const found = rows.find((r) => r.id === id);
+    if (!found) {
+      throw new NotFoundError('CATEGORY_NOT_FOUND', 'ບໍ່ພົບໝວດໝູ່ທີ່ລະບຸ', { id });
+    }
+    return found;
+  }
+
 }

@@ -1,5 +1,15 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBody, ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
@@ -174,4 +184,81 @@ export class MasterDataController {
     scope.require('role.read', 'role.manage');
     return this.master.permissions();
   }
+
+  @Post('categories')
+  @ApiOperation({
+    summary: 'สร้างหมวดหมู่ปัญหา',
+    description:
+      '`code` เป็นตัวระบุถาวร แก้ไม่ได้หลังสร้าง — รายงานย้อนหลัง กฎ routing ' +
+      'และการนำเข้าข้อมูลอ้างถึง code ไม่ใช่ id การเปลี่ยนภายหลังทำให้ของเหล่านั้น ' +
+      'ชี้ผิดโดยไม่มีอะไรฟ้อง · `company_id: null` = หมวดระดับกลุ่ม ' +
+      'ซึ่งมีแต่ super_admin สร้างได้',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['code', 'name_th'],
+      properties: {
+        code: { type: 'string', example: 'AI_TOOLS', description: 'A–Z, 0–9, _ ยาว 2–40' },
+        name_th: { type: 'string', example: 'ຂໍສິດໃຊ້ເຄື່ອງມື AI' },
+        company_id: { type: 'number', nullable: true, description: 'null = ระดับกลุ่ม' },
+        default_impact: { type: 'string', enum: ['org_wide', 'department', 'individual'] },
+        default_urgency: { type: 'string', enum: ['high', 'medium', 'low'] },
+        sort_order: { type: 'number', example: 110 },
+        is_active: { type: 'boolean', example: true },
+      },
+    },
+  })
+  createCategory(
+    @CurrentScope() scope: AccessScope,
+    @Body()
+    body: {
+      code: string;
+      name_th: string;
+      company_id?: number | null;
+      default_impact?: string;
+      default_urgency?: string;
+      sort_order?: number;
+      is_active?: boolean;
+    },
+  ) {
+    return this.master.createCategory(scope, body);
+  }
+
+  @Patch('categories/:id')
+  @ApiOperation({
+    summary: 'แก้ไขหมวดหมู่ปัญหา',
+    description:
+      '**ไม่มี endpoint ลบโดยตั้งใจ** — ปิดด้วย `is_active: false` เท่านั้น · ' +
+      'ticket เก่าอ้างถึง `category_id` อยู่ ถ้าลบแถวไป ประวัติจะชี้ไปที่ความว่างเปล่า ' +
+      'และรายงานย้อนหลังจะนับหมวดนั้นไม่ได้อีกเลย · ' +
+      '`code` แก้ไม่ได้ด้วยเหตุผลเดียวกับตอนสร้าง',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name_th: { type: 'string' },
+        default_impact: { type: 'string', enum: ['org_wide', 'department', 'individual'] },
+        default_urgency: { type: 'string', enum: ['high', 'medium', 'low'] },
+        sort_order: { type: 'number' },
+        is_active: { type: 'boolean' },
+      },
+    },
+  })
+  updateCategory(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: {
+      name_th?: string;
+      default_impact?: string;
+      default_urgency?: string;
+      sort_order?: number;
+      is_active?: boolean;
+    },
+  ) {
+    return this.master.updateCategory(scope, id, body);
+  }
+
 }
