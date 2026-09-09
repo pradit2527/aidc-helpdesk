@@ -14,6 +14,8 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+
+import { SUPERWORK_OPENAPI } from './integrations/superwork/superwork.openapi';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 
@@ -134,6 +136,23 @@ async function bootstrap(): Promise<void> {
     },
   });
 
+  /*
+   * เอกสารของ Super Work — API ของระบบอื่นที่เราเชื่อมต่ออยู่
+   *
+   * แยกเป็นคนละหน้ากับ /docs โดยตั้งใจ ไม่เอามาปนกับ endpoint ของเราเอง
+   * เพราะสิ่งที่ "เราให้บริการ" กับสิ่งที่ "เราไปเรียกใช้" เป็นคนละเรื่องกัน
+   * การรวมไว้หน้าเดียวจะทำให้คนอ่านเข้าใจผิดว่าเราให้บริการ endpoint พวกนั้นด้วย
+   */
+  SwaggerModule.setup(`${API_PREFIX}/docs-superwork`, app, SUPERWORK_OPENAPI, {
+    jsonDocumentUrl: `${API_PREFIX}/openapi-superwork.json`,
+    customSiteTitle: 'Super Work Partner API (ระบบภายนอก)',
+    swaggerOptions: {
+      persistAuthorization: true,
+      docExpansion: 'list',
+      tryItOutEnabled: true,
+    },
+  });
+
   const port = Number(process.env.PORT ?? 8000);
   await app.listen(port, '0.0.0.0');
 
@@ -145,6 +164,7 @@ async function bootstrap(): Promise<void> {
       `  - API      : http://localhost:${port}/${API_PREFIX}`,
       `  - เอกสาร    : http://localhost:${port}/${API_PREFIX}/docs`,
       `  - OpenAPI  : http://localhost:${port}/${API_PREFIX}/openapi.json`,
+      `  - Super Work: http://localhost:${port}/${API_PREFIX}/docs-superwork`,
       '',
     ].join('\n'),
   );
