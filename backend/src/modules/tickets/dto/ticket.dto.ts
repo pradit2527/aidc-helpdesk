@@ -284,6 +284,20 @@ export class TicketCommentDto {
 
   @ApiProperty({ example: '2026-09-07T02:30:00.000Z' }) created_at!: string;
   @ApiPropertyOptional({ type: RefUserDto, nullable: true }) author!: RefUserDto | null;
+
+  @ApiProperty({
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        id: { type: 'number' },
+        file_name: { type: 'string' },
+        file_size: { type: 'number' },
+      },
+    },
+    description: 'อาเรย์ว่างเมื่อไม่มีไฟล์แนบ ไม่ใช่ไม่ส่งฟิลด์',
+  })
+  attachments!: { id: number; file_name: string; file_size: number }[];
 }
 
 export class TicketHistoryDto {

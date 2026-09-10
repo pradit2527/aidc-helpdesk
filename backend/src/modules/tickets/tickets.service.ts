@@ -144,6 +144,22 @@ export class TicketsService {
       this.details.approvals(row.id),
     ]);
 
+    /*
+     * ไฟล์แนบของคอมเมนต์ต้องดึงหลังรู้ว่าคอมเมนต์ไหนรอดจากการกรองแล้ว
+     *
+     * ถ้าดึงพร้อมกันข้างบน จะต้องดึงของคอมเมนต์ภายในมาด้วย แล้วค่อยกรองทิ้ง
+     * ทีหลัง ซึ่งเท่ากับอ่านข้อมูลที่ผู้เรียกไม่มีสิทธิ์เห็นขึ้นมาก่อน
+     */
+    const attachments = await this.details.commentAttachments(comments.map((c) => c.id));
+    const filesByComment = new Map<number, { id: number; file_name: string; file_size: number }[]>();
+    for (const a of attachments) {
+      if (a.commentId === null) continue;
+      const list = filesByComment.get(a.commentId);
+      const file = { id: a.id, file_name: a.fileName, file_size: a.fileSize };
+      if (list) list.push(file);
+      else filesByComment.set(a.commentId, [file]);
+    }
+
     return {
       ...base,
       comments: comments.map((c) => ({
@@ -153,6 +169,9 @@ export class TicketsService {
         is_system: c.isSystem,
         created_at: c.createdAt.toISOString(),
         author: c.authorId ? { id: c.authorId, full_name: c.authorName ?? '' } : null,
+        /* ต้องเป็นอาเรย์ว่างเสมอเมื่อไม่มีไฟล์ ห้ามเป็น undefined —
+           หน้าจออ่าน .length ตรง ๆ ตามสัญญาที่ประกาศไว้ในชนิดข้อมูล */
+        attachments: filesByComment.get(c.id) ?? [],
       })),
       history: history.map((h) => ({
         id: h.id,

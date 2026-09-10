@@ -248,7 +248,7 @@ export const MESSAGES = {
   'page.newArticle': { lo: 'ຂຽນບົດຄວາມໃໝ່', th: 'เขียนบทความใหม่' },
   'page.adminConsole': { lo: 'ສູນຄວບຄຸມຜູ້ດູແລລະບົບ', th: 'ศูนย์ควบคุมผู้ดูแลระบบ' },
   'page.profile': { lo: 'ໂປຣໄຟລ໌ ແລະ ການຕັ້ງຄ່າ', th: 'โปรไฟล์และการตั้งค่า' },
-  'page.fallback': { lo: 'AIDC Service Desk', th: 'AIDC Service Desk' },
+  'page.fallback': { lo: 'Helpdesk & Support', th: 'Helpdesk & Support' },
 
   'scope.label': { lo: 'ຂອບເຂດ', th: 'ขอบเขต' },
   'scope.allCompanies': { lo: 'ທຸກບໍລິສັດ', th: 'ทุกบริษัท' },

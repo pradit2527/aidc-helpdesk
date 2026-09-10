@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type { Db } from '../client';
@@ -7,6 +7,7 @@ import { DB } from '../db.module';
 import {
   appUser,
   approvalRequest,
+  attachment,
   ticketChecklist,
   ticketChecklistItem,
   ticketComment,
@@ -54,6 +55,32 @@ export class TicketDetailRepository {
       .leftJoin(appUser, eq(appUser.id, ticketComment.authorId))
       .where(where)
       .orderBy(asc(ticketComment.createdAt));
+  }
+
+  /**
+   * ไฟล์แนบของคอมเมนต์
+   *
+   * รับ id มาทั้งชุดแล้วยิงคิวรีเดียว ไม่ใช่วนถามทีละคอมเมนต์ — เรื่องที่คุยกัน
+   * ยาว ๆ มีคอมเมนต์ได้หลายสิบอัน ถ้าวนถามจะกลายเป็นหลายสิบคิวรีต่อการเปิดหน้าเดียว
+   * ซึ่งบนฐานข้อมูลที่อยู่คนละทวีปแปลว่าเพิ่มเวลาโหลดเป็นสิบวินาที
+   *
+   * ไฟล์ที่ถูกลบแบบ soft delete ต้องไม่ติดมาด้วย
+   */
+  async commentAttachments(commentIds: readonly number[]) {
+    if (commentIds.length === 0) return [];
+
+    return this.db
+      .select({
+        id: attachment.id,
+        commentId: attachment.commentId,
+        fileName: attachment.fileName,
+        fileSize: attachment.fileSize,
+      })
+      .from(attachment)
+      .where(
+        and(inArray(attachment.commentId, [...commentIds]), isNull(attachment.deletedAt)),
+      )
+      .orderBy(asc(attachment.id));
   }
 
   /** ประวัติการเปลี่ยนแปลง เรียงจากเก่าไปใหม่ให้อ่านเป็นไทม์ไลน์ได้ */

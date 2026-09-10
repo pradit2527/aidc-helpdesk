@@ -118,11 +118,11 @@ function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Eleme
 
               <p className="mt-4 whitespace-pre-wrap text-body text-ink-2">{ticket.description}</p>
 
-              {ticket.workaround_at && (
+              {ticket.sla.workaround_at && (
                 <div className="mt-4 rounded border border-sla-risk/30 bg-sla-risk-bg px-4 py-3">
                   <p className="text-body-sm font-semibold">
                     ມີທາງແກ້ຊົ່ວຄາວແລ້ວ — ໂມງ SLA ຂອງການແກ້ໄຂຢຸດນັບຕັ້ງແຕ່{' '}
-                    {formatDateTime(ticket.workaround_at)}
+                    {formatDateTime(ticket.sla.workaround_at)}
                   </p>
                   <p className="mt-1 text-body-sm text-ink-2">{ticket.workaround_note}</p>
                   <p className="mt-1 text-caption text-ink-3">
@@ -359,11 +359,26 @@ function Checklist({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
 }
 
 function History({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
-  const FIELD_LABEL: Record<string, string> = {
-    status: 'ສະຖານະ',
-    priority: 'ລະດັບຄວາມສຳຄັນ',
-    assignee: 'ຜູ້ຮັບຜິດຊອບ',
-    support_tier: 'ລະດັບການສະໜັບສະໜູນ',
+  /*
+   * แถวหนึ่งของประวัติเก็บทั้งการเปลี่ยนสถานะและการเปลี่ยนระดับความสำคัญ
+   * และอาจมีอย่างใดอย่างหนึ่งหรือทั้งคู่ จึงประกอบข้อความเป็นท่อน ๆ
+   * แล้วค่อยต่อกัน แทนการเดาว่ามีแค่ฟิลด์เดียวเสมอ
+   */
+  const changes = (entry: TicketDetail['history'][number]): string[] => {
+    const parts: string[] = [];
+    if (entry.to_status) {
+      const to = TICKET_STATUS[entry.to_status]?.label ?? entry.to_status;
+      const from = entry.from_status ? (TICKET_STATUS[entry.from_status]?.label ?? entry.from_status) : null;
+      parts.push(from ? `ປ່ຽນສະຖານະຈາກ “${from}” ເປັນ “${to}”` : `ເປີດເລື່ອງດ້ວຍສະຖານະ “${to}”`);
+    }
+    if (entry.to_priority) {
+      parts.push(
+        entry.from_priority
+          ? `ປ່ຽນລະດັບຈາກ ${entry.from_priority} ເປັນ ${entry.to_priority}`
+          : `ກຳນົດລະດັບເປັນ ${entry.to_priority}`,
+      );
+    }
+    return parts;
   };
 
   return (
@@ -372,16 +387,14 @@ function History({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
         <li key={entry.id} className="flex gap-3 border-l-2 border-hair pl-4">
           <div className="min-w-0 flex-1">
             <p className="text-body-sm text-ink">
-              <span className="font-semibold">{entry.actor?.full_name ?? 'ລະບົບ'}</span>{' '}
-              ປ່ຽນ {FIELD_LABEL[entry.field] ?? entry.field}
-              {entry.from_value && ` ຈາກ “${entry.from_value}”`}
-              {entry.to_value && ` ເປັນ “${entry.to_value}”`}
+              <span className="font-semibold">{entry.changed_by?.full_name ?? 'ລະບົບ'}</span>{' '}
+              {changes(entry).join(' · ') || 'ແກ້ໄຂເລື່ອງ'}
             </p>
             {entry.reason && (
               <p className="mt-0.5 text-caption text-ink-2">ເຫດຜົນ: {entry.reason}</p>
             )}
-            <time className="text-caption text-ink-3" dateTime={entry.created_at}>
-              {formatDateTime(entry.created_at)}
+            <time className="text-caption text-ink-3" dateTime={entry.changed_at}>
+              {formatDateTime(entry.changed_at)}
             </time>
           </div>
         </li>
@@ -433,7 +446,7 @@ function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
           </p>
         )}
 
-        {can.set_workaround && !ticket.workaround_at && (
+        {can.set_workaround && !ticket.sla.workaround_at && (
           <Button
             variant="secondary"
             className="w-full"
@@ -505,7 +518,7 @@ function DetailsPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
             <DefRow label="ລໍຖ້າຫຍັງຢູ່">{PENDING_REASON[ticket.pending_reason]}</DefRow>
           )}
           <DefRow label="ແຈ້ງເມື່ອ">{formatDateTime(ticket.created_at)}</DefRow>
-          <DefRow label="ຄົບກຳນົດຕອບຮັບ">{formatDateTime(ticket.response_due_at)}</DefRow>
+          <DefRow label="ຄົບກຳນົດຕອບຮັບ">{formatDateTime(ticket.sla.response_due_at)}</DefRow>
           <DefRow label="ຕອບຮັບຄັ້ງທຳອິດ">
             {ticket.sla.first_response_at ? (
               formatDateTime(ticket.sla.first_response_at)

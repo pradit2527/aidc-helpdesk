@@ -168,7 +168,7 @@ export default function LoginPage(): React.JSX.Element {
               AIDC<span style={{ color: '#ff9783' }}>/</span>SERVICE
             </div>
             <div className="eyebrow mt-1.5" style={{ color: 'var(--hero-faint)' }}>
-              AI Help Desk <span className="amp">&amp;</span> Support Portal
+              Help Desk <span className="amp">&amp;</span> Support Portal
             </div>
           </div>
         </div>

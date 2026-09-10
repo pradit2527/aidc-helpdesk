@@ -48,12 +48,23 @@ export function Brand({
         <span className="min-w-0 leading-tight">
           <span
             className={cn(
+              /*
+               * ขนาดตัวอักษรตั้งเป็นพิกเซลตรง ๆ ไม่ใช้สเกล text-h3
+               *
+               * ช่องที่เหลือบนแถบเมนูกว้าง 139px หลังหักโลโก้และระยะขอบ
+               * ส่วนชื่อ "Helpdesk & Support" ที่ 16px กินไป 152px จึงโดนตัด
+               * เหลือ "Helpdesk & Sup…" ซึ่งอ่านไม่ออกว่าเป็นระบบอะไร
+               *
+               * 14.5px ทำให้พอดีโดยยังใหญ่กว่าคำบรรยายใต้ชื่อชัดเจน
+               * ถ้าเปลี่ยนชื่อระบบอีกครั้งให้ยาวกว่านี้ ต้องวัดใหม่
+               */
               'block truncate font-bold tracking-tight',
-              large ? 'text-h3' : 'text-body-sm',
+              large ? 'text-[14.5px]' : 'text-[12.5px]',
               dark ? 'text-[color:var(--side-ink)]' : 'text-ink',
             )}
           >
-            AIDC Service Desk
+            {/* & ต้องยืมรูปร่างจากฟอนต์อื่น — Archivo วาดเป็นทรงคล้าย ε */}
+            Helpdesk <span className="amp">&amp;</span> Support
           </span>
           <span
             className={cn(

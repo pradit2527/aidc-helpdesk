@@ -51,8 +51,8 @@ const archivo = Archivo({
 
 export const metadata: Metadata = {
   title: {
-    default: 'AIDC Service Desk',
-    template: '%s · AIDC Service Desk',
+    default: 'Helpdesk & Support',
+    template: '%s · Helpdesk & Support',
   },
   description: 'ສູນບໍລິການໄອທີຂອງກຸ່ມບໍລິສັດ AIDC',
   robots: { index: false, follow: false }, // ລະບົບພາຍໃນອົງກອນ

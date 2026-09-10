@@ -49,7 +49,17 @@ export interface TicketSla {
   remaining_minutes: number | null;
   /** P1 นับปฏิทิน · P2–P4 นับนาทีทำการ — หน่วยต่างกันจึงห้ามเอาไปบวกกัน */
   remaining_unit: 'business_minutes' | 'calendar_minutes';
+  /** กำหนดตอบรับ — อยู่ใน sla เช่นเดียวกับ first_response_at ไม่ใช่ระดับบนสุด */
+  response_due_at: string;
   resolution_due_at: string;
+  /**
+   * เวลาที่บันทึกวิธีแก้ชั่วคราว — null = ยังไม่มี
+   *
+   * มีค่าแล้วนาฬิกา resolution ของ incident หยุดถาวรตรงจุดนี้ (SLA 5.4)
+   * และปุ่ม "บันทึกวิธีแก้ชั่วคราว" ต้องหายไป
+   */
+  workaround_at: string | null;
+  is_response_breached: boolean;
   is_resolution_breached: boolean;
 }
 
@@ -112,14 +122,25 @@ export interface TicketComment {
   attachments: { id: number; file_name: string; file_size: number }[];
 }
 
+/**
+ * รายการหนึ่งบรรทัดในประวัติการเปลี่ยนแปลง
+ *
+ * ⚠️ เดิมประกาศเป็น field / from_value / to_value / actor / created_at
+ *    ซึ่งไม่ตรงกับ API สักฟิลด์เดียว — ชนิดข้อมูลที่ผิดแบบนี้ไม่ทำให้คอมไพล์
+ *    ไม่ผ่าน เพราะไม่มีใครอ่านค่าพวกนั้น แต่ทันทีที่มีคนเขียนหน้าประวัติจริง
+ *    จะได้ undefined ทั้งแถวโดยที่ TypeScript ยืนยันว่าถูกต้อง
+ *
+ *    ชื่อฟิลด์ด้านล่างตรงกับที่ GET /tickets/{id} ส่งกลับมาจริง
+ */
 export interface TicketHistoryEntry {
   id: number;
-  actor: UserRef | null;
-  field: string;
-  from_value: string | null;
-  to_value: string | null;
+  from_status: TicketStatus | null;
+  to_status: TicketStatus;
+  from_priority: Priority | null;
+  to_priority: Priority | null;
   reason: string | null;
-  created_at: string;
+  changed_at: string;
+  changed_by: UserRef | null;
 }
 
 export interface ApprovalStep {
@@ -147,10 +168,9 @@ export interface TicketDetail extends TicketListItem {
   impact: 'org_wide' | 'department' | 'individual';
   urgency: 'high' | 'medium' | 'low';
   created_at: string;
-  response_due_at: string;
   resolved_at: string | null;
   resolution_note: string | null;
-  workaround_at: string | null;
+  /* response_due_at กับ workaround_at อยู่ใน sla ไม่ใช่ตรงนี้ — ดู TicketSla */
   workaround_note: string | null;
   vendor_ref: string | null;
   is_major_incident: boolean;
