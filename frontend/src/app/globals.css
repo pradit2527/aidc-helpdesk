@@ -338,6 +338,24 @@
     background: linear-gradient(90deg, var(--side-accent) 0%, transparent 78%);
   }
 
+  /*
+   * กันสระบนกับวรรณยุกต์ล่างถูกเฉือนในช่องที่ตัดข้อความด้วยจุดไข่ปลา
+   *
+   * อักษรลาวและไทยซ้อนสระบน/วรรณยุกต์ล่างได้สองชั้น หมึกจริงจึงสูงกว่า
+   * กล่องบรรทัดที่ 1.2–1.4 เท่าอยู่ราว 2–3px ต่อด้าน ปกติมองไม่เห็นปัญหา
+   * เพราะมันล้นออกไปเฉย ๆ แต่ .truncate ต้องใส่ overflow:hidden เพื่อทำ
+   * จุดไข่ปลา ส่วนที่ล้นจึงถูกตัดหายทั้งหัวและหาง — วัดได้จริงบนชื่อผู้ใช้
+   * (ล้น 2px บน 1.8px ล่าง) และชื่อระบบบนหัวแถบเมนู (3px ทั้งสองด้าน)
+   *
+   * แก้ด้วย padding ไม่ใช่ line-height เพราะ overflow เฉือนที่ขอบ padding box
+   * ไม่ใช่ content box — ตัวอักษรจึงรอด ส่วน margin ติดลบที่เท่ากันหักล้าง
+   * ความสูงที่เพิ่มออกไป จังหวะบรรทัดและความสูงแถวจึงไม่ขยับตาม
+   */
+  .truncate {
+    padding-block: 0.22em;
+    margin-block: -0.22em;
+  }
+
   .side-hair {
     border-color: var(--side-hair);
   }
@@ -349,6 +367,51 @@
    * ใส่ค่า opacity ให้สีที่มาจาก var() แบบนั้นไม่ได้ ผลคือพื้นหลังโปร่งใส
    * color-mix ผสมเองจึงยังผูกกับ --side-accent อยู่ ถ้าเปลี่ยนสีเน้นก็ตามไปด้วย
    */
+  /*
+   * แผงในแถบเมนู — การ์ดพื้นผิวบนพื้นแถบ
+   *
+   * เดิมบล็อกผู้ใช้ใช้ bg-white/6% และวงแหวนรูปย่อใช้ ring-white/15
+   * ซึ่งเป็นของที่เหลือมาจากตอนแถบเมนูยังเป็นพื้นกรมท่าเข้ม พอพื้นเปลี่ยน
+   * เป็นสีอ่อน ขาวโปร่ง 6% บนพื้นอ่อนแทบมองไม่เห็น ทั้งสองบล็อกจึงลอย
+   * อยู่บนพื้นโดยไม่มีขอบเขตของตัวเอง
+   *
+   * ใช้ token ของธีมแทนค่าโปร่งแสงตายตัว จะได้ทำงานถูกทั้งสองโหมด
+   */
+  .side-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 2px rgb(28 25 23 / 0.05);
+  }
+
+  .side-user-card {
+    @apply flex items-center gap-3 px-3 py-3 transition-colors;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    /* ขีดสีเน้นด้านซ้าย ผูกบล็อกนี้เข้ากับแบรนด์โดยไม่ต้องถมสีทั้งก้อน */
+    box-shadow:
+      inset 3px 0 0 0 var(--side-accent),
+      0 1px 2px rgb(28 25 23 / 0.05);
+  }
+  .side-user-card:hover {
+    background: var(--bg-page);
+  }
+
+  /* รูปย่อของผู้ใช้ — พื้นสีเน้นอ่อน เห็นได้จริงบนพื้นสว่าง ต่างจากขาวโปร่ง 14% */
+  .side-avatar {
+    background: var(--primary-subtle);
+    color: var(--primary-subtle-ink);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side-accent) 30%, transparent);
+  }
+
+  /* แผงรายการเมนู — กอดเนื้อหา ไม่ยืดเต็มความสูงที่เหลือ */
+  .side-nav-panel {
+    overflow: hidden;
+  }
+  /* เมนูอยู่ในแผงที่มีระยะขอบของตัวเองแล้ว ระยะซ้ายจึงลดลงหนึ่งขั้น */
+  .side-nav-panel .side-link {
+    @apply px-3.5;
+  }
+
   .side-role-chip {
     background: color-mix(in srgb, var(--side-accent) 18%, transparent);
     color: var(--side-accent-ink);

@@ -219,11 +219,8 @@ function Sidebar({
         {/* เว้นช่องว่างคั่นสองบล็อกแทนการใช้เส้นคั่นชิด ๆ
             ตราสัญลักษณ์กับตัวตนของผู้ใช้เป็นคนละเรื่องกัน จึงไม่ควรติดกันเป็นก้อนเดียว */}
         <div className="px-3 pb-3 pt-1">
-          <Link
-            href="/profile"
-            className="flex items-center gap-3 rounded bg-white/[0.06] px-3 py-3 transition-colors hover:bg-white/[0.1]"
-          >
-            <span className="grid h-10 w-10 flex-none place-items-center rounded-full bg-white/[0.14] text-body-sm font-bold text-[color:var(--side-ink)] ring-1 ring-white/15">
+          <Link href="/profile" className="side-user-card">
+            <span className="side-avatar grid h-10 w-10 flex-none place-items-center rounded-full text-body-sm font-bold">
               {initials(user.full_name)}
             </span>
             <span className="min-w-0 flex-1">
@@ -240,7 +237,10 @@ function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 py-2" aria-label={t('action.mainMenu')}>
+      {/* แผงห่อรายการเมนู กอดเนื้อหาไว้ ไม่ยืดเต็มความสูงที่เหลือ
+          nav เป็นตัวกินพื้นที่ว่างแทน เมนูจึงยังอยู่ชิดบนเหมือนเดิม */}
+      <nav className="flex-1 px-3 pb-3 pt-1" aria-label={t('action.mainMenu')}>
+        <div className="side-panel side-nav-panel py-1.5">
         {sections.map((section, index) => (
           <div key={section.titleKey ?? `section-${index}`} className="py-1">
             {section.titleKey && (
@@ -265,6 +265,7 @@ function Sidebar({
             })}
           </div>
         ))}
+        </div>
       </nav>
 
       <div className="side-hair flex-none border-t px-5 py-1">
