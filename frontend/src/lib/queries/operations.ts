@@ -83,6 +83,34 @@ export function useUser(id: number): UseQueryResult<AdminUser, Error> {
   });
 }
 
+export interface UpdateUserInput {
+  id: number;
+  full_name?: string;
+  company_id?: number;
+  department_id?: number | null;
+}
+
+/**
+ * ย้ายบริษัท / แผนก และแก้ชื่อของผู้ใช้คนอื่น — สำหรับผู้ดูแล
+ *
+ * ใส่ผลที่เซิร์ฟเวอร์ตอบกลับลงแคชของผู้ใช้คนนั้นทันที แล้วค่อยให้รายการดึงใหม่
+ * หน้ารายละเอียดจึงแสดงค่าที่บันทึกจริงได้เลยโดยไม่ต้องรอยิงซ้ำ
+ */
+export function useUpdateUser(): ReturnType<
+  typeof useMutation<AdminUser, Error, UpdateUserInput>
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateUserInput) => api.patch<AdminUser>(`/users/${id}`, body),
+    onSuccess: (user) => {
+      qc.setQueryData(['users', user.id], user);
+      // แค่ทำเครื่องหมายว่าเก่า ไม่ยิงซ้ำตอนนี้ — หน้าที่เปิดอยู่ได้ค่าจริงจากบรรทัดบนแล้ว
+      // หน้ารายการจะดึงใหม่เองเมื่อผู้ดูแลกลับไปเปิด
+      void qc.invalidateQueries({ queryKey: ['users'], refetchType: 'none' });
+    },
+  });
+}
+
 // ── ร่องรอยการใช้งาน ─────────────────────────────────────────────────
 
 export interface AuditListParams {

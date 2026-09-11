@@ -131,6 +131,39 @@ export class UsersController {
     scope.require('user.read');
     return this.users.detail(scope, id);
   }
+
+  /*
+   * ต้องประกาศหลัง @Patch('me') เสมอ — Express จับเส้นทางตามลำดับที่ลงทะเบียน
+   * ถ้า :id มาก่อน คำขอ PATCH /users/me จะถูก ParseIntPipe ปฏิเสธด้วย 400
+   * ก่อนไปถึง updateMe
+   */
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'ย้ายบริษัท / แผนก และแก้ชื่อของผู้ใช้ (สำหรับผู้ดูแล)',
+    description:
+      'ต้องมีสิทธิ์ `user.assign_role` ไม่ใช่ `user.update` — บริษัทต้นสังกัดตัดสินว่าผู้ใช้เห็นข้อมูลของใคร ' +
+      'การย้ายบริษัทจึงเท่ากับการมอบสิทธิ์ · บริษัทปลายทางต้องอยู่ในขอบเขตของผู้เรียกและยังเปิดใช้งาน · ' +
+      'แผนกต้องเป็นของบริษัทที่ผู้ใช้สังกัด · ย้ายบริษัทโดยไม่ส่ง `department_id` จะล้างแผนกทิ้ง · ' +
+      'ส่ง `department_id: null` เพื่อล้างแผนกเอง · คืนรายละเอียดผู้ใช้หลังบันทึก',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        full_name: { type: 'string' },
+        company_id: { type: 'number', example: 1 },
+        department_id: { type: 'number', nullable: true, example: 11 },
+      },
+    },
+  })
+  updateUser(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { full_name?: string; company_id?: number; department_id?: number | null },
+  ) {
+    return this.users.updateUser(scope, id, body);
+  }
+
   @Post(':id/unlock')
   @ApiOperation({
     summary: 'ปลดล็อกบัญชี',

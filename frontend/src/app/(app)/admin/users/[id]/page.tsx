@@ -13,10 +13,10 @@ import { Field, Input, Select } from '@/components/ui/field';
 import { Alert, Avatar, BackLink, DefRow, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { formatDateTime } from '@/lib/format';
-import { useHasRole } from '@/lib/session';
+import { useCan, useHasRole } from '@/lib/session';
 import { ApiError } from '@/lib/api';
 import { useCompanies, useDepartments } from '@/lib/queries/master-data';
-import { useUser } from '@/lib/queries/operations';
+import { useUpdateUser, useUser } from '@/lib/queries/operations';
 import type { AdminUser } from '@/lib/types';
 import type { RoleCode } from '@/lib/types';
 
@@ -59,12 +59,6 @@ function UserDetailView({ target }: { target: AdminUser }): React.JSX.Element {
   const [scoped, setScoped] = React.useState<number[]>(target.scoped_companies.map((c) => c.id));
 
   const companies = useCompanies();
-  const departmentsQuery = useDepartments();
-
-  // แผนกของบริษัทที่ผู้ใช้คนนี้สังกัด — ไม่ใช่ทุกแผนกในกลุ่ม
-  const departments = (departmentsQuery.data ?? []).filter(
-    (d) => d.company.id === target.company.id,
-  );
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
@@ -105,40 +99,7 @@ function UserDetailView({ target }: { target: AdminUser }): React.JSX.Element {
         </CardBody>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>ຂໍ້ມູນພື້ນຖານ</CardTitle>
-        </CardHeader>
-        <CardBody className="space-y-4">
-          <Field label="ຊື່ ແລະ ນາມສະກຸນ" htmlFor="full_name">
-            <Input defaultValue={target.full_name} />
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="ບໍລິສັດ" htmlFor="company">
-              <Select defaultValue={target.company.id}>
-                {(companies.data ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="ພະແນກ" htmlFor="department">
-              <Select defaultValue={target.department?.id ?? ''}>
-                <option value="">— ບໍ່ລະບຸ —</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-        </CardBody>
-        <CardFooter className="justify-end">
-          <Button onClick={() => toast.success('ບັນທຶກຂໍ້ມູນຜູ້ໃຊ້ແລ້ວ')}>ບັນທຶກ</Button>
-        </CardFooter>
-      </Card>
+      <BasicInfoCard target={target} />
 
       <Card>
         <CardHeader>
@@ -234,5 +195,146 @@ function UserDetailView({ target }: { target: AdminUser }): React.JSX.Element {
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+/**
+ * ชื่อ บริษัท และแผนกของผู้ใช้ — บันทึกผ่าน PATCH /users/{id}
+ *
+ * ⚠️ แก้ได้เฉพาะผู้ที่มีสิทธิ์ user.assign_role (ผู้ดูแลบริษัท / ผู้ดูแลระบบ)
+ *    บริษัทต้นสังกัดตัดสินว่าผู้ใช้เห็นข้อมูลของใคร การย้ายบริษัทจึงเท่ากับการมอบสิทธิ์
+ *    คนอื่นเห็นค่าได้แต่แก้ไม่ได้ — การซ่อนไว้เฉย ๆ ทำให้ไม่รู้ว่าข้อมูลนี้อยู่ตรงไหน
+ *    ด่านจริงอยู่ที่เซิร์ฟเวอร์ ส่วนนี้แค่ไม่ให้กดสิ่งที่จะโดนปฏิเสธแน่ ๆ
+ */
+function BasicInfoCard({ target }: { target: AdminUser }): React.JSX.Element {
+  const canEdit = useCan('user.assign_role');
+  const companies = useCompanies();
+  const departmentsQuery = useDepartments();
+  const update = useUpdateUser();
+
+  const originalDept = target.department ? String(target.department.id) : '';
+  const [fullName, setFullName] = React.useState(target.full_name);
+  const [companyId, setCompanyId] = React.useState<number>(target.company.id);
+  const [departmentId, setDepartmentId] = React.useState<string>(originalDept);
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  // หลังบันทึก ข้อมูลจากเซิร์ฟเวอร์เปลี่ยน — ให้ช่องกรอกตามค่าที่บันทึกจริง
+  React.useEffect(() => {
+    setFullName(target.full_name);
+    setCompanyId(target.company.id);
+    setDepartmentId(target.department ? String(target.department.id) : '');
+  }, [target.full_name, target.company.id, target.department]);
+
+  const allDepartments = departmentsQuery.data ?? [];
+
+  /*
+   * แผนกของบริษัทที่ "เลือกอยู่ตอนนี้" ไม่ใช่ของบริษัทเดิมของผู้ใช้
+   *
+   * เดิมกรองด้วย target.company.id — พอเปลี่ยนบริษัทในช่องเลือก รายการแผนกยังเป็น
+   * ของบริษัทเก่า ผู้ดูแลจึงเลือกแผนกข้ามบริษัทได้โดยไม่รู้ตัว
+   *
+   * ซ่อนแผนกที่ปิดใช้งานแล้ว แต่คงแผนกที่เลือกอยู่ไว้แม้ถูกปิดทีหลัง ไม่งั้นช่องจะ
+   * แสดงว่างทั้งที่ผู้ใช้ยังสังกัดแผนกนั้นอยู่จริง
+   */
+  const departments = allDepartments.filter(
+    (d) => d.company.id === companyId && (d.is_active || String(d.id) === departmentId),
+  );
+
+  const changeCompany = (next: number): void => {
+    setCompanyId(next);
+    setErrors({});
+    // แผนกที่เลือกไว้เป็นของบริษัทเก่า ถ้าไม่ล้าง เซิร์ฟเวอร์จะปฏิเสธแผนกข้ามบริษัท
+    const stillValid = allDepartments.some(
+      (d) => String(d.id) === departmentId && d.company.id === next,
+    );
+    if (!stillValid) setDepartmentId('');
+  };
+
+  const dirty =
+    fullName.trim() !== target.full_name ||
+    companyId !== target.company.id ||
+    departmentId !== originalDept;
+
+  const save = async (): Promise<void> => {
+    setErrors({});
+    try {
+      const saved = await update.mutateAsync({
+        id: target.id,
+        full_name: fullName.trim(),
+        company_id: companyId,
+        department_id: departmentId === '' ? null : Number(departmentId),
+      });
+      const deptName = saved.department?.name ?? 'ບໍ່ລະບຸພະແນກ';
+      toast.success(`ບັນທຶກແລ້ວ — ${saved.company.code} · ${deptName}`);
+    } catch (err) {
+      if (err instanceof ApiError && err.fields) setErrors(err.fields);
+      toast.error(err instanceof Error ? err.message : 'ບັນທຶກບໍ່ສຳເລັດ');
+    }
+  };
+
+  const locked = !canEdit || update.isPending;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>ຂໍ້ມູນພື້ນຖານ</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        {!canEdit && (
+          <p className="text-body-sm text-ink-2">
+            ການຍ້າຍບໍລິສັດ ຫຼື ພະແນກ ມີຜົນກັບສິດການເບິ່ງຂໍ້ມູນ
+            ຈຶ່ງແກ້ໄດ້ສະເພາະຜູ້ດູແລບໍລິສັດ ແລະ ຜູ້ດູແລລະບົບ
+          </p>
+        )}
+        <Field label="ຊື່ ແລະ ນາມສະກຸນ" htmlFor="full_name" error={errors.full_name}>
+          <Input value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={locked} />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="ບໍລິສັດ" htmlFor="company" error={errors.company_id}>
+            <Select
+              value={companyId}
+              onChange={(e) => changeCompany(Number(e.target.value))}
+              disabled={locked}
+            >
+              {(companies.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.code}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            label="ພະແນກ"
+            htmlFor="department"
+            error={errors.department_id}
+            hint={
+              departments.length === 0
+                ? 'ບໍລິສັດນີ້ຍັງບໍ່ມີພະແນກ — ສ້າງໄດ້ທີ່ໜ້າ “ຈັດການພະແນກ”'
+                : undefined
+            }
+          >
+            <Select
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              disabled={locked}
+            >
+              <option value="">— ບໍ່ລະບຸ —</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      </CardBody>
+      {canEdit && (
+        <CardFooter className="justify-end">
+          <Button onClick={() => void save()} disabled={!dirty || update.isPending}>
+            {update.isPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກ'}
+          </Button>
+        </CardFooter>
+      )}
+    </Card>
   );
 }

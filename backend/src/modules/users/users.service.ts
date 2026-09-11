@@ -265,7 +265,9 @@ export class UsersService {
         role_name_th: role.nameTh,
         granted_at: userRole.grantedAt,
         expires_at: userRole.expiresAt,
+        scope_company_id: scopeCompany.id,
         scope_company_code: scopeCompany.code,
+        scope_company_name: scopeCompany.nameTh,
       })
       .from(userRole)
       .innerJoin(role, eq(role.id, userRole.roleId))
@@ -287,8 +289,18 @@ export class UsersService {
       is_expired: boolean;
       scope_company_codes: string[];
     }>();
+    // บริษัทในขอบเขตจากบทบาทที่ยังมีผลเท่านั้น ตรงกับที่ ScopeService ใช้ตัดสินสิทธิ์จริง
+    const scopedCompanies = new Map<number, { id: number; code: string; name_th: string }>();
 
     for (const r of roles) {
+      const isExpired = r.expires_at !== null && r.expires_at <= now;
+      if (!isExpired && r.scope_company_id !== null && r.scope_company_code !== null) {
+        scopedCompanies.set(r.scope_company_id, {
+          id: r.scope_company_id,
+          code: r.scope_company_code,
+          name_th: r.scope_company_name ?? '',
+        });
+      }
       const existing = grouped.get(r.user_role_id);
       if (existing) {
         if (r.scope_company_code) existing.scope_company_codes.push(r.scope_company_code);
@@ -301,17 +313,153 @@ export class UsersService {
         expires_at: r.expires_at?.toISOString() ?? null,
         // บทบาทที่หมดอายุแล้วยังอยู่ในฐานข้อมูล แต่ไม่มีผลกับสิทธิ์จริง
         // หน้าจอต้องแยกให้เห็น ไม่งั้นผู้ดูแลจะคิดว่าคนนี้ยังมีสิทธิ์อยู่
-        is_expired: r.expires_at !== null && r.expires_at <= now,
+        is_expired: isExpired,
         scope_company_codes: r.scope_company_code ? [r.scope_company_code] : [],
       });
     }
 
+    const roleDetails = [...grouped.values()];
+    const { company_id, company_code, company_name, department_id, department_name, ...rest } =
+      row;
+
+    /*
+     * รูปของผลลัพธ์ต้องตรงกับ AdminUser ที่หน้าจอใช้
+     *
+     * เดิมคืนแบบแบน (company_id, company_code, department_id ...) และ roles เป็น
+     * อาเรย์ของอ็อบเจกต์ ขณะที่หน้ารายละเอียดผู้ใช้อ่าน target.company.id กับ
+     * target.scoped_companies ตรง ๆ ทั้งสองค่าจึงเป็น undefined แล้วหน้าพังทันที
+     * ที่เปิด — ส่วน GET /users (รายการ) คืนแบบซ้อนมาตลอด จึงไม่มีใครเห็นปัญหา
+     *
+     * roles คืนเฉพาะรหัสของบทบาทที่ยังมีผล เหมือนหน้ารายการ ใช้เป็นสถานะของช่องติ๊ก
+     * รายละเอียดเต็มรวมบทบาทที่หมดอายุแล้วอยู่ที่ role_details ผู้ดูแลจึงยังเห็น
+     * ประวัติการให้สิทธิ์ครบเหมือนเดิม
+     */
     return {
-      ...row,
+      ...rest,
+      company: { id: company_id, code: company_code, name_th: company_name },
+      department:
+        department_id === null ? null : { id: department_id, name: department_name ?? '' },
+      roles: roleDetails.filter((r) => !r.is_expired).map((r) => r.role_code),
+      scoped_companies: [...scopedCompanies.values()],
+      role_details: roleDetails,
       password_changed_at: row.password_changed_at?.toISOString() ?? null,
       last_login_at: row.last_login_at?.toISOString() ?? null,
-      roles: [...grouped.values()],
     };
+  }
+
+  /**
+   * ย้ายบริษัท / แผนก และแก้ชื่อของผู้ใช้คนอื่น (PATCH /users/{id}) — สำหรับผู้ดูแล
+   *
+   * ⚠️ ใช้สิทธิ์ user.assign_role ไม่ใช่ user.update
+   *
+   *    บริษัทต้นสังกัดตัดสินว่าผู้ใช้เห็นข้อมูลของใคร (ScopeService ใช้ company_id
+   *    เป็นขอบเขตเมื่อไม่ได้กำหนด user_role_scope) การย้ายบริษัทจึงมีน้ำหนักเท่ากับ
+   *    การมอบสิทธิ์ ส่วน user.update ถูกแจกให้ end_user, agent และ manager_viewer
+   *    ด้วย ถ้าใช้ตัวนั้นเป็นด่าน พนักงานทุกคนจะย้ายใครก็ได้ไปอยู่บริษัทอื่นได้
+   *
+   * กฎที่บังคับ
+   *   1. ผู้ใช้เป้าหมายต้องอยู่ในขอบเขต (detail() ตอบ 404 ถ้าไม่ใช่)
+   *   2. บริษัทปลายทางต้องอยู่ในขอบเขตของผู้เรียกและยังเปิดใช้งาน กันผู้ดูแลบริษัท ก.
+   *      ส่งคนไปอยู่บริษัท ข. ที่ตัวเองไม่ได้ดูแล
+   *   3. แผนกต้องเป็นของบริษัทที่ผู้ใช้สังกัด (หลังย้ายแล้ว) — ฐานข้อมูลไม่มี
+   *      constraint ข้อนี้ จึงต้องกันที่นี่
+   *   4. ย้ายบริษัทโดยไม่ระบุแผนก ล้างแผนกทิ้ง เพราะแผนกเดิมเป็นของบริษัทเก่า
+   *
+   * ไม่ต้องบังคับออกจากระบบ — ScopeService อ่าน company_id ใหม่ทุกคำขอ
+   * สิทธิ์ที่เปลี่ยนจึงมีผลตั้งแต่คำขอถัดไปของผู้ใช้คนนั้นเอง
+   */
+  async updateUser(
+    scope: AccessScope,
+    id: number,
+    input: { full_name?: string; company_id?: number; department_id?: number | null },
+  ) {
+    const current = await this.detail(scope, id);
+    scope.require('user.assign_role');
+
+    const patch: Record<string, unknown> = {};
+
+    if (input.full_name !== undefined) {
+      const name = String(input.full_name).trim();
+      if (name.length < 2) {
+        throw new ValidationError('VALIDATION_ERROR', 'ຊື່ຕ້ອງຍາວຢ່າງໜ້ອຍ 2 ຕົວອັກສອນ', [
+          { field: 'full_name', message: 'ຊື່ສັ້ນເກີນໄປ' },
+        ]);
+      }
+      patch.fullName = name;
+    }
+
+    let companyId = current.company.id;
+    const companyChanged =
+      input.company_id !== undefined && Number(input.company_id) !== current.company.id;
+
+    if (input.company_id !== undefined) {
+      const wanted = Number(input.company_id);
+      /*
+       * บริษัทที่ไม่มีอยู่จริงกับบริษัทที่อยู่นอกขอบเขต ตอบข้อความเดียวกันโดยตั้งใจ
+       * ถ้าแยกข้อความ ผู้เรียกจะใช้ความต่างนั้นไล่เดาว่าบริษัทไหนมีอยู่จริง
+       */
+      const unavailable = new ValidationError('VALIDATION_ERROR', 'ເລືອກບໍລິສັດນີ້ບໍ່ໄດ້', [
+        { field: 'company_id', message: 'ບໍລິສັດນີ້ບໍ່ຢູ່ໃນຂອບເຂດທີ່ທ່ານດູແລ' },
+      ]);
+      if (!Number.isInteger(wanted) || wanted <= 0) throw unavailable;
+      if (!scope.isSuperAdmin && !scope.inScope(wanted)) throw unavailable;
+
+      const [target] = await this.db
+        .select({ id: company.id, isActive: company.isActive })
+        .from(company)
+        .where(eq(company.id, wanted))
+        .limit(1);
+      if (!target) throw unavailable;
+      if (!target.isActive) {
+        throw new ValidationError('VALIDATION_ERROR', 'ບໍລິສັດນີ້ຖືກປິດການໃຊ້ງານແລ້ວ', [
+          { field: 'company_id', message: 'ບໍລິສັດນີ້ຖືກປິດການໃຊ້ງານແລ້ວ' },
+        ]);
+      }
+      companyId = wanted;
+      patch.companyId = wanted;
+    }
+
+    if (input.department_id !== undefined && input.department_id !== null) {
+      const wanted = Number(input.department_id);
+      const wrongCompany = new ValidationError(
+        'VALIDATION_ERROR',
+        'ພະແນກນີ້ບໍ່ແມ່ນຂອງບໍລິສັດທີ່ເລືອກ',
+        [{ field: 'department_id', message: 'ເລືອກພະແນກຂອງບໍລິສັດນີ້' }],
+      );
+      if (!Number.isInteger(wanted) || wanted <= 0) throw wrongCompany;
+
+      const [dept] = await this.db
+        .select({
+          id: department.id,
+          companyId: department.companyId,
+          isActive: department.isActive,
+        })
+        .from(department)
+        .where(eq(department.id, wanted))
+        .limit(1);
+      if (!dept || dept.companyId !== companyId) throw wrongCompany;
+      /*
+       * แผนกที่ถูกปิดแล้วห้ามเลือกใหม่ — แต่ถ้าเป็นแผนกเดิมของผู้ใช้อยู่แล้ว ปล่อยผ่าน
+       * หน้าจอส่งค่าทุกช่องทุกครั้ง ถ้ากันแผนกเดิมด้วย ผู้ดูแลจะแก้ชื่อผู้ใช้ไม่ได้เลย
+       * จนกว่าจะย้ายเขาออกจากแผนกที่ถูกปิดไปแล้ว
+       */
+      if (!dept.isActive && dept.id !== current.department?.id) {
+        throw new ValidationError('VALIDATION_ERROR', 'ພະແນກນີ້ຖືກປິດການໃຊ້ງານແລ້ວ', [
+          { field: 'department_id', message: 'ພະແນກນີ້ຖືກປິດການໃຊ້ງານແລ້ວ' },
+        ]);
+      }
+      patch.departmentId = wanted;
+    } else if (input.department_id === null) {
+      patch.departmentId = null;
+    } else if (companyChanged) {
+      // ย้ายบริษัทแต่ไม่ได้บอกแผนก — แผนกเดิมเป็นของบริษัทเก่า ปล่อยค้างไว้ไม่ได้
+      patch.departmentId = null;
+    }
+
+    if (Object.keys(patch).length === 0) return current;
+
+    await this.db.update(appUser).set(patch).where(eq(appUser.id, id));
+    return this.detail(scope, id);
   }
 
   /** จำนวนผู้ใช้ที่ยังมีบทบาทไม่หมดอายุ — ใช้ในรายงาน Access Expiry */
