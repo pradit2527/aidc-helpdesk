@@ -88,7 +88,17 @@ function isPooled(): boolean {
 
 export const sql = postgres(DATABASE_URL, {
   max: Number(process.env.DB_POOL_MAX ?? 10),
-  idle_timeout: 30,
+  /*
+   * เก็บ connection ที่ว่างไว้นานพอให้ผู้ใช้อ่านหน้าจอจบแล้วกดต่อ
+   *
+   * เดิมตั้ง 30 วินาที — ใครเปิดอ่าน ticket นานกว่านั้นแล้วคลิกต่อ จะเจอ
+   * connection ถูกปิดไปแล้ว ต้องต่อใหม่พร้อม TLS handshake ซึ่งวัดได้
+   * +2.2 วินาทีบนฐานข้อมูลที่อยู่ไกล (8.7 s หลังว่าง 35 วินาที เทียบ 6.6 s ตอนอุ่น)
+   *
+   * 240 วินาทียังต่ำกว่าเวลาที่ Neon พักเครื่องเมื่อไม่มีการใช้งาน (5 นาที)
+   * จึงไม่ถือ connection ค้างไว้กับเครื่องที่หลับไปแล้ว
+   */
+  idle_timeout: Number(process.env.DB_IDLE_TIMEOUT ?? 240),
   connect_timeout: 10,
   ssl: resolveSsl(),
   // ปิด prepared statement เมื่อต่อผ่าน pooler มิฉะนั้นจะพังเป็นระยะ

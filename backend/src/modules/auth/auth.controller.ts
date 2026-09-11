@@ -118,7 +118,7 @@ export class AuthController {
   @ApiEnvelope(MeResponseDto)
   @ApiResponse({ status: 401, type: ErrorResponseDto })
   async me(@CurrentScope() scope: AccessScope): Promise<MeResponseDto> {
-    return this.auth.meFor(scope.userId);
+    return this.auth.meFor(scope);
   }
 
   @Post('change-password')

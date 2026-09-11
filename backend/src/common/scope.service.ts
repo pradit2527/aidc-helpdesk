@@ -31,38 +31,59 @@ export class ScopeService {
   constructor(@Inject(DB) private readonly db: Db) {}
 
   async forUser(userId: number): Promise<AccessScope> {
-    const [user] = await this.db
-      .select({
-        id: appUser.id,
-        companyId: appUser.companyId,
-        isActive: appUser.isActive,
-        isLocked: appUser.isLocked,
-        deletedAt: appUser.deletedAt,
-      })
-      .from(appUser)
-      .where(eq(appUser.id, userId))
-      .limit(1);
+    const now = new Date();
+    // role ที่ยังมีผล = ไม่มีวันหมดอายุ หรือหมดอายุในอนาคต
+    const activeRole = or(isNull(userRole.expiresAt), gt(userRole.expiresAt, now));
+
+    /*
+     * ยิงทั้งสี่คิวรีพร้อมกัน ไม่ใช่ทีละตัว
+     *
+     * ทั้งสี่ตัวไม่ได้พึ่งผลของกันเลย แต่เดิม await เรียงกันทีละตัว และ ScopeGuard
+     * เรียกเมท็อดนี้ในทุกคำขอที่ต้องล็อกอิน เวลาที่เสียจึงถูกบวกเข้าไปในทุกหน้า
+     * ที่ผู้ใช้เปิด — บนฐานข้อมูลที่อยู่ไกล (~250 ms ต่อรอบ) สี่รอบเรียงกันคือ
+     * ราว 1 วินาที ส่วนยิงพร้อมกันเหลือราวรอบเดียว
+     *
+     * ⚠️ ยังตรวจบัญชีที่ใช้งานไม่ได้ก่อนคืนค่าเหมือนเดิม ถ้าบัญชีถูกปิด ผลของ
+     *    อีกสามคิวรีถูกทิ้งไปโดยไม่เคยถูกใช้หรือส่งออกไปไหน
+     */
+    const [[user], rows, scopeRows, contactRows] = await Promise.all([
+      this.db
+        .select({
+          id: appUser.id,
+          companyId: appUser.companyId,
+          isActive: appUser.isActive,
+          isLocked: appUser.isLocked,
+          deletedAt: appUser.deletedAt,
+        })
+        .from(appUser)
+        .where(eq(appUser.id, userId))
+        .limit(1),
+      this.db
+        .select({
+          roleCode: role.code,
+          permissionCode: permission.code,
+        })
+        .from(userRole)
+        .innerJoin(role, eq(role.id, userRole.roleId))
+        .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
+        .leftJoin(permission, eq(permission.id, rolePermission.permissionId))
+        .where(and(eq(userRole.userId, userId), activeRole)),
+      this.db
+        .select({ companyId: userRoleScope.companyId })
+        .from(userRoleScope)
+        .innerJoin(userRole, eq(userRole.id, userRoleScope.userRoleId))
+        .where(and(eq(userRole.userId, userId), activeRole)),
+      this.db
+        .select({ key: escalationContact.contactKey })
+        .from(escalationContact)
+        .where(and(eq(escalationContact.userId, userId), eq(escalationContact.isActive, true))),
+    ]);
 
     if (!user || !user.isActive || user.deletedAt !== null) {
       throw new UnauthorizedException({
         error: { code: 'UNAUTHENTICATED', message: 'ບັນຊີນີ້ໃຊ້ງານບໍ່ໄດ້' },
       });
     }
-
-    const now = new Date();
-    // role ที่ยังมีผล = ไม่มีวันหมดอายุ หรือหมดอายุในอนาคต
-    const activeRole = or(isNull(userRole.expiresAt), gt(userRole.expiresAt, now));
-
-    const rows = await this.db
-      .select({
-        roleCode: role.code,
-        permissionCode: permission.code,
-      })
-      .from(userRole)
-      .innerJoin(role, eq(role.id, userRole.roleId))
-      .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
-      .leftJoin(permission, eq(permission.id, rolePermission.permissionId))
-      .where(and(eq(userRole.userId, userId), activeRole));
 
     const permissions = new Set<string>();
     const roleCodes = new Set<string>();
@@ -72,17 +93,6 @@ export class ScopeService {
       if (row.roleCode === 'super_admin') isSuperAdmin = true;
       if (row.permissionCode) permissions.add(row.permissionCode);
     }
-
-    const scopeRows = await this.db
-      .select({ companyId: userRoleScope.companyId })
-      .from(userRoleScope)
-      .innerJoin(userRole, eq(userRole.id, userRoleScope.userRoleId))
-      .where(and(eq(userRole.userId, userId), activeRole));
-
-    const contactRows = await this.db
-      .select({ key: escalationContact.contactKey })
-      .from(escalationContact)
-      .where(and(eq(escalationContact.userId, userId), eq(escalationContact.isActive, true)));
 
     return new AccessScope({
       userId: user.id,

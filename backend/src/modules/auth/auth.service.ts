@@ -5,6 +5,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { Response } from 'express';
 
 import { ScopeService } from '../../common/scope.service';
+import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
 import { appUser, company, department, passwordHistory } from '../../db/schema';
@@ -243,27 +244,65 @@ export class AuthService {
     }
   }
 
-  async currentUser(userId: number): Promise<CurrentUserDto> {
-    const scope = await this.scopes.forUser(userId);
+  /**
+   * ข้อมูลผู้ใช้ปัจจุบัน — ใช้ตอนล็อกอิน ซึ่งยังไม่มี scope จาก guard ให้ใช้
+   */
+  async currentUser(userId: number, knownScope?: AccessScope): Promise<CurrentUserDto> {
+    const { dto } = await this.loadCurrentUser(userId, knownScope);
+    return dto;
+  }
 
-    const [row] = await this.db
-      .select({
-        id: appUser.id,
-        username: appUser.username,
-        fullName: appUser.fullName,
-        email: appUser.email,
-        jobTitle: appUser.jobTitle,
-        companyId: appUser.companyId,
-        companyCode: company.code,
-        companyName: company.nameTh,
-        departmentId: appUser.departmentId,
-        departmentName: department.name,
-      })
-      .from(appUser)
-      .innerJoin(company, eq(company.id, appUser.companyId))
-      .leftJoin(department, eq(department.id, appUser.departmentId))
-      .where(eq(appUser.id, userId))
-      .limit(1);
+  /**
+   * ข้อมูลสำหรับ GET /auth/me
+   *
+   * ⚠️ รับ scope ที่ ScopeGuard สร้างไว้แล้ว ไม่ใช่ userId
+   *
+   *    เดิมรับ userId แล้วส่งต่อให้ currentUser ซึ่งสร้าง scope ใหม่ทั้งชุด ทั้งที่
+   *    guard เพิ่งสร้างชุดเดียวกันเสร็จไปก่อนหน้าไม่กี่มิลลิวินาที คิวรีสิทธิ์สี่ตัว
+   *    จึงวิ่งสองรอบในทุกครั้งที่หน้าเว็บโหลด — และหน้าเว็บเรียก /auth/me ทุกหน้า
+   *
+   *    คิวรีที่อ่าน must_change_password แยกไว้อีกตัวก็ถูกรวมเข้ากับคิวรีอ่าน
+   *    ข้อมูลผู้ใช้ เพราะเป็นคอลัมน์ของแถวเดียวกันในตารางเดียวกัน
+   */
+  async meFor(scope: AccessScope): Promise<CurrentUserDto & { must_change_password: boolean }> {
+    const { dto, mustChangePassword } = await this.loadCurrentUser(scope.userId, scope);
+    return { ...dto, must_change_password: mustChangePassword };
+  }
+
+  private async loadCurrentUser(
+    userId: number,
+    knownScope?: AccessScope,
+  ): Promise<{ dto: CurrentUserDto; mustChangePassword: boolean }> {
+    const scope = knownScope ?? (await this.scopes.forUser(userId));
+
+    // สองคิวรีนี้ไม่พึ่งกัน ต่างรู้ค่าที่ต้องใช้จาก scope ครบแล้ว จึงยิงพร้อมกัน
+    const [[row], scoped] = await Promise.all([
+      this.db
+        .select({
+          id: appUser.id,
+          username: appUser.username,
+          fullName: appUser.fullName,
+          email: appUser.email,
+          jobTitle: appUser.jobTitle,
+          companyId: appUser.companyId,
+          companyCode: company.code,
+          companyName: company.nameTh,
+          departmentId: appUser.departmentId,
+          departmentName: department.name,
+          mustChangePassword: appUser.mustChangePassword,
+        })
+        .from(appUser)
+        .innerJoin(company, eq(company.id, appUser.companyId))
+        .leftJoin(department, eq(department.id, appUser.departmentId))
+        .where(eq(appUser.id, userId))
+        .limit(1),
+      // อ่านชื่อบริษัทในขอบเขตมาด้วย เพราะ frontend แสดงรหัสบริษัทบนหน้าจอ
+      // ถ้าส่งแต่ id ไป frontend ต้องยิงอีกรอบเพื่อแปลงเป็นชื่อ
+      this.db
+        .select({ id: company.id, code: company.code, nameTh: company.nameTh })
+        .from(company)
+        .where(inArray(company.id, [...scope.companyIds])),
+    ]);
 
     if (!row) {
       throw new UnauthorizedException({
@@ -271,40 +310,22 @@ export class AuthService {
       });
     }
 
-    // อ่านชื่อบริษัทในขอบเขตมาด้วย เพราะ frontend แสดงรหัสบริษัทบนหน้าจอ
-    // ถ้าส่งแต่ id ไป frontend ต้องยิงอีกรอบเพื่อแปลงเป็นชื่อ
-    const scoped = await this.db
-      .select({ id: company.id, code: company.code, nameTh: company.nameTh })
-      .from(company)
-      .where(inArray(company.id, [...scope.companyIds]));
-
     return {
-      id: row.id,
-      username: row.username,
-      full_name: row.fullName,
-      email: row.email,
-      job_title: row.jobTitle,
-      company: { id: row.companyId, code: row.companyCode, name_th: row.companyName },
-      department: row.departmentId
-        ? { id: row.departmentId, name: row.departmentName ?? '' }
-        : null,
-      roles: [...scope.roleCodes],
-      scoped_companies: scoped.map((c) => ({ id: c.id, code: c.code, name_th: c.nameTh })),
-      permissions: [...scope.permissions],
-    } as CurrentUserDto;
-  }
-
-  /** ข้อมูลสำหรับ GET /auth/me — เหมือน currentUser แต่พ่วงธงบังคับเปลี่ยนรหัสผ่าน */
-  async meFor(userId: number): Promise<CurrentUserDto & { must_change_password: boolean }> {
-    const [row] = await this.db
-      .select({ mustChangePassword: appUser.mustChangePassword })
-      .from(appUser)
-      .where(eq(appUser.id, userId))
-      .limit(1);
-
-    return {
-      ...(await this.currentUser(userId)),
-      must_change_password: row?.mustChangePassword ?? false,
+      mustChangePassword: row.mustChangePassword,
+      dto: {
+        id: row.id,
+        username: row.username,
+        full_name: row.fullName,
+        email: row.email,
+        job_title: row.jobTitle,
+        company: { id: row.companyId, code: row.companyCode, name_th: row.companyName },
+        department: row.departmentId
+          ? { id: row.departmentId, name: row.departmentName ?? '' }
+          : null,
+        roles: [...scope.roleCodes],
+        scoped_companies: scoped.map((c) => ({ id: c.id, code: c.code, name_th: c.nameTh })),
+        permissions: [...scope.permissions],
+      } as CurrentUserDto,
     };
   }
 
