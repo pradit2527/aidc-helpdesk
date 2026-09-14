@@ -26,6 +26,7 @@
     "db:seed:prod": "node dist/db/seed/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.125.0",
     "@date-fns/tz": "1.2.0",
     "@nestjs/common": "11.0.7",
     "@nestjs/config": "4.0.0",

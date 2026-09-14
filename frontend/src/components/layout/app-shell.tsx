@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation';
 import { Bell, LogOut, Menu, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
 
+import { AssistantLauncher } from '@/components/assistant/assistant-launcher';
 import { Brand } from '@/components/layout/brand';
+import { AssistantChatProvider } from '@/lib/assistant-chat';
 import { PreferenceButtons, useT } from '@/components/layout/preference-controls';
 import { initials } from '@/lib/format';
 import {
@@ -45,6 +47,8 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
   }, [pathname]);
 
   return (
+    /* บทสนทนากับผู้ช่วย AI อยู่ระดับ shell — เปลี่ยนหน้าแล้วคุยต่อจากเดิมได้ ออกจากระบบแล้วหาย */
+    <AssistantChatProvider>
     <div className="flex min-h-screen">
       <Sidebar sections={sections} pathname={pathname} className="hidden lg:flex" />
 
@@ -135,6 +139,8 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
         href="/tickets/new"
         aria-label={t('action.newTicket')}
         className="fixed bottom-[76px] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-dialog sm:hidden"
+        /* globals.css ยกปุ่มแชท Chatwoot ขึ้นเหนือปุ่มนี้ โดยหาจาก attribute นี้ */
+        data-mobile-fab
       >
         <Plus className="h-6 w-6" aria-hidden="true" />
       </Link>
@@ -148,6 +154,8 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
       <nav
         className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t border-hair bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
         aria-label={t('action.mainMenu')}
+        /* globals.css ยกปุ่มแชท Chatwoot ขึ้นเหนือแถบนี้ โดยหาจาก attribute นี้ */
+        data-mobile-nav
       >
         {bottom.map((item) => {
           const Icon = item.icon;
@@ -168,7 +176,11 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
           );
         })}
       </nav>
+
+      {/* แชทผู้ช่วย AI ลอยทุกหน้า */}
+      <AssistantLauncher />
     </div>
+    </AssistantChatProvider>
   );
 }
 

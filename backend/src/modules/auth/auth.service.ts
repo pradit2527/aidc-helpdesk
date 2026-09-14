@@ -1,6 +1,6 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { SignJWT, jwtVerify } from 'jose';
 import type { Response } from 'express';
 
@@ -157,17 +157,27 @@ export class AuthService {
       invalid();
     }
 
-    // เข้าสำเร็จ = ล้างตัวนับ มิฉะนั้นความผิดพลาดที่กระจายอยู่หลายเดือนจะสะสมจนล็อก
-    await this.db
-      .update(appUser)
-      .set({ failedLoginCount: 0, lastLoginAt: new Date() })
-      .where(eq(appUser.id, found.id));
+    // ล็อกอินใหม่ต้องได้สิทธิ์ล่าสุดเสมอ — "ออกแล้วเข้าใหม่" คือวิธีที่ผู้ใช้ใช้เมื่อเพิ่งได้บทบาทเพิ่ม
+    this.scopes.invalidate(found.id);
 
-    return {
-      user: await this.currentUser(found.id),
-      tokens: await this.issueTokens(found.id, found.tokenVersion),
-      mustChangePassword: found.mustChangePassword,
-    };
+    /*
+     * สามงานนี้ไม่พึ่งกัน จึงทำพร้อมกัน
+     *
+     * เดิมรอทีละขั้น: ล้างตัวนับ → อ่านข้อมูลผู้ใช้ → ออกโทเคน บนฐานข้อมูลที่อยู่ไกล
+     * ขั้นแรกขั้นเดียวก็กิน ~250 ms ที่ผู้ใช้ต้องนั่งรอหน้าปุ่ม "กำลังเข้าสู่ระบบ" โดยเปล่าประโยชน์
+     *
+     * เข้าสำเร็จ = ล้างตัวนับ มิฉะนั้นความผิดพลาดที่กระจายอยู่หลายเดือนจะสะสมจนล็อก
+     */
+    const [, user, tokens] = await Promise.all([
+      this.db
+        .update(appUser)
+        .set({ failedLoginCount: 0, lastLoginAt: new Date() })
+        .where(eq(appUser.id, found.id)),
+      this.currentUser(found.id),
+      this.issueTokens(found.id, found.tokenVersion),
+    ]);
+
+    return { user, tokens, mustChangePassword: found.mustChangePassword };
   }
 
   /** ต่ออายุ session จาก refresh token */
@@ -221,6 +231,8 @@ export class AuthService {
         })
         .where(eq(appUser.id, userId));
     });
+    // token_version เปลี่ยนแล้ว — สิทธิ์ที่จำไว้ยังถือเลขเก่า ต้องล้างให้ token เดิมถูกปฏิเสธทันที
+    this.scopes.invalidate(userId);
   }
 
   /** ห้ามใช้ซ้ำกับรหัสผ่านล่าสุด 3 ชุด (นโยบาย 3.2) */
@@ -329,20 +341,16 @@ export class AuthService {
     };
   }
 
-  /** อ่าน user id จาก access token — ใช้โดย ScopeGuard */
+  /**
+   * อ่าน user id จาก access token — ใช้โดย ScopeGuard
+   *
+   * token_version และสถานะบัญชีตรวจผ่าน ScopeService ซึ่งจำผลไว้สั้น ๆ
+   * เดิมยิงฐานข้อมูลหนึ่งรอบทุกคำขอเพื่ออ่านค่าเดียวที่แทบไม่เคยเปลี่ยน
+   * แล้ว guard ก็อ่านแถวเดียวกันซ้ำอีกรอบตอนประกอบสิทธิ์
+   */
   async userIdFromAccessToken(token: string): Promise<number> {
     const claims = await this.verify(token, 'access');
-    const [user] = await this.db
-      .select({ tokenVersion: appUser.tokenVersion })
-      .from(appUser)
-      .where(and(eq(appUser.id, claims.sub), eq(appUser.isActive, true)))
-      .limit(1);
-
-    if (!user || user.tokenVersion !== claims.ver) {
-      throw new UnauthorizedException({
-        error: { code: 'UNAUTHENTICATED', message: 'ເຊດຊັນໝົດອາຍຸແລ້ວ' },
-      });
-    }
+    await this.scopes.forToken(claims.sub, claims.ver);
     return claims.sub;
   }
 

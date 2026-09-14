@@ -103,11 +103,50 @@ const FALLBACK_MESSAGE: Record<ApiErrorCode, string> = {
   NETWORK_ERROR: 'ເຊື່ອມຕໍ່ເຊີບເວີບໍ່ໄດ້ ກະລຸນາກວດອິນເຕີເນັດ',
 };
 
-function readCsrfToken(): string | null {
+export function readCsrfToken(): string | null {
   if (typeof document === 'undefined') return null;
   const match = document.cookie.match(/(?:^|;\s*)aidc_csrf=([^;]*)/);
   const value = match?.[1];
   return value === undefined ? null : decodeURIComponent(value);
+}
+
+/**
+ * ยิงเมื่อ session หมดจริง คือต่ออายุไม่สำเร็จแล้ว — SessionProvider ฟังแล้วพาไปหน้าล็อกอิน
+ */
+export const SESSION_EXPIRED_EVENT = 'aidc:session-expired';
+
+/**
+ * เส้นทางที่ห้ามลองต่ออายุเมื่อได้ 401
+ *
+ * login ได้ 401 แปลว่ารหัสผิด ไม่ใช่ session หมด — ถ้าไปต่ออายุให้ ข้อความ "รหัสผิด"
+ * จะถูกกลบ ส่วน refresh เองได้ 401 แล้วต่ออายุซ้ำจะวนไม่รู้จบ
+ */
+const NO_REFRESH_PATHS = new Set(['/auth/login', '/auth/refresh', '/auth/logout']);
+
+let refreshing: Promise<boolean> | null = null;
+
+/**
+ * ต่ออายุ session ด้วย refresh token (อายุ 7 วัน)
+ *
+ * ⚠️ นี่คือเหตุที่ผู้ใช้เคยถูกเด้งไปหน้าล็อกอินทุก 30 นาที
+ *    access token หมดอายุใน 30 นาที แต่ไม่มีโค้ดไหนเรียก /auth/refresh เลย
+ *    refresh token 7 วันที่ backend ออกให้จึงไม่เคยถูกใช้สักครั้ง
+ *
+ * คำขอที่ได้ 401 พร้อมกันหลายตัวรอการต่ออายุก้อนเดียว — ถ้าต่างคนต่างต่อ
+ * คุกกี้ชุดใหม่จะทับกันไปมาและชนเพดานอัตราการเรียกของ /auth/refresh
+ */
+export function refreshSession(): Promise<boolean> {
+  refreshing ??= fetch(`${BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+    .then((res) => res.ok)
+    .catch(() => false)
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
 }
 
 interface RequestOptions {
@@ -128,9 +167,11 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   return search ? `${BASE_URL}${path}?${search}` : `${BASE_URL}${path}`;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, query, signal } = options;
-
+/**
+ * ประกอบคำขอใหม่ทุกครั้งที่ยิง — ห้ามใช้ก้อนเดิมซ้ำตอนลองอีกรอบหลังต่ออายุ
+ * เพราะการต่ออายุออก CSRF token ใหม่ ก้อนเดิมยังถือค่าเก่าซึ่งจะได้ 403
+ */
+function buildInit({ method = 'GET', body, signal }: RequestOptions): RequestInit {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -151,32 +192,56 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   // การส่ง body: undefined ไม่เท่ากับการไม่ส่ง body
   if (body !== undefined) init.body = JSON.stringify(body);
   if (signal) init.signal = signal;
+  return init;
+}
 
-  let response: Response;
-  try {
-    response = await fetch(buildUrl(path, query), init);
-  } catch (cause) {
-    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
-    throw new ApiError(0, 'NETWORK_ERROR', FALLBACK_MESSAGE.NETWORK_ERROR);
-  }
+/**
+ * ยิงคำขอ — ถ้าได้ 401 ต่ออายุ session แล้วลองอีกครั้งเดียว
+ *
+ * ผู้ใช้จึงไม่เห็นว่า access token หมดอายุเลย ตราบใดที่ refresh token ยังใช้ได้
+ * ต่ออายุไม่สำเร็จ = session หมดจริง จึงแจ้ง SessionProvider ให้พาไปหน้าล็อกอิน
+ */
+async function send(path: string, options: RequestOptions): Promise<Response> {
+  const url = buildUrl(path, options.query);
+  const attempt = async (): Promise<Response> => {
+    try {
+      return await fetch(url, buildInit(options));
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
+      throw new ApiError(0, 'NETWORK_ERROR', FALLBACK_MESSAGE.NETWORK_ERROR);
+    }
+  };
+
+  const response = await attempt();
+  if (response.status !== 401 || NO_REFRESH_PATHS.has(path)) return response;
+
+  if (await refreshSession()) return attempt();
+
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  return response;
+}
+
+function toApiError(response: Response, payload: Envelope<unknown> | null): ApiError {
+  const error = payload?.error ?? {};
+  const code = (error.code as ApiErrorCode) ?? statusToCode(response.status);
+  return new ApiError(
+    response.status,
+    code,
+    error.message || FALLBACK_MESSAGE[code] || FALLBACK_MESSAGE.SERVER_ERROR,
+    toFieldMap(error.details),
+    Number(response.headers.get('Retry-After')) || undefined,
+    payload?.meta?.request_id ?? response.headers.get('X-Request-Id') ?? undefined,
+  );
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options);
 
   if (response.status === 204) return undefined as T;
 
   const payload = (await response.json().catch(() => null)) as Envelope<T> | null;
-  const requestId = payload?.meta?.request_id ?? response.headers.get('X-Request-Id') ?? undefined;
 
-  if (!response.ok) {
-    const error = payload?.error ?? {};
-    const code = (error.code as ApiErrorCode) ?? statusToCode(response.status);
-    throw new ApiError(
-      response.status,
-      code,
-      error.message || FALLBACK_MESSAGE[code] || FALLBACK_MESSAGE.SERVER_ERROR,
-      toFieldMap(error.details),
-      Number(response.headers.get('Retry-After')) || undefined,
-      requestId,
-    );
-  }
+  if (!response.ok) throw toApiError(response, payload);
 
   // แกะซองออกให้ผู้เรียก เพื่อให้โค้ดหน้าจอไม่ต้องเขียน .data ทุกที่
   // ถ้าปล่อยให้แกะเอง วันหนึ่งจะมีคนลืมแล้วได้ undefined ตอน runtime
@@ -193,37 +258,10 @@ export async function apiRequestPage<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<Page<T>> {
-  const { method = 'GET', body, query, signal } = options;
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-
-  const init: RequestInit = { method, headers, credentials: 'include' };
-  if (body !== undefined) init.body = JSON.stringify(body);
-  if (signal) init.signal = signal;
-
-  let response: Response;
-  try {
-    response = await fetch(buildUrl(path, query), init);
-  } catch (cause) {
-    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
-    throw new ApiError(0, 'NETWORK_ERROR', FALLBACK_MESSAGE.NETWORK_ERROR);
-  }
-
+  const response = await send(path, options);
   const payload = (await response.json().catch(() => null)) as Envelope<T[]> | null;
-  const requestId = payload?.meta?.request_id ?? response.headers.get('X-Request-Id') ?? undefined;
 
-  if (!response.ok) {
-    const error = payload?.error ?? {};
-    const code = (error.code as ApiErrorCode) ?? statusToCode(response.status);
-    throw new ApiError(
-      response.status,
-      code,
-      error.message || FALLBACK_MESSAGE[code] || FALLBACK_MESSAGE.SERVER_ERROR,
-      toFieldMap(error.details),
-      Number(response.headers.get('Retry-After')) || undefined,
-      requestId,
-    );
-  }
+  if (!response.ok) throw toApiError(response, payload);
 
   const meta = payload?.meta ?? { request_id: '' };
   const items = payload?.data ?? [];

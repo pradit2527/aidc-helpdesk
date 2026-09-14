@@ -60,15 +60,32 @@ function toSessionUser(user: ApiUser, mustChangePassword: boolean): SessionUser 
   };
 }
 
+/**
+ * ผู้ใช้ที่เพิ่งได้จากการล็อกอิน รอให้ SessionProvider หยิบไปใช้ครั้งเดียว
+ *
+ * POST /auth/login ตอบข้อมูลผู้ใช้ชุดเดียวกับ GET /auth/me ครบทุกฟิลด์อยู่แล้ว
+ * เดิมหน้าถัดไปยิง /auth/me ซ้ำทันที ผู้ใช้จึงรอสองรอบติดกันกว่าจะเห็นหน้าแรก
+ *
+ * อายุสั้นโดยตั้งใจ — ถ้าไม่มีใครหยิบไปภายในไม่กี่วินาที แปลว่าไม่ได้ไปต่อจากการล็อกอินแล้ว
+ * ข้อมูลที่ค้างนานกว่านั้นอาจเก่ากว่าสิทธิ์จริงในฐานข้อมูล
+ */
+let primed: { user: SessionUser; at: number } | null = null;
+const PRIMED_TTL_MS = 30_000;
+
+export function takePrimedUser(): SessionUser | null {
+  const value = primed;
+  primed = null;
+  return value && Date.now() - value.at < PRIMED_TTL_MS ? value.user : null;
+}
+
 export async function login(
   username: string,
   password: string,
 ): Promise<{ user: SessionUser; mustChangePassword: boolean }> {
   const data = await api.post<LoginResponse>('/auth/login', { username, password });
-  return {
-    user: toSessionUser(data.user, data.must_change_password),
-    mustChangePassword: data.must_change_password,
-  };
+  const user = toSessionUser(data.user, data.must_change_password);
+  primed = { user, at: Date.now() };
+  return { user, mustChangePassword: data.must_change_password };
 }
 
 /**

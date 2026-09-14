@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { Impact, Priority, TicketStatus, Urgency } from '../../common/constants';
 import type { AccessScope } from '../../common/scope';
 import { elapsedMinutes, slaStatus } from '../../common/sla/business-time';
+import { AssignTicketUseCase } from '../../application/use-cases/assign-ticket.use-case';
 import { CreateTicketUseCase } from '../../application/use-cases/create-ticket.use-case';
 import { SuperworkService } from '../../integrations/superwork/superwork.service';
 import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
@@ -11,11 +12,18 @@ import { SlaConfigRepository } from '../../db/repositories/sla-config.repository
 import { TicketDetailRepository } from '../../db/repositories/ticket-detail.repository';
 import { TicketRepository, type TicketRow } from '../../db/repositories/ticket.repository';
 import { TicketWriteRepository } from '../../db/repositories/ticket-write.repository';
+import {
+  actorMayTransition,
+  allowedTransitionsFrom,
+  isWithinReopenWindow,
+} from '../../domain/ticket/ticket.entity';
 import { ForbiddenError, ValidationError } from '../../common/errors/domain-error';
 import {
+  AssignTicketDto,
   ChangePriorityDto,
   ChangeStatusDto,
   CreateTicketDto,
+  TicketAssigneeDto,
   TicketDetailDto,
   TicketListItemDto,
   TicketListResponseDto,
@@ -55,6 +63,7 @@ export class TicketsService {
     private readonly createTicket: CreateTicketUseCase,
     private readonly changeTicketStatus: ChangeTicketStatusUseCase,
     private readonly reassessPriority: ReassessTicketPriorityUseCase,
+    private readonly assignTicket: AssignTicketUseCase,
     private readonly writes: TicketWriteRepository,
     private readonly superwork: SuperworkService,
   ) {}
@@ -179,6 +188,12 @@ export class TicketsService {
         to_status: h.toStatus,
         from_priority: h.fromPriority,
         to_priority: h.toPriority,
+        from_assignee: h.fromAssigneeId
+          ? { id: h.fromAssigneeId, full_name: h.fromAssigneeName ?? '' }
+          : null,
+        to_assignee: h.toAssigneeId
+          ? { id: h.toAssigneeId, full_name: h.toAssigneeName ?? '' }
+          : null,
         reason: h.reason,
         changed_at: h.changedAt.toISOString(),
         changed_by: h.changedBy ? { id: h.changedBy, full_name: h.actorName ?? '' } : null,
@@ -249,6 +264,9 @@ export class TicketsService {
       toStatus: dto.to_status as TicketStatus,
       reason: dto.reason,
       pendingReason: dto.pending_reason,
+      comment: dto.comment,
+      resolutionNote: dto.resolution_note,
+      satisfactionScore: dto.satisfaction_score,
     });
     return this.detail(scope, id);
   }
@@ -264,6 +282,33 @@ export class TicketsService {
       reason: dto.reason,
     });
     return this.detail(scope, id);
+  }
+
+  /** มอบหมายผู้รับผิดชอบ หรือรับงานเอง (POST /tickets/{id}/assign) */
+  async assign(scope: AccessScope, id: number, dto: AssignTicketDto): Promise<TicketDetailDto> {
+    await this.assignTicket.execute(scope, id, {
+      assigneeId: dto.assignee_id,
+      comment: dto.comment,
+      reason: dto.reason,
+    });
+    return this.detail(scope, id);
+  }
+
+  /**
+   * ผู้ที่มอบหมายเรื่องนี้ให้ได้ (GET /tickets/{id}/assignees)
+   *
+   * ผูกกับเรื่อง ไม่ใช่รายชื่อผู้ใช้ทั่วไป เพราะคำตอบขึ้นกับบริษัทของเรื่อง —
+   * เจ้าหน้าที่ที่ดูแลบริษัท ก. รับเรื่องของบริษัท ข. ไม่ได้ ถ้าให้หน้าจอกรองเอง
+   * จากรายชื่อทั้งหมด กติกาขอบเขตจะต้องถูกเขียนซ้ำอีกชุดที่ฝั่ง frontend
+   */
+  async assignees(scope: AccessScope, id: number): Promise<TicketAssigneeDto[]> {
+    const row = await this.tickets.findById(scope, id);
+    scope.require('ticket.assign');
+
+    const users = await this.tickets.assignableUsers(row.companyId);
+    return users
+      .map((u) => ({ id: u.id, full_name: u.fullName, is_me: u.id === scope.userId }))
+      .sort((a, b) => Number(b.is_me) - Number(a.is_me));
   }
 
   // ── การแปลงแถวเป็น DTO ───────────────────────────────────────────
@@ -378,6 +423,26 @@ export class TicketsService {
     const base = await this.toListItem(row);
     const closed = ['resolved', 'closed', 'cancelled'].includes(row.status);
     const isOwner = row.requesterId === scope.userId;
+    const status = row.status as TicketStatus;
+
+    /*
+     * สถานะที่ผู้เรียกคนนี้ไปต่อได้ — ใช้ actorMayTransition ตัวเดียวกับ use case
+     *
+     * ช่วงเปิดคืน 7 วันตรวจที่นี่ด้วย ไม่งั้นเรื่องที่ปิดไปนานแล้วจะมีปุ่ม
+     * "เปิดคืน" ที่กดแล้วได้ข้อความปฏิเสธทุกครั้ง
+     */
+    const actor = {
+      isOwner,
+      canChangeStatus: scope.has('ticket.change_status'),
+      canCancel: scope.has('ticket.cancel'),
+      canReopen: scope.has('ticket.reopen'),
+    };
+    const now = new Date();
+    const availableTransitions = allowedTransitionsFrom(status).filter(
+      (to) =>
+        actorMayTransition(status, to, actor) &&
+        !(status === 'closed' && !isWithinReopenWindow(row.closedAt, now)),
+    );
 
     /**
      * บล็อก can ประเมินที่นี่ที่เดียว frontend ไม่คำนวณเงื่อนไขเองแม้แต่ข้อเดียว
@@ -409,12 +474,17 @@ export class TicketsService {
         comment: scope.has('ticket.comment') || isOwner,
         comment_internal: scope.has('ticket.comment_internal'),
         attach: !closed && (scope.has('ticket.attach') || isOwner),
-        close_own: row.status === 'resolved' && (isOwner || scope.has('ticket.close_own')),
-        reopen: ['resolved', 'closed'].includes(row.status) && scope.has('ticket.reopen'),
-        cancel: row.status === 'new' && (isOwner || scope.has('ticket.cancel')),
+        // สามข้อนี้อ่านจากรายการเดียวกับปุ่มเปลี่ยนสถานะ — เดิมคำนวณแยก
+        // และบอกว่าผู้แจ้งยกเลิกหรือเปิดคืนได้ ทั้งที่คำสั่งจริงปฏิเสธทุกครั้ง
+        close_own: status === 'resolved' && availableTransitions.includes('closed'),
+        reopen:
+          (status === 'resolved' || status === 'closed') &&
+          availableTransitions.includes('in_progress'),
+        cancel: availableTransitions.includes('cancelled'),
         delete: scope.has('ticket.delete'),
         view_history: scope.has('ticket.view_history') || isOwner,
       },
+      available_transitions: [...availableTransitions],
     };
   }
 

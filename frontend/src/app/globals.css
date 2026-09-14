@@ -771,6 +771,28 @@
   }
 }
 
+/*
+ * ปุ่มแชท Chatwoot บนจอที่มีแถบเมนูล่าง
+ *
+ * Chatwoot วางปุ่มไว้มุมขวาล่างและซ้อนเหนือทุกอย่างในหน้า บนจอแคบจึงบังแถบเมนูล่าง
+ * (ซ่อนตั้งแต่ lg) และปุ่มลอยแจ้งปัญหา (ซ่อนตั้งแต่ sm) — ยกขึ้นเหนือของที่อยู่ในหน้าจริง
+ * หาจาก data attribute ของสองอย่างนั้นผ่าน :has() หน้า login ที่ไม่มีแถบจึงไม่ถูกยก
+ *
+ * ⚠️ ต้องอยู่นอก @layer — Tailwind ตัดกฎใน layer ที่ไม่มีชื่อ class ปรากฏในโค้ดของเราทิ้งตอน build
+ *    และคลาส woot-* ถูกสร้างโดยสคริปต์ของ Chatwoot ไม่มีในไฟล์ไหนของเราเลย
+ * ⚠️ ต้องมี !important — สไตล์ของ Chatwoot ถูกฉีดเข้าหน้าทีหลังด้วย selector ของมันเอง
+ */
+@media (max-width: 1023.98px) {
+  body:has([data-mobile-nav]) .woot-widget-bubble.woot-elements--right {
+    bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+  }
+}
+@media (max-width: 639.98px) {
+  body:has([data-mobile-fab]) .woot-widget-bubble.woot-elements--right {
+    bottom: calc(144px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    โหมดสำรองเมื่อสไตล์ชีตโหลดไม่สำเร็จ (ADR-003 C-01)
    ยกมาจาก prototype เพราะเน็ตที่ไซต์งานหลุดจริง —

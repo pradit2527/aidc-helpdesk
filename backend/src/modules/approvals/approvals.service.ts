@@ -255,7 +255,8 @@ export class ApprovalsService {
       userId: scope.userId,
       homeCompanyId: row.company_id,
       companyIds: [row.company_id],
-      permissions: ['ticket.change_status'],
+      // ticket.cancel ด้วย เพราะการปฏิเสธยกเลิกเรื่อง — กฎยกเลิกของเจ้าหน้าที่ต้องมีทั้งสองสิทธิ์
+      permissions: ['ticket.change_status', 'ticket.cancel'],
       isSuperAdmin: false,
     });
 

@@ -1,21 +1,33 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../client';
 import { DB } from '../db.module';
-import type { ITicketRepository } from '../../application/ports/ticket-repository.port';
+import type {
+  AssignmentRecord,
+  ITicketRepository,
+  PublicCommentRecord,
+  StatusChangeRecord,
+} from '../../application/ports/ticket-repository.port';
 import type { TicketEntity } from '../../domain/ticket/ticket.entity';
 import { NotFoundError } from '../../common/errors/domain-error';
 import {
   appUser,
+  auditLog,
   company,
   department,
+  permission,
+  role,
+  rolePermission,
   ticket,
   ticketCategory,
+  ticketComment,
   ticketSequence,
   ticketStatusHistory,
+  userRole,
+  userRoleScope,
 } from '../schema';
 
 /**
@@ -106,6 +118,9 @@ export type TicketRow = Awaited<ReturnType<typeof selectTicketsQuery>>[number];
  * จึงรับเป็นชนิดนี้ตรง ๆ แทนการ cast ซึ่งจะกลบความต่างนั้นไป
  */
 export type DbTransaction = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** คอลัมน์ reason ของประวัติยาวได้ 500 — ตัดก่อนเขียน แทนการปล่อยให้ทั้งทรานแซกชันล้ม */
+const HISTORY_REASON_MAX = 500;
 
 /**
  * ชั้นเดียวในระบบที่แปลง "สิทธิ์ของผู้ใช้" เป็น "เงื่อนไข WHERE"
@@ -236,6 +251,93 @@ export class TicketRepository implements Partial<ITicketRepository> {
   }
 
   /**
+   * ผู้ที่รับเรื่องของบริษัทนี้ได้
+   *
+   * เงื่อนไขสองข้อพร้อมกัน
+   *   1. ถือบทบาทที่ยังไม่หมดอายุซึ่งให้สิทธิ์ ticket.change_status (หรือเป็น super_admin)
+   *      — อ่านจาก role_permission ไม่ผูกกับชื่อบทบาท เพราะหน้าจัดการสิทธิ์แก้ได้
+   *   2. บริษัทนี้อยู่ในขอบเขตของเขา — กติกาเดียวกับ AccessScope:
+   *      มีแถว user_role_scope ใช้ตามนั้น ไม่มีเลยใช้บริษัทต้นสังกัด
+   *
+   * ⚠️ ถ้ามอบเรื่องให้คนที่ไม่ผ่านข้อ 2 เขาจะได้รับมอบหมายแต่เปิดเรื่องนั้นไม่ได้
+   *    (findById ตอบ 404) เรื่องจะค้างอยู่ในมือคนที่มองไม่เห็นมัน
+   */
+  async assignableUsers(companyId: number): Promise<{ id: number; fullName: string }[]> {
+    const now = new Date();
+    const activeRole = or(isNull(userRole.expiresAt), gt(userRole.expiresAt, now));
+
+    const workingRoleIds = this.db
+      .select({ roleId: rolePermission.roleId })
+      .from(rolePermission)
+      .innerJoin(permission, eq(permission.id, rolePermission.permissionId))
+      .where(eq(permission.code, 'ticket.change_status'));
+
+    const candidates = await this.db
+      .select({
+        id: appUser.id,
+        fullName: appUser.fullName,
+        homeCompanyId: appUser.companyId,
+        roleCode: role.code,
+      })
+      .from(appUser)
+      .innerJoin(userRole, eq(userRole.userId, appUser.id))
+      .innerJoin(role, eq(role.id, userRole.roleId))
+      .where(
+        and(
+          eq(appUser.isActive, true),
+          isNull(appUser.deletedAt),
+          activeRole,
+          or(inArray(role.id, workingRoleIds), eq(role.code, 'super_admin')),
+        ),
+      );
+
+    if (candidates.length === 0) return [];
+
+    const ids = [...new Set(candidates.map((c) => c.id))];
+    // ขอบเขตมาจากทุกบทบาทที่ยังมีผล ไม่ใช่เฉพาะบทบาทที่ทำงานกับเรื่องได้ — ตรงกับ ScopeService
+    const scopeRows = await this.db
+      .select({ userId: userRole.userId, companyId: userRoleScope.companyId })
+      .from(userRoleScope)
+      .innerJoin(userRole, eq(userRole.id, userRoleScope.userRoleId))
+      .where(and(inArray(userRole.userId, ids), activeRole));
+
+    const scopedCompanies = new Map<number, Set<number>>();
+    for (const r of scopeRows) {
+      const set = scopedCompanies.get(r.userId);
+      if (set) set.add(r.companyId);
+      else scopedCompanies.set(r.userId, new Set([r.companyId]));
+    }
+
+    const users = new Map<
+      number,
+      { id: number; fullName: string; homeCompanyId: number; superAdmin: boolean }
+    >();
+    for (const c of candidates) {
+      const isSuper = c.roleCode === 'super_admin';
+      const existing = users.get(c.id);
+      if (existing) {
+        existing.superAdmin ||= isSuper;
+        continue;
+      }
+      users.set(c.id, {
+        id: c.id,
+        fullName: c.fullName,
+        homeCompanyId: c.homeCompanyId,
+        superAdmin: isSuper,
+      });
+    }
+
+    return [...users.values()]
+      .filter((u) => {
+        if (u.superAdmin) return true;
+        const scoped = scopedCompanies.get(u.id);
+        return scoped ? scoped.has(companyId) : u.homeCompanyId === companyId;
+      })
+      .map(({ id, fullName }) => ({ id, fullName }))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }
+
+  /**
    * ออกเลขที่เรื่องแบบไม่ชนกัน (B-03)
    *
    * UPDATE … RETURNING ล็อกแถวลำดับของบริษัท+เดือนนั้นภายในทรานแซกชันเดียวกัน
@@ -353,11 +455,14 @@ export class TicketRepository implements Partial<ITicketRepository> {
     });
   }
 
-  /** บันทึกการเปลี่ยนสถานะพร้อมประวัติ ในทรานแซกชันเดียว */
-  async saveStatusChange(
-    entity: TicketEntity,
-    change: { from: string; to: string; actorId: number; reason?: string },
-  ): Promise<void> {
+  /**
+   * บันทึกการเปลี่ยนสถานะ ในทรานแซกชันเดียวกับประวัติ ข้อความถึงผู้แจ้ง และ audit
+   *
+   * ⚠️ audit_log เขียนที่นี่ ไม่ใช่ที่ service — ถ้าแยกไปเขียนหลัง commit
+   *    การเปลี่ยนสถานะที่สำเร็จแต่เขียน audit ล้มจะไม่มีร่องรอยเลย
+   *    ซึ่งเป็นสิ่งที่การตรวจ ISO 20000 ข้อ 7.5 ถามหาเป็นอย่างแรก
+   */
+  async saveStatusChange(entity: TicketEntity, change: StatusChangeRecord): Promise<void> {
     const props = entity.toPersistence();
     const id = props.id;
     if (id === undefined) {
@@ -375,6 +480,15 @@ export class TicketRepository implements Partial<ITicketRepository> {
           pendingReason: props.pendingReason ?? null,
           pendingStartedAt: props.pendingStartedAt ?? null,
           pendingDurationMinutes: props.pendingDurationMinutes,
+          updatedAt: change.at,
+          ...(change.resolutionDueAt ? { resolutionDueAt: change.resolutionDueAt } : {}),
+          ...(change.resolutionNote !== undefined ? { resolutionNote: change.resolutionNote } : {}),
+          ...(change.satisfactionScore !== undefined
+            ? { satisfactionScore: change.satisfactionScore, csatRespondedAt: change.at }
+            : {}),
+          // บวกในฐานข้อมูล ไม่ใช่อ่านมาบวกแล้วเขียนกลับ — สองคนเปิดคืนพร้อมกันต้องได้ +2
+          ...(change.reopened ? { reopenCount: sql`${ticket.reopenCount} + 1` } : {}),
+          ...(change.selfAssigned ? { assigneeId: change.actorId } : {}),
         })
         .where(eq(ticket.id, id));
 
@@ -383,8 +497,82 @@ export class TicketRepository implements Partial<ITicketRepository> {
         fromStatus: change.from,
         toStatus: change.to,
         changedBy: change.actorId,
-        // คอลัมน์ชื่อ reason ไม่ใช่ note — บังคับกรอกกรณียกเลิกและเปิดใหม่
-        ...(change.reason ? { reason: change.reason } : {}),
+        changedAt: change.at,
+        // คอลัมน์ชื่อ reason ไม่ใช่ note — บังคับกรอกกรณีพัก ยกเลิก และเปิดใหม่
+        ...(change.reason ? { reason: change.reason.slice(0, HISTORY_REASON_MAX) } : {}),
+        ...(change.selfAssigned ? { fromAssigneeId: null, toAssigneeId: change.actorId } : {}),
+      });
+
+      if (change.publicComment) {
+        await TicketRepository.insertPublicComment(tx, id, change.actorId, change.publicComment, change.at);
+      }
+
+      await tx.insert(auditLog).values({
+        actorId: change.actorId,
+        companyId: props.companyId,
+        action: 'ticket.status_changed',
+        entityType: 'ticket',
+        entityId: id,
+        oldValue: { status: change.from },
+        newValue: { status: change.to, ...(change.auditDetail ?? {}) },
+      });
+    });
+  }
+
+  /**
+   * บันทึกการมอบหมาย ในทรานแซกชันเดียวกับประวัติ ข้อความถึงผู้แจ้ง และ audit
+   *
+   * assignee_change_count นับเฉพาะการเปลี่ยนมือ ไม่นับการรับครั้งแรก
+   * เพราะเป็นตัวตั้งของ KPI-3 (FCR) — เรื่องที่มีคนรับครั้งเดียวแล้วแก้จบ
+   * ต้องนับเป็นแก้ได้ในครั้งแรก ไม่ใช่ถูกหักเพราะมีการมอบหมายหนึ่งครั้ง
+   */
+  async saveAssignment(change: AssignmentRecord): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(ticket)
+        .set({
+          assigneeId: change.toAssigneeId,
+          status: change.toStatus,
+          updatedAt: change.at,
+          ...(change.fromAssigneeId !== null
+            ? { assigneeChangeCount: sql`${ticket.assigneeChangeCount} + 1` }
+            : {}),
+        })
+        .where(eq(ticket.id, change.ticketId));
+
+      await tx.insert(ticketStatusHistory).values({
+        ticketId: change.ticketId,
+        fromStatus: change.fromStatus,
+        toStatus: change.toStatus,
+        fromAssigneeId: change.fromAssigneeId,
+        toAssigneeId: change.toAssigneeId,
+        changedBy: change.actorId,
+        changedAt: change.at,
+        ...(change.reason ? { reason: change.reason.slice(0, HISTORY_REASON_MAX) } : {}),
+      });
+
+      if (change.publicComment) {
+        await TicketRepository.insertPublicComment(
+          tx,
+          change.ticketId,
+          change.actorId,
+          change.publicComment,
+          change.at,
+        );
+      }
+
+      await tx.insert(auditLog).values({
+        actorId: change.actorId,
+        companyId: change.companyId,
+        action: 'ticket.assigned',
+        entityType: 'ticket',
+        entityId: change.ticketId,
+        oldValue: { assignee_id: change.fromAssigneeId, status: change.fromStatus },
+        newValue: {
+          assignee_id: change.toAssigneeId,
+          status: change.toStatus,
+          ...(change.reason ? { reason: change.reason } : {}),
+        },
       });
     });
   }
@@ -435,5 +623,35 @@ export class TicketRepository implements Partial<ITicketRepository> {
         reason: change.reason,
       });
     });
+  }
+
+  /**
+   * เขียนข้อความสาธารณะถึงผู้แจ้งภายในทรานแซกชันของคำสั่ง
+   *
+   * เวลาตอบรับครั้งแรกเขียนด้วยเงื่อนไข IS NULL ใน WHERE ของ UPDATE เอง
+   * กติกาเดียวกับ TicketWriteRepository.addComment — เจ้าหน้าที่สองคนตอบพร้อมกัน
+   * ต้องได้เวลาของคนแรก ไม่ใช่คนที่เขียนทีหลังทับ
+   */
+  private static async insertPublicComment(
+    tx: DbTransaction,
+    ticketId: number,
+    authorId: number,
+    comment: PublicCommentRecord,
+    at: Date,
+  ): Promise<void> {
+    await tx.insert(ticketComment).values({
+      ticketId,
+      authorId,
+      body: comment.body,
+      isInternal: false,
+      isSystem: false,
+    });
+
+    if (comment.countsAsFirstResponse) {
+      await tx
+        .update(ticket)
+        .set({ firstResponseAt: at })
+        .where(and(eq(ticket.id, ticketId), isNull(ticket.firstResponseAt)));
+    }
   }
 }

@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -306,6 +307,21 @@ export class TicketHistoryDto {
   @ApiProperty({ example: 'assigned' }) to_status!: string;
   @ApiPropertyOptional({ example: 'P3', nullable: true }) from_priority!: string | null;
   @ApiPropertyOptional({ example: 'P2', nullable: true }) to_priority!: string | null;
+
+  @ApiPropertyOptional({
+    type: RefUserDto,
+    nullable: true,
+    description: 'ผู้รับผิดชอบก่อนเปลี่ยน — null ทั้งกรณียังไม่มีคนรับ และแถวที่ไม่ใช่การมอบหมาย',
+  })
+  from_assignee!: RefUserDto | null;
+
+  @ApiPropertyOptional({
+    type: RefUserDto,
+    nullable: true,
+    description: 'ผู้รับผิดชอบหลังเปลี่ยน — มีค่าเฉพาะแถวที่เป็นการมอบหมายหรือรับงาน',
+  })
+  to_assignee!: RefUserDto | null;
+
   @ApiPropertyOptional({ example: 'กระทบทั้งแผนก', nullable: true }) reason!: string | null;
   @ApiProperty({ example: '2026-09-07T02:31:00.000Z' }) changed_at!: string;
   @ApiPropertyOptional({ type: RefUserDto, nullable: true }) changed_by!: RefUserDto | null;
@@ -382,6 +398,17 @@ export class TicketDetailDto extends TicketListItemDto {
   can!: TicketCanDto;
 
   @ApiProperty({
+    enum: TICKET_STATUS,
+    isArray: true,
+    example: ['in_progress', 'pending_user', 'cancelled'],
+    description:
+      'สถานะที่ผู้เรียกคนนี้เปลี่ยนไปได้จากสถานะปัจจุบัน — รวมตาราง transition ' +
+      'สิทธิ์ของผู้เรียก และช่วงเปิดคืน 7 วันไว้แล้ว frontend แสดงปุ่มตามรายการนี้ ' +
+      'กฎชุดเดียวกับที่ POST /tickets/{id}/status ใช้ตัดสินจริง',
+  })
+  available_transitions!: TicketStatus[];
+
+  @ApiProperty({
     type: [TicketCommentDto],
     description: 'คอมเมนต์ภายในถูกตัดออกก่อนส่งเมื่อผู้เรียกไม่มีสิทธิ์เห็น',
   })
@@ -418,29 +445,34 @@ export class ChangeStatusDto {
 
   @ApiPropertyOptional({
     example: 'ລໍຖ້າອາໄຫຼ່ຫົວອ່ານຈາກຜູ້ຈຳໜ່າຍ ກຳນົດສົ່ງ 3 ກັນຍາ',
-    description: 'บังคับเมื่อ cancelled / pending_user / reopen',
+    description:
+      'เก็บในประวัติ · บังคับเมื่อ pending_user (≥ 10 ตัวอักษร) / cancelled (≥ 5) / เปิดคืน (≥ 10)',
   })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   reason?: string;
 
   @ApiPropertyOptional({
     description:
-      'ถ้าระบุ ระบบสร้างคอมเมนต์สาธารณะให้ · บังคับเมื่อ pending_reason เป็น user หรือ vendor',
+      'ข้อความถึงผู้แจ้ง — ถ้าระบุ ระบบสร้างคอมเมนต์สาธารณะให้ · ' +
+      'พักด้วยเหตุผล user หรือ vendor โดยไม่ระบุ ระบบใช้ reason เป็นข้อความแจ้งผู้แจ้งแทน (SLA 5.4)',
   })
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   comment?: string;
 
-  @ApiPropertyOptional({ description: 'บังคับเมื่อ to_status = resolved' })
+  @ApiPropertyOptional({ description: 'บังคับเมื่อ to_status = resolved (≥ 15 ตัวอักษร)' })
   @IsOptional()
   @IsString()
+  @MaxLength(5000)
   resolution_note?: string;
 
   @ApiPropertyOptional({
     minimum: 1,
     maximum: 5,
-    description: 'รับได้เมื่อ to_status = closed โดยผู้แจ้ง (FE-04)',
+    description: 'รับได้เฉพาะผู้แจ้ง ตอน to_status = closed (FE-04)',
   })
   @IsOptional()
   @IsInt()
@@ -470,4 +502,39 @@ export class ChangePriorityDto {
   @IsString()
   @MinLength(10)
   reason!: string;
+}
+
+// ══════════════════════ มอบหมายผู้รับผิดชอบ ══════════════════════
+
+export class AssignTicketDto {
+  @ApiProperty({
+    example: 12,
+    description: 'id ของผู้รับผิดชอบ · ส่ง id ของตัวเองเพื่อรับงานเอง (ticket.assign_self)',
+  })
+  @IsInt()
+  @Min(1)
+  assignee_id!: number;
+
+  @ApiPropertyOptional({
+    example: 'ຮັບເລື່ອງແລ້ວ ກຳລັງກວດສອບ ຈະແຈ້ງຄວາມຄືບໜ້າພາຍໃນ 30 ນາທີ',
+    description:
+      'ข้อความถึงผู้แจ้ง — ถ้าระบุ ระบบสร้างคอมเมนต์สาธารณะให้ และนับเป็นการตอบรับครั้งแรก (SLA 5.1)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  comment?: string;
+
+  @ApiPropertyOptional({ example: 'ຍ້າຍໃຫ້ທີມເຄືອຂ່າຍ', description: 'เหตุผลการมอบหมาย — เก็บในประวัติ' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+export class TicketAssigneeDto {
+  @ApiProperty({ example: 12 }) id!: number;
+  @ApiProperty({ example: 'ສົມສັກ ວົງສາ' }) full_name!: string;
+  @ApiProperty({ example: false, description: 'true = ผู้เรียกเอง ใช้เรียงไว้บนสุดของรายการ' })
+  is_me!: boolean;
 }

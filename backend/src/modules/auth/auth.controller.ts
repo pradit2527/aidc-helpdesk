@@ -18,6 +18,11 @@ import { AUTH_THROTTLE, THROTTLE } from '../../common/throttle/throttle.config';
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
 import {
+  chatwootIdentifierHash,
+  readChatwootConfig,
+} from '../../integrations/chatwoot/chatwoot.config';
+import { ChatwootIdentityDto } from '../../integrations/chatwoot/chatwoot.dto';
+import {
   AuthService,
   COOKIE,
   clearSessionCookies,
@@ -119,6 +124,49 @@ export class AuthController {
   @ApiResponse({ status: 401, type: ErrorResponseDto })
   async me(@CurrentScope() scope: AccessScope): Promise<MeResponseDto> {
     return this.auth.meFor(scope);
+  }
+
+  /*
+   * แยกจาก /auth/me โดยตั้งใจ
+   *
+   * /auth/me ถูกเรียกทุกครั้งที่เปิดหน้า และถูกทำให้เร็วที่สุดเท่าที่ทำได้ไปแล้ว
+   * ส่วนตัวตนของแชทต้องการเพียงครั้งเดียวหลังหน้าต่างแชทพร้อม — ถ้ารวมไว้
+   * ทุกหน้าจะจ่ายค่าคำนวณให้แชท แม้ในเครื่องที่ไม่ได้เปิดใช้แชทเลย
+   */
+  @Get('chatwoot-identity')
+  @UseGuards(ScopeGuard)
+  @ApiCookieAuth('cookie')
+  @ApiOperation({
+    summary: 'ตัวตนสำหรับหน้าต่างแชท Chatwoot',
+    description: [
+      'ใช้กับ `window.$chatwoot.setUser(identifier, { name, email, identifier_hash })`',
+      '',
+      '- `identifier` = ชื่อผู้ใช้ — คนเดียวกันเปิดจากเครื่องไหนก็เห็นประวัติแชทเดียวกัน',
+      '- `identifier_hash` = HMAC-SHA256 ของ identifier ด้วย `CHATWOOT_HMAC_TOKEN`',
+      '  คำนวณที่ backend เท่านั้น เพราะ token ต้องไม่ไปถึงเบราว์เซอร์ · `null` เมื่อยังไม่ได้ตั้งค่า',
+      '- `custom_attributes` ให้เจ้าหน้าที่เห็นบริษัท แผนก ตำแหน่ง และบทบาทของผู้ถาม',
+    ].join('\n'),
+  })
+  @ApiEnvelope(ChatwootIdentityDto)
+  @ApiResponse({ status: 401, type: ErrorResponseDto })
+  async chatwootIdentity(@CurrentScope() scope: AccessScope): Promise<ChatwootIdentityDto> {
+    const me = await this.auth.meFor(scope);
+    const { hmacToken } = readChatwootConfig();
+
+    return {
+      identifier: me.username,
+      // ไม่ตั้ง token = ส่ง null ไม่ใช่คำนวณด้วยค่าว่าง — HMAC ของ key ว่างคำนวณได้
+      // และหน้าตาเหมือนรหัสจริงทุกอย่าง แต่ Chatwoot จะปฏิเสธโดยไม่บอกว่าเพราะอะไร
+      identifier_hash: hmacToken ? chatwootIdentifierHash(hmacToken, me.username) : null,
+      name: me.full_name,
+      email: me.email ?? null,
+      custom_attributes: {
+        company: me.company.code,
+        ...(me.department ? { department: me.department.name } : {}),
+        ...(me.job_title ? { job_title: me.job_title } : {}),
+        roles: me.roles.join(', '),
+      },
+    };
   }
 
   @Post('change-password')

@@ -152,11 +152,20 @@ frontend
    ⚠️ ขั้นนี้ข้ามไม่ได้ — repo นี้เป็น monorepo ที่ไม่มี `package.json` ที่ราก
    ถ้าไม่ตั้ง build จะล้มด้วย `No Next.js version detected`
 
-3. **Settings → Environment Variables** ใส่ตัวเดียว
+3. **Settings → Environment Variables**
 
 ```bash
 BACKEND_ORIGIN=https://aidc-helpdesk-api.up.railway.app
+
+# แชทถาม-ตอบ Chatwoot — ไม่ตั้งสองตัวนี้ = ไม่มีปุ่มแชท
+NEXT_PUBLIC_CHATWOOT_BASE_URL=https://helpdesk.aidclaos.com
+NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN=<website token ของ inbox แบบ Website>
 ```
+
+   **เซิร์ฟเวอร์ Chatwoot ต้องเป็น https** — หน้าเว็บนี้เป็น https ถ้าแชทเป็น http
+   เบราว์เซอร์บล็อกโดยไม่แจ้งอะไรเลย ปุ่มแชทแค่ไม่โผล่
+   `NEXT_PUBLIC_*` ถูกฝังตอน build ต้อง Redeploy ทุกครั้งที่แก้
+   ส่วน HMAC token ของแชท (`CHATWOOT_HMAC_TOKEN`) เป็นความลับ ตั้งที่ Railway ไม่ใช่ที่นี่
 
    **ห้ามตั้ง `NEXT_PUBLIC_API_BASE_URL`** — ถ้าตั้งเป็น URL เต็มของ Railway
    เบราว์เซอร์จะยิงข้ามโดเมนแล้วคุกกี้ `SameSite=Strict` จะไม่ถูกส่งไป

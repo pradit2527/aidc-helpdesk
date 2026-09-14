@@ -86,6 +86,9 @@ export class TicketDetailRepository {
   /** ประวัติการเปลี่ยนแปลง เรียงจากเก่าไปใหม่ให้อ่านเป็นไทม์ไลน์ได้ */
   async history(ticketId: number) {
     const actor = alias(appUser, 'actor');
+    // ผู้รับผิดชอบก่อนและหลังเป็นคนละคนกับผู้สั่ง จึงต้องมีชื่อแทนของตัวเอง
+    const fromAssignee = alias(appUser, 'from_assignee');
+    const toAssignee = alias(appUser, 'to_assignee');
 
     return this.db
       .select({
@@ -94,6 +97,10 @@ export class TicketDetailRepository {
         toStatus: ticketStatusHistory.toStatus,
         fromPriority: ticketStatusHistory.fromPriority,
         toPriority: ticketStatusHistory.toPriority,
+        fromAssigneeId: ticketStatusHistory.fromAssigneeId,
+        fromAssigneeName: fromAssignee.fullName,
+        toAssigneeId: ticketStatusHistory.toAssigneeId,
+        toAssigneeName: toAssignee.fullName,
         reason: ticketStatusHistory.reason,
         changedAt: ticketStatusHistory.changedAt,
         changedBy: ticketStatusHistory.changedBy,
@@ -101,8 +108,11 @@ export class TicketDetailRepository {
       })
       .from(ticketStatusHistory)
       .leftJoin(actor, eq(actor.id, ticketStatusHistory.changedBy))
+      .leftJoin(fromAssignee, eq(fromAssignee.id, ticketStatusHistory.fromAssigneeId))
+      .leftJoin(toAssignee, eq(toAssignee.id, ticketStatusHistory.toAssigneeId))
       .where(eq(ticketStatusHistory.ticketId, ticketId))
-      .orderBy(asc(ticketStatusHistory.changedAt));
+      // id เป็นตัวตัดสินเมื่อเวลาตรงกัน — มอบหมายกับเริ่มงานในวินาทีเดียวกันต้องเรียงตามลำดับจริง
+      .orderBy(asc(ticketStatusHistory.changedAt), asc(ticketStatusHistory.id));
   }
 
   /**

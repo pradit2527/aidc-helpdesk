@@ -57,6 +57,8 @@ export interface TicketProps extends NewTicketProps {
   pendingStartedAt?: Date | null;
   /** นาทีที่หยุดนาฬิกาสะสม — บวกกลับเข้ากำหนดเวลาเมื่อคำนวณใหม่ (SLA 5.4) */
   pendingDurationMinutes: number;
+  /** ผู้รับผิดชอบปัจจุบัน — null = ยังไม่มีใครรับ */
+  assigneeId?: number | null;
 }
 
 const MIN_SUBJECT_LENGTH = 5;
@@ -86,6 +88,15 @@ const ALLOWED_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
 const TERMINAL_STATUSES: readonly TicketStatus[] = ['closed', 'cancelled'];
 
 /**
+ * สถานะที่มอบหมายผู้รับผิดชอบใหม่ไม่ได้
+ *
+ * resolved รวมอยู่ด้วยทั้งที่ยังไม่จบ เพราะงานของเจ้าหน้าที่เสร็จแล้ว
+ * เหลือแค่รอผู้แจ้งยืนยัน — การย้ายเรื่องช่วงนี้ทำให้ KPI-3 (FCR) นับว่า
+ * เปลี่ยนมือทั้งที่ไม่มีใครทำงานต่อจริง ถ้าต้องทำต่อให้เปิดคืนก่อน
+ */
+const UNASSIGNABLE_STATUSES: readonly TicketStatus[] = ['resolved', 'closed', 'cancelled'];
+
+/**
  * เปิดซ้ำได้ภายในกี่วันหลังปิด
  *
  * เกินจากนี้ต้องแจ้งเรื่องใหม่ เพราะการเปิดเรื่องเก่าที่ปิดไปนานแล้ว
@@ -93,6 +104,60 @@ const TERMINAL_STATUSES: readonly TicketStatus[] = ['closed', 'cancelled'];
  * และรายงานที่ส่งผู้บริหารไปแล้วจะไม่ตรงกับที่ระบบแสดงในภายหลัง
  */
 const REOPEN_WINDOW_DAYS = 7;
+
+/** สถานะที่ไปต่อได้จากสถานะนี้ตามตาราง — ยังไม่ดูว่าใครเป็นคนสั่ง */
+export function allowedTransitionsFrom(status: TicketStatus): readonly TicketStatus[] {
+  return ALLOWED_TRANSITIONS[status];
+}
+
+/** ยังอยู่ในช่วงที่เปิดซ้ำได้ไหม — เรื่องที่ยังไม่เคยปิดถือว่าอยู่ในช่วงเสมอ */
+export function isWithinReopenWindow(closedAt: Date | null | undefined, at: Date): boolean {
+  if (!closedAt) return true;
+  return (at.getTime() - closedAt.getTime()) / 86_400_000 <= REOPEN_WINDOW_DAYS;
+}
+
+/** สิ่งที่ต้องรู้เกี่ยวกับผู้สั่ง เพื่อตัดสินว่าเปลี่ยนสถานะได้ไหม */
+export interface TransitionActor {
+  /** เป็นผู้แจ้งของเรื่องนี้ */
+  isOwner: boolean;
+  /** ticket.change_status — เจ้าหน้าที่ที่ทำงานกับเรื่อง */
+  canChangeStatus: boolean;
+  /** ticket.cancel */
+  canCancel: boolean;
+  /** ticket.reopen */
+  canReopen: boolean;
+}
+
+/**
+ * ผู้สั่งคนนี้เปลี่ยนจาก from ไป to ได้ไหม
+ *
+ * ใช้ตัวเดียวกันทั้งตอนตัดสินคำสั่งจริง และตอนบอกหน้าจอว่าจะแสดงปุ่มอะไร
+ * ถ้าเขียนแยกสองชุด วันหนึ่งจะมีปุ่มที่กดแล้วถูกปฏิเสธ หรือทางที่ทำได้แต่ไม่มีปุ่มให้กด
+ *
+ * ผู้แจ้งที่ไม่ใช่เจ้าหน้าที่ทำได้สามอย่างเท่านั้น
+ *   - ยืนยันปิดเรื่องที่แก้แล้ว
+ *   - เปิดเรื่องคืนเมื่อยังพบปัญหาเดิม
+ *   - ถอนเรื่องที่ยังไม่มีใครรับ — มีคนรับแล้วต้องคุยกับเจ้าหน้าที่ ไม่ใช่ยกเลิกทิ้งเอง
+ * การเปลี่ยนอื่นทั้งหมดเป็นงานของเจ้าหน้าที่
+ */
+export function actorMayTransition(
+  from: TicketStatus,
+  to: TicketStatus,
+  actor: TransitionActor,
+): boolean {
+  if (!ALLOWED_TRANSITIONS[from].includes(to)) return false;
+
+  const reopening = (from === 'resolved' || from === 'closed') && to === 'in_progress';
+  if (reopening) return actor.canChangeStatus || (actor.isOwner && actor.canReopen);
+
+  if (to === 'cancelled') {
+    return (actor.canChangeStatus && actor.canCancel) || (actor.isOwner && from === 'new');
+  }
+
+  if (from === 'resolved' && to === 'closed') return actor.canChangeStatus || actor.isOwner;
+
+  return actor.canChangeStatus;
+}
 
 export class TicketEntity {
   private props: TicketProps;
@@ -159,6 +224,9 @@ export class TicketEntity {
   }
   get requesterId(): number {
     return this.props.requesterId;
+  }
+  get assigneeId(): number | null {
+    return this.props.assigneeId ?? null;
   }
   get isSecurityIncident(): boolean {
     return this.props.isSecurityIncident ?? false;
@@ -232,9 +300,18 @@ export class TicketEntity {
 
     if (this.props.status === 'closed') this.assertReopenWindow(at);
 
-    // สะสมนาทีที่หยุดนาฬิกาก่อนเปลี่ยนสถานะ มิฉะนั้น isPending
-    // จะเป็นเท็จไปแล้วตอนที่ต้องใช้ค่านี้
-    if (this.willResumeFromPending(next) && options.pausedMinutesToAdd) {
+    /*
+     * สะสมนาทีที่หยุดนาฬิกาก่อนเปลี่ยนสถานะ มิฉะนั้น isPending
+     * จะเป็นเท็จไปแล้วตอนที่ต้องใช้ค่านี้
+     *
+     * การเปิดคืนจาก resolved / closed ใช้สูตรเดียวกับการเลิกพัก (S-03)
+     * ช่วงที่เรื่องค้างอยู่ในสถานะ "แก้แล้ว" ไม่ใช่เวลาที่เจ้าหน้าที่ถือเรื่องไว้
+     * ถ้านับรวม เรื่องที่ผู้แจ้งตีกลับหลังผ่านไปสองวันจะเกินกำหนดทันทีที่เปิดคืน
+     */
+    const reopening =
+      (this.props.status === 'resolved' || this.props.status === 'closed') &&
+      next === 'in_progress';
+    if ((this.willResumeFromPending(next) || reopening) && options.pausedMinutesToAdd) {
       this.props.pendingDurationMinutes += options.pausedMinutesToAdd;
     }
 
@@ -263,6 +340,42 @@ export class TicketEntity {
     // กลับมาทำต่อ = ยังไม่จบ ต้องล้างเวลาที่เคยบันทึกไว้
     // มิฉะนั้นรายงาน "เวลาเฉลี่ยในการแก้" จะนับรอบแรกที่ถูกตีกลับด้วย
     if (next === 'in_progress') this.props.resolvedAt = null;
+  }
+
+  /**
+   * มอบหมายผู้รับผิดชอบ
+   *
+   * เรื่องใหม่ขยับเป็น "มอบหมายแล้ว" ในตัว เพราะความหมายของสถานะนั้นคือ "มีคนรับแล้ว"
+   * ถ้าแยกเป็นสองคำสั่ง จะมีช่วงที่มีผู้รับผิดชอบแต่สถานะยังบอกว่าไม่มีใครรับ
+   * เรื่องนั้นจะค้างอยู่ในแท็บ "ยังไม่มีคนรับ" ของคิว ทั้งที่มีคนถืออยู่แล้ว
+   *
+   * สถานะอื่นคงเดิม — ย้ายเรื่องที่กำลังทำหรือพักอยู่ให้คนอื่น ไม่ได้แปลว่าเริ่มใหม่
+   */
+  assignTo(assigneeId: number): {
+    fromAssigneeId: number | null;
+    fromStatus: TicketStatus;
+    toStatus: TicketStatus;
+  } {
+    if (UNASSIGNABLE_STATUSES.includes(this.props.status)) {
+      throw new ConflictError(
+        'TICKET_NOT_ASSIGNABLE',
+        'ເລື່ອງທີ່ແກ້ໄຂແລ້ວ ຫຼື ປິດແລ້ວ ມອບໝາຍໃໝ່ບໍ່ໄດ້',
+        { status: this.props.status },
+      );
+    }
+
+    const fromAssigneeId = this.props.assigneeId ?? null;
+    if (fromAssigneeId === assigneeId) {
+      throw new ConflictError('TICKET_ASSIGNEE_UNCHANGED', 'ຜູ້ນີ້ຮັບຜິດຊອບເລື່ອງນີ້ຢູ່ແລ້ວ', {
+        assigneeId,
+      });
+    }
+
+    const fromStatus = this.props.status;
+    this.props.assigneeId = assigneeId;
+    if (fromStatus === 'new') this.props.status = 'assigned';
+
+    return { fromAssigneeId, fromStatus, toStatus: this.props.status };
   }
 
   /**
@@ -309,16 +422,14 @@ export class TicketEntity {
   /** เปิดซ้ำได้ภายใน 7 วันหลังปิด เกินจากนั้นต้องแจ้งเรื่องใหม่ */
   private assertReopenWindow(at: Date): void {
     const closedAt = this.props.closedAt;
-    if (!closedAt) return;
+    if (!closedAt || isWithinReopenWindow(closedAt, at)) return;
 
     const days = (at.getTime() - closedAt.getTime()) / 86_400_000;
-    if (days > REOPEN_WINDOW_DAYS) {
-      throw new ConflictError(
-        'TICKET_REOPEN_WINDOW_EXPIRED',
-        `ເລື່ອງນີ້ປິດເກີນ ${REOPEN_WINDOW_DAYS} ວັນແລ້ວ ກະລຸນາແຈ້ງເລື່ອງໃໝ່`,
-        { closedAt: closedAt.toISOString(), daysSinceClosed: Math.floor(days) },
-      );
-    }
+    throw new ConflictError(
+      'TICKET_REOPEN_WINDOW_EXPIRED',
+      `ເລື່ອງນີ້ປິດເກີນ ${REOPEN_WINDOW_DAYS} ວັນແລ້ວ ກະລຸນາແຈ້ງເລື່ອງໃໝ່`,
+      { closedAt: closedAt.toISOString(), daysSinceClosed: Math.floor(days) },
+    );
   }
 
   private static assertSubject(subject: string): void {

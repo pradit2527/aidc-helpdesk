@@ -3,7 +3,9 @@
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 
-import { fetchMe, logout as logoutRequest } from '@/lib/auth';
+import { SESSION_EXPIRED_EVENT } from '@/lib/api';
+import { fetchMe, logout as logoutRequest, takePrimedUser } from '@/lib/auth';
+import { identifyChatwootUser, resetChatwoot } from '@/lib/chatwoot';
 import type { RoleCode, SessionUser } from '@/lib/types';
 
 /**
@@ -28,6 +30,8 @@ interface SessionContextValue {
   signOut: () => Promise<void>;
 }
 
+type LoadResult = 'ready' | 'anonymous' | 'error';
+
 const SessionContext = React.createContext<SessionContextValue | null>(null);
 
 /** เส้นทางที่เข้าได้โดยไม่ต้องล็อกอิน */
@@ -37,12 +41,16 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+function loginUrl(pathname: string): string {
+  return `/login?next=${encodeURIComponent(pathname)}`;
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
 
   const [user, setUser] = React.useState<SessionUser | null>(null);
-  const [state, setState] = React.useState<'loading' | 'ready' | 'anonymous' | 'error'>('loading');
+  const [state, setState] = React.useState<'loading' | LoadResult>('loading');
 
   /**
    * โหลดผู้ใช้ปัจจุบัน
@@ -52,51 +60,93 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
    * เดิมไม่มี try/catch — พอ /auth/me ล้มด้วยเหตุอื่นที่ไม่ใช่ 401
    * (เน็ตสะดุด, เซิร์ฟเวอร์กำลังตื่นจากการหลับ, ECONNRESET)
    * promise จะ reject แล้ว state ค้างที่ 'loading' ตลอดไป
-   * ผู้ใช้เห็นหน้าจอหมุนไม่จบ สลับกับเนื้อหาเป็นจังหวะกระพริบ
-   * และไม่มีทางออกจากสถานะนั้นนอกจากรีเฟรชเอง
    *
    * แยก 'error' ออกจาก 'anonymous' โดยตั้งใจ — เน็ตล่มไม่ใช่ "ยังไม่ล็อกอิน"
    * ถ้ากลบเป็นอันเดียวกัน ผู้ใช้จะถูกเด้งไปหน้าล็อกอินแล้วกรอกซ้ำไปเรื่อย
    * ทั้งที่รหัสถูกต้องและ session ยังอยู่
+   *
+   * ใช้ผู้ใช้ที่หน้าล็อกอินเพิ่งได้มาก่อน ถ้ามี — ไม่ต้องถาม /auth/me ซ้ำทันทีหลังล็อกอิน
    */
-  const load = React.useCallback(async (): Promise<SessionUser | null> => {
+  const load = React.useCallback(async (): Promise<LoadResult> => {
     try {
-      const me = await fetchMe();
+      const me = takePrimedUser() ?? (await fetchMe());
       setUser(me);
-      setState(me ? 'ready' : 'anonymous');
-      return me;
+      const result: LoadResult = me ? 'ready' : 'anonymous';
+      setState(result);
+      return result;
     } catch {
       setUser(null);
       setState('error');
-      return null;
+      return 'error';
     }
   }, []);
 
+  // อ่านผู้ใช้ปัจจุบันใน effect ด้านล่างโดยไม่ต้องผูก effect กับ user
+  const userRef = React.useRef<SessionUser | null>(null);
   React.useEffect(() => {
-    // หน้าล็อกอินไม่ต้องถาม /auth/me — ผู้ใช้ยังไม่มี session อยู่แล้ว
-    // ถ้าถามจะได้ 401 ทุกครั้งแล้วมีเสียงรบกวนใน log ฝั่งเซิร์ฟเวอร์เปล่า ๆ
-    if (isPublic(pathname)) {
-      setState('anonymous');
-      return;
-    }
-    void load();
-  }, [pathname, load]);
+    userRef.current = user;
+  }, [user]);
 
   /*
-   * ยังไม่ล็อกอินแต่เปิดหน้าที่ต้องล็อกอิน → พาไปหน้าล็อกอิน
+   * โหลดผู้ใช้เมื่อเข้าหน้าที่ต้องล็อกอินและยังไม่มีข้อมูล
    *
-   * ต้องอยู่ใน useEffect ไม่ใช่ระหว่าง render — การสั่ง router ระหว่าง render
-   * ทำให้ React เตือนว่าอัปเดต state ของ component อื่นขณะกำลัง render อยู่
+   * ⚠️ นี่คือเหตุที่ผู้ใช้เคย "ล็อกอินสองรอบถึงจะเข้าได้"
    *
-   * แนบ next มาด้วย เพื่อพากลับมาหน้าเดิมหลังล็อกอินสำเร็จ
-   * ผู้ใช้ที่กดลิงก์ ticket จากอีเมลแล้วโดนเด้งไปหน้าแรกจะหาเรื่องนั้นไม่เจอ
+   *    เดิมมีสอง effect แยกกัน — ตัวหนึ่งโหลด /auth/me อีกตัวดูว่า state เป็น
+   *    'anonymous' แล้วเด้งไปหน้าล็อกอิน provider นี้อยู่ที่ราก จึงยังถือ 'anonymous'
+   *    ค้างมาจากหน้าล็อกอิน พอล็อกอินสำเร็จแล้วเปลี่ยนหน้า ตัวเด้งทำงานทันที
+   *    ก่อน /auth/me จะตอบ ผู้ใช้จึงถูกส่งกลับไปหน้าล็อกอินทั้งที่เพิ่งเข้าสำเร็จ
+   *    ตอนนี้ตัดสินใจเด้งจาก "ผลของการโหลดรอบนี้" เท่านั้น
+   *
+   * ⚠️ ไม่โหลดซ้ำทุกครั้งที่เปลี่ยนหน้า — เดิมยิง /auth/me ทุกคลิก
+   *    ซึ่งบนฐานข้อมูลที่อยู่ไกลกินเวลาวินาทีกว่าและแย่ connection กับข้อมูลของหน้านั้นเอง
+   *    session หมดอายุระหว่างใช้งานถูกจับได้จากคำขอ API ปกติอยู่แล้ว (SESSION_EXPIRED_EVENT)
    */
   React.useEffect(() => {
-    if (state === 'anonymous' && !isPublic(pathname)) {
-      const next = encodeURIComponent(pathname);
-      router.replace(`/login?next=${next}`);
+    if (isPublic(pathname)) {
+      // ออกมาหน้าล็อกอิน = ทิ้งผู้ใช้เดิม คนที่ล็อกอินต่ออาจเป็นคนละคน
+      setUser(null);
+      setState('loading');
+      return;
     }
-  }, [state, pathname, router]);
+    if (userRef.current) return;
+
+    let cancelled = false;
+    void load().then((result) => {
+      if (!cancelled && result === 'anonymous') router.replace(loginUrl(pathname));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, load, router]);
+
+  /*
+   * session หมดจริงระหว่างใช้งาน (ต่ออายุด้วย refresh token ไม่สำเร็จ) → ไปหน้าล็อกอิน
+   * แนบหน้าปัจจุบันไปด้วย เพื่อให้กลับมาที่เดิมหลังล็อกอินใหม่
+   */
+  React.useEffect(() => {
+    const onExpired = (): void => {
+      const current = window.location.pathname;
+      if (!isPublic(current)) router.replace(loginUrl(current));
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, [router]);
+
+  /*
+   * บอกแชท Chatwoot ว่าใครกำลังคุยอยู่ ทุกครั้งที่ได้ผู้ใช้คนใหม่
+   *
+   * ผูกกับ id ไม่ใช่ทั้งอ็อบเจกต์ — refresh() หลังแก้โปรไฟล์สร้างอ็อบเจกต์ใหม่
+   * ของคนเดิม ถ้าผูกกับอ็อบเจกต์จะยิงถาม backend ซ้ำทุกครั้งโดยไม่มีอะไรเปลี่ยน
+   *
+   * ล้มเหลวได้เงียบ ๆ โดยตั้งใจ — แชทยังใช้ได้แบบไม่ระบุตัวตน
+   * ปัญหาของแชทต้องไม่ทำให้ระบบหลักใช้ไม่ได้
+   */
+  const userId = user?.id;
+  React.useEffect(() => {
+    if (userId === undefined) return;
+    identifyChatwootUser().catch(() => undefined);
+  }, [userId]);
 
   /*
    * ไม่มีการบังคับเปลี่ยนรหัสผ่านแล้ว — หน้า /change-password ถูกถอดออก
@@ -109,6 +159,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
 
   const signOut = React.useCallback(async (): Promise<void> => {
     await logoutRequest();
+    // ล้างแชทด้วย — มิฉะนั้นคนที่นั่งเครื่องนี้ต่อจะเปิดอ่านบทสนทนาของคนที่เพิ่งออกได้
+    resetChatwoot();
     setUser(null);
     setState('anonymous');
     router.replace('/login');
@@ -138,7 +190,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
             type="button"
             onClick={() => {
               setState('loading');
-              void load();
+              void load().then((result) => {
+                if (result === 'anonymous') router.replace(loginUrl(pathname));
+              });
             }}
             className="min-h-tap rounded-md bg-primary px-5 py-2 text-body-sm font-semibold text-white"
           >

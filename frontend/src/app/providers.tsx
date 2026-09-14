@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as React from 'react';
 import { Toaster } from 'sonner';
 
+import { ChatwootWidget } from '@/components/support/chatwoot-widget';
 import { ApiError } from '@/lib/api';
 import { PreferencesProvider } from '@/lib/preferences';
 import { SessionProvider } from '@/lib/session';
@@ -50,6 +51,8 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
             toastOptions={{ className: 'text-body-sm' }}
           />
         </SessionProvider>
+        {/* นอก SessionProvider — ต้องขึ้นแม้ยังไม่ล็อกอินหรือติดต่อเซิร์ฟเวอร์ไม่ได้ */}
+        <ChatwootWidget />
       </PreferencesProvider>
     </QueryClientProvider>
   );

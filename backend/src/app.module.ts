@@ -8,6 +8,7 @@ import { LoggerModule } from 'nestjs-pino';
 
 import { CLOCK, SystemClock } from './application/ports/clock.port';
 import { TICKET_REPOSITORY } from './application/ports/ticket-repository.port';
+import { AssignTicketUseCase } from './application/use-cases/assign-ticket.use-case';
 import { ChangeTicketStatusUseCase } from './application/use-cases/change-ticket-status.use-case';
 import { CreateTicketUseCase } from './application/use-cases/create-ticket.use-case';
 import { ReassessTicketPriorityUseCase } from './application/use-cases/reassess-ticket-priority.use-case';
@@ -33,6 +34,9 @@ import { AuditController } from './modules/audit/audit.controller';
 import { AuditService } from './modules/audit/audit.service';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
+import { AssistantController } from './modules/assistant/assistant.controller';
+import { AssistantService } from './modules/assistant/assistant.service';
+import { AssistantToolbox } from './modules/assistant/assistant.tools';
 import { DashboardController } from './modules/dashboard/dashboard.controller';
 import { DashboardService } from './modules/dashboard/dashboard.service';
 import { HealthController } from './modules/health/health.controller';
@@ -67,6 +71,7 @@ import { UsersService } from './modules/users/users.service';
   ],
   controllers: [
     ApprovalsController,
+    AssistantController,
     AttachmentsController,
     AuditController,
     ChecklistController,
@@ -89,6 +94,8 @@ import { UsersService } from './modules/users/users.service';
     AttachmentsService,
     AuditService,
     AuthService,
+    AssistantService,
+    AssistantToolbox,
     HealthService,
     KbService,
     NotificationsService,
@@ -119,6 +126,7 @@ import { UsersService } from './modules/users/users.service';
      */
     { provide: CLOCK, useClass: SystemClock },
     CreateTicketUseCase,
+    AssignTicketUseCase,
     ChangeTicketStatusUseCase,
     ReassessTicketPriorityUseCase,
 

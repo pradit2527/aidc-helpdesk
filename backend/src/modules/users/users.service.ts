@@ -6,6 +6,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../common/errors/domain-error';
 import { TicketWriteRepository } from '../../db/repositories/ticket-write.repository';
 import type { AccessScope } from '../../common/scope';
+import { ScopeService } from '../../common/scope.service';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
 import { appUser, company, department, role, userRole, userRoleScope } from '../../db/schema';
@@ -79,6 +80,7 @@ export class UsersService {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly writes: TicketWriteRepository,
+    private readonly scopes: ScopeService,
   ) {}
 
   /**
@@ -459,6 +461,8 @@ export class UsersService {
     if (Object.keys(patch).length === 0) return current;
 
     await this.db.update(appUser).set(patch).where(eq(appUser.id, id));
+    // ย้ายบริษัท = ขอบเขตที่เห็นเปลี่ยน สิทธิ์ที่จำไว้ของคนนี้ต้องล้างทันที ไม่รอหมดอายุเอง
+    this.scopes.invalidate(id);
     return this.detail(scope, id);
   }
 
@@ -844,6 +848,8 @@ export class UsersService {
       }
     }
 
+    // บทบาทที่ถอนต้องหมดผลทันที ไม่ใช่อีก 30 วินาทีตามอายุแคช
+    this.scopes.invalidate(userId);
     return this.detail(scope, userId);
   }
 

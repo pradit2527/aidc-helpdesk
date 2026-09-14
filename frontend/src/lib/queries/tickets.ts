@@ -5,6 +5,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 
+import type { TicketStatus } from '@/config/enums';
 import { api, type Page } from '@/lib/api';
 import type { TicketDetail, TicketListItem } from '@/lib/types';
 
@@ -17,8 +18,10 @@ import type { TicketDetail, TicketListItem } from '@/lib/types';
  */
 export const ticketKeys = {
   all: ['tickets'] as const,
-  list: (filters: TicketListParams) => [...ticketKeys.all, 'list', filters] as const,
+  lists: () => [...ticketKeys.all, 'list'] as const,
+  list: (filters: TicketListParams) => [...ticketKeys.lists(), filters] as const,
   detail: (id: number) => [...ticketKeys.all, 'detail', id] as const,
+  assignees: (id: number) => [...ticketKeys.detail(id), 'assignees'] as const,
 };
 
 export interface TicketListParams {
@@ -112,6 +115,99 @@ export function useCreateTicket(): ReturnType<
       void qc.invalidateQueries({ queryKey: ticketKeys.all });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
+  });
+}
+
+/**
+ * หลังคำสั่งที่เปลี่ยนเรื่องสำเร็จ
+ *
+ * ใส่รายละเอียดฉบับเต็มที่เซิร์ฟเวอร์ตอบกลับลงแคชทันที — รวม available_transitions
+ * ชุดใหม่ ปุ่มจึงเปลี่ยนตามสถานะใหม่โดยไม่ต้องยิงซ้ำ แล้วค่อยให้รายการกับแดชบอร์ด
+ * ดึงใหม่ เพราะตัวเลขในนั้นเปลี่ยนตาม
+ *
+ * ล้างเฉพาะรายการ ไม่ล้าง ticketKeys.all — ถ้าล้างทั้งกลุ่ม รายละเอียดที่เพิ่งใส่
+ * จะถูกดึงซ้ำอีกรอบโดยไม่มีอะไรเปลี่ยน ซึ่งช้าเห็นได้ชัดบนฐานข้อมูลที่อยู่ไกล
+ */
+function useApplyTicketUpdate(): (ticket: TicketDetail) => void {
+  const qc = useQueryClient();
+  return (ticket) => {
+    qc.setQueryData(ticketKeys.detail(ticket.id), ticket);
+    void qc.invalidateQueries({ queryKey: ticketKeys.lists() });
+    void qc.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+}
+
+export interface ChangeTicketStatusInput {
+  id: number;
+  to_status: TicketStatus;
+  pending_reason?: 'user' | 'vendor' | 'approval';
+  /** เก็บในประวัติ — บังคับเมื่อพัก ยกเลิก และเปิดคืน */
+  reason?: string;
+  /** ข้อความถึงผู้แจ้ง */
+  comment?: string;
+  /** บังคับเมื่อแก้ไขเสร็จ */
+  resolution_note?: string;
+  /** 1–5 · รับเฉพาะผู้แจ้งตอนยืนยันปิด */
+  satisfaction_score?: number;
+}
+
+export function useChangeTicketStatus(): ReturnType<
+  typeof useMutation<TicketDetail, Error, ChangeTicketStatusInput>
+> {
+  const apply = useApplyTicketUpdate();
+  return useMutation({
+    mutationFn: ({ id, ...body }: ChangeTicketStatusInput) =>
+      api.post<TicketDetail>(`/tickets/${id}/status`, body),
+    onSuccess: apply,
+  });
+}
+
+export interface AssignTicketInput {
+  id: number;
+  assignee_id: number;
+  /** ข้อความถึงผู้แจ้ง — นับเป็นการตอบรับครั้งแรก */
+  comment?: string;
+  reason?: string;
+}
+
+export function useAssignTicket(): ReturnType<
+  typeof useMutation<TicketDetail, Error, AssignTicketInput>
+> {
+  const qc = useQueryClient();
+  const apply = useApplyTicketUpdate();
+  return useMutation({
+    mutationFn: ({ id, ...body }: AssignTicketInput) =>
+      api.post<TicketDetail>(`/tickets/${id}/assign`, body),
+    onSuccess: (ticket) => {
+      apply(ticket);
+      // คิว "งานของฉัน" ของผู้รับเปลี่ยน — ล้างรายชื่อผู้รับไว้ด้วยเผื่อมีการเปลี่ยนสิทธิ์ระหว่างทาง
+      void qc.invalidateQueries({ queryKey: ticketKeys.assignees(ticket.id) });
+    },
+  });
+}
+
+export interface TicketAssignee {
+  id: number;
+  full_name: string;
+  /** true = ผู้เรียกเอง — อยู่บนสุดของรายการเสมอ */
+  is_me: boolean;
+}
+
+/**
+ * ผู้ที่มอบหมายเรื่องนี้ให้ได้
+ *
+ * ดึงเมื่อเปิดกล่องมอบหมายเท่านั้น (enabled) — คนส่วนใหญ่ที่เปิดหน้ารายละเอียด
+ * ไม่ได้จะมอบหมายงาน การดึงทุกครั้งที่เปิดหน้าเป็นคิวรีที่เสียเปล่า
+ */
+export function useTicketAssignees(
+  id: number,
+  enabled: boolean,
+): UseQueryResult<TicketAssignee[], Error> {
+  return useQuery({
+    queryKey: ticketKeys.assignees(id),
+    queryFn: () => api.get<TicketAssignee[]>(`/tickets/${id}/assignees`),
+    enabled: enabled && Number.isFinite(id) && id > 0,
+    staleTime: 60_000,
   });
 }
 

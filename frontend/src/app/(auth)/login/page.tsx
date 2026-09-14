@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronRight, Eye, EyeOff, Lock, Moon, ShieldCheck, Sun, User } from 'lucide-react';
 import * as React from 'react';
 
+import { landingPath } from '@/config/nav';
 import { ApiError } from '@/lib/api';
 import { login } from '@/lib/auth';
 
@@ -101,18 +102,19 @@ export default function LoginPage(): React.JSX.Element {
     setError(null);
 
     try {
-      await login(username.trim(), password);
+      const { user } = await login(username.trim(), password);
 
       /*
        * ต้องใช้ replace ไม่ใช่ push
        *
        * ถ้า push ผู้ใช้กดปุ่มย้อนกลับจะกลับมาเจอหน้าล็อกอินทั้งที่ล็อกอินอยู่แล้ว
        * ซึ่งสับสน และบนเครื่องที่ใช้ร่วมกันยังทำให้เห็นชื่อผู้ใช้ที่ค้างในฟอร์มด้วย
+       *
+       * พากลับไปหน้าที่ผู้ใช้ตั้งใจเปิดก่อนโดนเด้งมาล็อกอิน ถ้าไม่มีให้ไปหน้าแรกของบทบาทตรง ๆ
+       * ไม่ผ่าน "/" ซึ่งเป็นหน้าที่มีไว้เพียงเด้งต่อ — เสียการเปลี่ยนหน้าไปหนึ่งรอบเปล่า ๆ
        */
-
-      // พากลับไปหน้าที่ผู้ใช้ตั้งใจเปิดก่อนโดนเด้งมาล็อกอิน
       const next = searchParams.get('next');
-      router.replace(isSafeNext(next) ? next : '/');
+      router.replace(isSafeNext(next) && next !== '/' ? next : landingPath(user.roles));
       return;
     } catch (cause) {
       setSubmitting(false);

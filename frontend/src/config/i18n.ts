@@ -88,6 +88,8 @@ export const MESSAGES = {
   'navShort.myQueue': { lo: 'ຂອງຂ້ອຍ', th: 'ของฉัน' },
   'nav.settings': { lo: 'ຕັ້ງຄ່າລະບົບ', th: 'ตั้งค่าระบบ' },
   'navShort.settings': { lo: 'ຕັ້ງຄ່າ', th: 'ตั้งค่า' },
+  'nav.assistant': { lo: 'ຖາມ AI ຜູ້ຊ່ວຍໄອທີ', th: 'ถาม AI ผู้ช่วยไอที' },
+  'navShort.assistant': { lo: 'ຖາມ AI', th: 'ถาม AI' },
 
   // ── เมนูและการนำทาง ──
   // ใช้คำว่า Ticket ทั้งสองภาษา — เป็นคำที่ทีมใช้เรียกกันจริงอยู่แล้ว

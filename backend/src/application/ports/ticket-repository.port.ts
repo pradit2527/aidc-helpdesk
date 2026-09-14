@@ -48,6 +48,58 @@ export interface UnitOfWork {
   run<T>(work: (tx: unknown) => Promise<T>): Promise<T>;
 }
 
+/** ข้อความสาธารณะถึงผู้แจ้งที่ต้องบันทึกในทรานแซกชันเดียวกับคำสั่ง */
+export interface PublicCommentRecord {
+  body: string;
+  /**
+   * นับเป็นการตอบรับครั้งแรกหรือไม่ — use case เป็นผู้ตัดสิน
+   * repository เขียนเวลาเฉพาะตอนที่ยังว่างอยู่ จึงไม่ทับค่าที่มีแล้ว
+   */
+  countsAsFirstResponse: boolean;
+}
+
+/**
+ * ทุกอย่างที่ต้องบันทึกพร้อมกันเมื่อเรื่องเปลี่ยนสถานะหนึ่งครั้ง
+ *
+ * รวมไว้ในก้อนเดียวเพราะต้องสำเร็จหรือล้มเหลวพร้อมกัน — ถ้าสถานะเปลี่ยนแล้ว
+ * แต่ข้อความแจ้งผู้แจ้งหรือบันทึก audit ไม่ถูกเขียน หลักฐานกับความจริงจะไม่ตรงกัน
+ */
+export interface StatusChangeRecord {
+  from: string;
+  to: string;
+  actorId: number;
+  /** เวลาที่เกิดการเปลี่ยน — ใช้เป็น updated_at เวลาในประวัติ และเวลาตอบรับครั้งแรก */
+  at: Date;
+  /** เหตุผลที่เก็บในประวัติ — บังคับกรณีพัก ยกเลิก และเปิดคืน */
+  reason?: string;
+  /** กำหนดแก้เสร็จใหม่ — เลื่อนออกเท่าเวลาที่หยุดนับ เมื่อเลิกพักหรือเปิดคืน */
+  resolutionDueAt?: Date;
+  resolutionNote?: string;
+  /** คะแนนความพึงพอใจจากผู้แจ้งตอนยืนยันปิด (1–5) */
+  satisfactionScore?: number;
+  /** true = รอบนี้คือการเปิดคืน นับเพิ่มใน reopen_count */
+  reopened?: boolean;
+  /** true = ผู้สั่งถูกตั้งเป็นผู้รับผิดชอบในคำสั่งเดียวกัน (เริ่มงานเรื่องที่ยังไม่มีคนรับ) */
+  selfAssigned?: boolean;
+  publicComment?: PublicCommentRecord;
+  /** รายละเอียดเพิ่มที่เก็บใน audit_log.new_value */
+  auditDetail?: Record<string, unknown>;
+}
+
+/** ทุกอย่างที่ต้องบันทึกพร้อมกันเมื่อมอบหมายผู้รับผิดชอบหนึ่งครั้ง */
+export interface AssignmentRecord {
+  ticketId: number;
+  companyId: number;
+  actorId: number;
+  at: Date;
+  fromAssigneeId: number | null;
+  toAssigneeId: number;
+  fromStatus: string;
+  toStatus: string;
+  reason?: string;
+  publicComment?: PublicCommentRecord;
+}
+
 export interface ITicketRepository {
   /** รายการที่อยู่ในขอบเขตของผู้เรียกเท่านั้น — กรองที่ชั้น query ไม่ใช่ที่ UI */
   list(
@@ -74,11 +126,14 @@ export interface ITicketRepository {
     actorId: number,
   ): Promise<number>;
 
-  /** บันทึกการเปลี่ยนสถานะพร้อมเขียนประวัติ ในทรานแซกชันเดียว */
-  saveStatusChange(
-    entity: TicketEntity,
-    change: { from: string; to: string; actorId: number; reason?: string },
-  ): Promise<void>;
+  /** บันทึกการเปลี่ยนสถานะพร้อมประวัติ ข้อความถึงผู้แจ้ง และ audit ในทรานแซกชันเดียว */
+  saveStatusChange(entity: TicketEntity, change: StatusChangeRecord): Promise<void>;
+
+  /** บันทึกการมอบหมายพร้อมประวัติ ข้อความถึงผู้แจ้ง และ audit ในทรานแซกชันเดียว */
+  saveAssignment(change: AssignmentRecord): Promise<void>;
+
+  /** ผู้ที่รับเรื่องของบริษัทนี้ได้ — ถือสิทธิ์ทำงานกับเรื่องและบริษัทอยู่ในขอบเขต */
+  assignableUsers(companyId: number): Promise<{ id: number; fullName: string }[]>;
 
   /** บันทึกการทบทวนระดับความสำคัญพร้อมเขียนประวัติ ในทรานแซกชันเดียว */
   savePriorityChange(

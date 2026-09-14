@@ -13,6 +13,7 @@
  */
 
 import {
+  Bot,
   Clock,
   Gauge,
   Inbox,
@@ -100,6 +101,17 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         labelKey: 'nav.newTicket',
         shortKey: 'navShort.newTicket',
         icon: Plus,
+        roles: ALL_ROLES,
+      },
+      /*
+       * ผู้ช่วย AI — ทุกบทบาท วางถัดจาก "แจ้งเรื่อง" เพราะเป็นทางเลือกก่อนแจ้ง
+       * ปัญหาเล็ก ๆ จบได้ในแชทโดยไม่ต้องเข้าคิว ส่วนที่ต้องให้ทีมไอทีทำ ผู้ช่วยร่าง ticket ให้
+       */
+      {
+        href: '/assistant',
+        labelKey: 'nav.assistant',
+        shortKey: 'navShort.assistant',
+        icon: Bot,
         roles: ALL_ROLES,
       },
       {
@@ -242,6 +254,7 @@ export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
   '/tickets/my': 'nav.myTickets',
   '/tickets': 'nav.allTickets',
   '/tickets/new': 'page.newTicket',
+  '/assistant': 'nav.assistant',
   '/queue': 'nav.queue',
   '/approvals': 'nav.approvals',
   '/dashboard': 'nav.dashboard',

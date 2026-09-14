@@ -29,9 +29,11 @@ import { ApiEnvelope, ApiEnvelopePage, ErrorResponseDto } from '../../common/htt
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
 import type { AccessScope } from '../../common/scope';
 import {
+  AssignTicketDto,
   ChangePriorityDto,
   ChangeStatusDto,
   CreateTicketDto,
+  TicketAssigneeDto,
   TicketDetailDto,
   TicketListItemDto,
   // รูปร่างที่ service คืนมา — EnvelopeInterceptor จะแยก items ไปไว้ที่ data
@@ -127,6 +129,9 @@ export class TicketsController {
       'คืนบล็อก **`can`** ที่ backend ประเมินสิทธิ์ระดับ ticket ให้แล้ว',
       'frontend ใช้ซ่อน/แสดงปุ่มโดยไม่ต้องเขียนกฎ RBAC ซ้ำอีกชุด (FE-02)',
       '',
+      '**`available_transitions`** คือสถานะที่ผู้เรียกคนนี้เปลี่ยนไปได้จากสถานะปัจจุบัน',
+      'ใช้กฎชุดเดียวกับที่ `POST /tickets/{id}/status` ตัดสินจริง',
+      '',
       'ไม่พบข้อมูล **หรือ** อยู่นอกขอบเขต ตอบ `404` เหมือนกัน',
       'เพื่อไม่ยืนยันว่า id นี้มีอยู่จริงในบริษัทอื่น',
     ].join('\n'),
@@ -147,13 +152,20 @@ export class TicketsController {
     description: [
       'ต้องเป็น transition ที่อนุญาตใน state machine 7 สถานะ',
       '',
+      '**ใครทำอะไรได้**',
+      '- เจ้าหน้าที่ (`ticket.change_status`) — ทุกเส้นที่ตารางอนุญาต · ยกเลิกต้องมี `ticket.cancel` ด้วย',
+      '- ผู้แจ้ง — ยืนยันปิดเรื่องที่แก้แล้ว · เปิดคืน (`ticket.reopen`) · ถอนเรื่องที่ยังเป็น `new`',
+      '',
       '**กฎที่ระบบบังคับ**',
-      '- `pending_user` ต้องระบุ `pending_reason` เสมอ',
-      '- `pending_reason = vendor` ต้องมีคอมเมนต์สาธารณะแจ้งผู้รับบริการก่อน',
-      '  จึงจะหยุดนับเวลาได้ (SLA 5.4)',
-      '- `resolved` ต้องมี `resolution_note` และ checklist ที่บังคับต้องครบ',
+      '- `pending_user` ต้องระบุ `pending_reason` และ `reason` ≥ 10 ตัวอักษร',
+      '  เหตุผล `user` / `vendor` ส่งข้อความถึงผู้แจ้งเสมอ — ใช้ `comment` ถ้ามี ไม่มีใช้ `reason` (SLA 5.4)',
+      '- `resolved` ต้องมี `resolution_note` ≥ 15 ตัวอักษร และ checklist ที่บังคับต้องครบ',
       '  มิฉะนั้นตอบ `409 CHECKLIST_INCOMPLETE`',
-      '- ออกจาก `pending_user` ระบบเลื่อน `resolution_due_at` ออกไปเท่าเวลาที่หยุด',
+      '- `cancelled` ต้องมี `reason` · เปิดคืนต้องมี `reason` ≥ 10 ตัวอักษร และนับเพิ่ม `reopen_count`',
+      '- `satisfaction_score` (1–5) รับเฉพาะผู้แจ้งตอนยืนยันปิด',
+      '- ออกจาก `pending_user` หรือเปิดคืน ระบบเลื่อน `resolution_due_at` ออกไปเท่าเวลาที่หยุดนับ',
+      '- เริ่มงานเรื่องที่ยังไม่มีผู้รับผิดชอบ ผู้กดถูกตั้งเป็นผู้รับผิดชอบ',
+      '- ทุกครั้งเขียน `ticket_status_history` และ `audit_log` ในทรานแซกชันเดียวกัน',
     ].join('\n'),
   })
   @ApiParam({ name: 'id', example: 1042 })
@@ -162,7 +174,7 @@ export class TicketsController {
   @ApiResponse({
     status: 409,
     type: ErrorResponseDto,
-    description: 'INVALID_STATE_TRANSITION · CHECKLIST_INCOMPLETE · APPROVAL_PENDING',
+    description: 'TICKET_INVALID_TRANSITION · CHECKLIST_INCOMPLETE · TICKET_REOPEN_WINDOW_EXPIRED',
   })
   changeStatus(
     @CurrentScope() scope: AccessScope,
@@ -170,6 +182,51 @@ export class TicketsController {
     @Body() dto: ChangeStatusDto,
   ): Promise<TicketDetailDto> {
     return this.tickets.changeStatus(scope, id, dto);
+  }
+
+  @Get(':id/assignees')
+  @ApiOperation({
+    summary: 'ผู้ที่มอบหมายเรื่องนี้ให้ได้',
+    description: [
+      'เฉพาะผู้ที่ถือสิทธิ์ทำงานกับเรื่อง และบริษัทของเรื่องอยู่ในขอบเขตของเขา',
+      'ผู้เรียกเองอยู่บนสุดเสมอ (`is_me`) · ต้องมีสิทธิ์ `ticket.assign`',
+    ].join('\n'),
+  })
+  @ApiParam({ name: 'id', example: 1042 })
+  @ApiResponse({ status: 200, type: [TicketAssigneeDto] })
+  assignees(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<TicketAssigneeDto[]> {
+    return this.tickets.assignees(scope, id);
+  }
+
+  @Post(':id/assign')
+  @ApiOperation({
+    summary: 'มอบหมายผู้รับผิดชอบ หรือรับงานเอง',
+    description: [
+      '- รับเอง (`assignee_id` = ตัวเอง) ต้องมี `ticket.assign_self` · มอบให้คนอื่นต้องมี `ticket.assign`',
+      '- ผู้รับต้องอยู่ในรายการ `GET /tickets/{id}/assignees` มิฉะนั้นตอบ `422 ASSIGNEE_NOT_ELIGIBLE`',
+      '- เรื่องที่เป็น `new` ขยับเป็น `assigned` ในคำสั่งเดียวกัน สถานะอื่นคงเดิม',
+      '- เรื่องที่แก้แล้ว / ปิดแล้ว / ยกเลิกแล้ว ตอบ `409 TICKET_NOT_ASSIGNABLE`',
+      '- `comment` ถ้าระบุ เป็นข้อความสาธารณะถึงผู้แจ้ง และนับเป็นการตอบรับครั้งแรก (SLA 5.1)',
+      '- เปลี่ยนมือ (ไม่ใช่รับครั้งแรก) นับเพิ่ม `assignee_change_count` ซึ่งเป็นตัวตั้งของ KPI-3',
+    ].join('\n'),
+  })
+  @ApiParam({ name: 'id', example: 1042 })
+  @ApiBody({ type: AssignTicketDto })
+  @ApiEnvelope(TicketDetailDto)
+  @ApiResponse({
+    status: 409,
+    type: ErrorResponseDto,
+    description: 'TICKET_NOT_ASSIGNABLE · TICKET_ASSIGNEE_UNCHANGED',
+  })
+  assign(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssignTicketDto,
+  ): Promise<TicketDetailDto> {
+    return this.tickets.assign(scope, id, dto);
   }
 
   @Post(':id/priority')
@@ -194,6 +251,7 @@ export class TicketsController {
   ): Promise<TicketDetailDto> {
     return this.tickets.changePriority(scope, id, dto);
   }
+
   @Post(':id/comments')
   @ApiOperation({
     summary: 'เพิ่มความเห็นในเรื่อง',
@@ -220,5 +278,4 @@ export class TicketsController {
   ) {
     return this.tickets.addComment(scope, id, body);
   }
-
 }
