@@ -33,6 +33,7 @@ interface ChatwootApi {
   setUser: (identifier: string, attributes: ChatwootUserAttributes) => void;
   setCustomAttributes: (attributes: Record<string, string>) => void;
   reset: () => void;
+  toggle: (state?: 'open' | 'close') => void;
 }
 
 declare global {
@@ -142,6 +143,17 @@ export async function identifyChatwootUser(): Promise<void> {
     chatwoot.setCustomAttributes(identity.custom_attributes);
     writeLastIdentifier(identity.identifier);
   });
+}
+
+/**
+ * เปิดหน้าต่างแชท — ใช้จากหน้า "แชทช่วยเหลือ" ให้ผู้ใช้เริ่มพิมพ์ได้ทันทีไม่ต้องหาปุ่มมุมจอ
+ *
+ * ถ้าสคริปต์ยังโหลดไม่เสร็จ รอให้พร้อมก่อนแล้วค่อยเปิด — กดก่อนพร้อมต้องไม่หายเงียบ
+ */
+export function openChatwoot(): void {
+  if (!CHATWOOT_ENABLED || typeof window === 'undefined') return;
+  loadChatwoot();
+  whenReady((chatwoot) => chatwoot.toggle('open'));
 }
 
 /**

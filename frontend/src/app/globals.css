@@ -793,6 +793,31 @@
   }
 }
 
+/*
+ * หน้าต่างแชท Chatwoot ให้เล็กลงบนจอคอมและแท็บเล็ต
+ *
+ * ค่าของ Chatwoot กว้าง 400px สูงเกือบเต็มจอ (สูงสุด 640px) — เปิดแล้วบังฟอร์มแจ้งเรื่อง
+ * ครึ่งหน้า ผู้ใช้ที่ถามทีมไอทีระหว่างกรอกฟอร์มมองไม่เห็นช่องที่กำลังกรอก
+ *
+ * จอแคบกว่า 667px ปล่อยเต็มจอตามเดิมของ Chatwoot — เล็กกว่านั้นพิมพ์ไม่ถนัด
+ * ยกเว้น .has-unread-view ซึ่งเป็นกล่องแจ้งข้อความใหม่แบบย่อ สูงตามเนื้อหาอยู่แล้ว
+ */
+@media (min-width: 667px) {
+  .woot-widget-holder:not(.has-unread-view) {
+    width: 340px !important;
+    height: min(460px, calc(100vh - 140px)) !important;
+    max-height: 460px !important;
+    bottom: 96px !important;
+  }
+}
+/* แท็บเล็ตที่มีแถบเมนูล่าง ปุ่มแชทถูกยกขึ้น 76px (ด้านบน) หน้าต่างต้องยกตามไม่ให้ทับปุ่ม */
+@media (min-width: 667px) and (max-width: 1023.98px) {
+  body:has([data-mobile-nav]) .woot-widget-holder:not(.has-unread-view) {
+    bottom: calc(152px + env(safe-area-inset-bottom)) !important;
+    height: min(460px, calc(100vh - 200px)) !important;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    โหมดสำรองเมื่อสไตล์ชีตโหลดไม่สำเร็จ (ADR-003 C-01)
    ยกมาจาก prototype เพราะเน็ตที่ไซต์งานหลุดจริง —
