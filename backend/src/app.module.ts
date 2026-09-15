@@ -23,6 +23,7 @@ import { throttleConfig, UserAwareThrottlerGuard } from './common/throttle/throt
 import { DbModule } from './db/db.module';
 import { JobsModule } from './jobs/jobs.module';
 import { SlaConfigRepository } from './db/repositories/sla-config.repository';
+import { SupportChatRepository } from './db/repositories/support-chat.repository';
 import { TicketDetailRepository } from './db/repositories/ticket-detail.repository';
 import { TicketRepository } from './db/repositories/ticket.repository';
 import { TicketWriteRepository } from './db/repositories/ticket-write.repository';
@@ -51,6 +52,10 @@ import { ProblemsController } from './modules/problems/problems.controller';
 import { ProblemsService } from './modules/problems/problems.service';
 import { ReportsController } from './modules/reports/reports.controller';
 import { ReportsService } from './modules/reports/reports.service';
+import { RealtimeGateway } from './modules/realtime/realtime.gateway';
+import { SupportChatController } from './modules/support-chat/support-chat.controller';
+import { ChatwootSyncService } from './modules/support-chat/chatwoot-sync.service';
+import { SupportChatService } from './modules/support-chat/support-chat.service';
 import { SystemController } from './modules/system/system.controller';
 import { SystemService } from './modules/system/system.service';
 import { ChecklistController } from './modules/tickets/checklist.controller';
@@ -83,6 +88,7 @@ import { UsersService } from './modules/users/users.service';
     NotificationsController,
     ProblemsController,
     ReportsController,
+    SupportChatController,
     SystemController,
     TicketsController,
     UsersController,
@@ -109,6 +115,12 @@ import { UsersService } from './modules/users/users.service';
     TicketDetailRepository,
     TicketWriteRepository,
     SlaConfigRepository,
+    SupportChatRepository,
+    // socket.io ตัวเดียวของทั้งระบบ — คอมเมนต์ ticket และแชทช่วยเหลือ
+    RealtimeGateway,
+    // ซิงก์แชทสองทางกับ Chatwoot — ไม่ทำอะไรจนกว่าจะตั้งค่าใน .env ครบ
+    ChatwootSyncService,
+    SupportChatService,
     TicketsService,
 
     /*

@@ -90,6 +90,8 @@ export const MESSAGES = {
   'navShort.settings': { lo: 'ຕັ້ງຄ່າ', th: 'ตั้งค่า' },
   'nav.assistant': { lo: 'ແຊັດຊ່ວຍເຫຼືອ', th: 'แชทช่วยเหลือ' },
   'navShort.assistant': { lo: 'ແຊັດ', th: 'แชท' },
+  'nav.chats': { lo: 'ກ່ອງແຊັດ', th: 'กล่องแชท' },
+  'navShort.chats': { lo: 'ກ່ອງແຊັດ', th: 'กล่องแชท' },
 
   // ── เมนูและการนำทาง ──
   // ใช้คำว่า Ticket ทั้งสองภาษา — เป็นคำที่ทีมใช้เรียกกันจริงอยู่แล้ว
@@ -247,6 +249,7 @@ export const MESSAGES = {
   'page.userDetail': { lo: 'ລາຍລະອຽດຜູ້ໃຊ້', th: 'รายละเอียดผู้ใช้' },
   'page.slaReport': { lo: 'ລາຍງານ SLA ລາຍເດືອນ', th: 'รายงาน SLA รายเดือน' },
   'page.importUsers': { lo: 'ນຳເຂົ້າຜູ້ໃຊ້ຈາກໄຟລ໌', th: 'นำเข้าผู้ใช้จากไฟล์' },
+  'page.newUser': { lo: 'ສ້າງຜູ້ໃຊ້ໃໝ່', th: 'สร้างผู้ใช้ใหม่' },
   'page.newArticle': { lo: 'ຂຽນບົດຄວາມໃໝ່', th: 'เขียนบทความใหม่' },
   'page.adminConsole': { lo: 'ສູນຄວບຄຸມຜູ້ດູແລລະບົບ', th: 'ศูนย์ควบคุมผู้ดูแลระบบ' },
   'page.profile': { lo: 'ໂປຣໄຟລ໌ ແລະ ການຕັ້ງຄ່າ', th: 'โปรไฟล์และการตั้งค่า' },

@@ -7,6 +7,7 @@ import type {
   KbArticle,
   NotificationItem,
   ProblemRecord,
+  RoleCode,
   SlaComplianceRow,
 } from '@/lib/types';
 
@@ -107,6 +108,36 @@ export function useUpdateUser(): ReturnType<
       // แค่ทำเครื่องหมายว่าเก่า ไม่ยิงซ้ำตอนนี้ — หน้าที่เปิดอยู่ได้ค่าจริงจากบรรทัดบนแล้ว
       // หน้ารายการจะดึงใหม่เองเมื่อผู้ดูแลกลับไปเปิด
       void qc.invalidateQueries({ queryKey: ['users'], refetchType: 'none' });
+    },
+  });
+}
+
+export interface CreateUserInput {
+  username: string;
+  full_name: string;
+  company_id: number;
+  department_id: number | null;
+  role: RoleCode;
+  password: string;
+  email?: string;
+  employee_code?: string;
+  job_title?: string;
+  phone?: string;
+}
+
+/**
+ * สร้างผู้ใช้ใหม่ — สำหรับผู้ดูแล
+ *
+ * ใส่ผู้ใช้ที่สร้างลงแคชทันที หน้ารายละเอียดที่พาไปต่อจึงไม่ต้องยิงซ้ำ
+ * แล้วให้รายการผู้ใช้ดึงใหม่ เพราะมีคนเพิ่มเข้ามาหนึ่งคน
+ */
+export function useCreateUser(): ReturnType<typeof useMutation<AdminUser, Error, CreateUserInput>> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateUserInput) => api.post<AdminUser>('/users', input),
+    onSuccess: (user) => {
+      qc.setQueryData(['users', user.id], user);
+      void qc.invalidateQueries({ queryKey: ['users'] });
     },
   });
 }

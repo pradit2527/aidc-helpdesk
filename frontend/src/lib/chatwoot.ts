@@ -69,10 +69,23 @@ export function loadChatwoot(): void {
   if (!CHATWOOT_ENABLED || typeof window === 'undefined') return;
   if (document.getElementById(SCRIPT_ID)) return;
 
+  /*
+   * ชุดเดียวกับที่ @chatwoot/docusaurus-plugin ส่งให้ SDK — แอปนี้เป็น Next.js จึงตั้งตรงนี้แทน
+   *
+   * - position ขวา ไม่ใช่ซ้าย: ฝั่งซ้ายของจอคอมคือแถบเมนู ปุ่มแชทจะทับปุ่มออกจากระบบพอดี
+   * - expanded_bubble: ปุ่มมีข้อความบอกว่ากดแล้วได้อะไร ปุ่มกลมไอคอนเปล่าคนไม่รู้ว่าคือแชทกับทีมไอที
+   * - locale th: Chatwoot ไม่มีภาษาลาว ไทยใกล้ที่สุดที่ผู้ใช้ในเครืออ่านได้ทุกคน
+   *   useBrowserLanguage ปิดไว้ — เบราว์เซอร์ส่วนใหญ่ในสำนักงานตั้งเป็นอังกฤษ ปุ่มในแชทจะกลายเป็นอังกฤษ
+   * - darkMode auto: ตามธีมของเครื่อง ไม่แสดงหน้าต่างขาวจ้าทับหน้าจอที่มืดอยู่
+   */
   window.chatwootSettings = {
+    hideMessageBubble: false,
     position: 'right',
-    type: 'standard',
-    launcherTitle: 'ສອບຖາມທີມ IT',
+    locale: 'th',
+    useBrowserLanguage: false,
+    darkMode: 'auto',
+    type: 'expanded_bubble',
+    launcherTitle: 'ແຊັດກັບທີມໄອທີ',
   };
 
   const script = document.createElement('script');

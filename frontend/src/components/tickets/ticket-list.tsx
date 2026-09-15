@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { MessageSquare, Paperclip, RotateCcw } from 'lucide-react';
+import { MessageSquare, Paperclip, RotateCcw, UserRound } from 'lucide-react';
 import * as React from 'react';
 
 import { PriorityBadge, PriorityMeter, SlaBadge, StatusBadge } from '@/components/common/badges';
 import { DataTable, EmptyState, type Column } from '@/components/ui/data-table';
+import { Avatar } from '@/components/ui/misc';
 import { PRIORITY, TICKET_TYPE } from '@/config/enums';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatRelative } from '@/lib/format';
@@ -118,13 +119,27 @@ function TicketCounters({ ticket }: { ticket: TicketListItem }): React.JSX.Eleme
   );
 }
 
+/**
+ * ตารางเรื่องแจ้งบนเดสก์ท็อป
+ *
+ * จัดความกว้างด้วยหลักเดียว: คอลัมน์ "เลขที่/หัวข้อ" รับพื้นที่ที่เหลือทั้งหมด (width 100%)
+ * ส่วนคอลัมน์อื่นหดพอดีเนื้อหาและอยู่บรรทัดเดียว (width 1% + nowrap)
+ *
+ * เดิมหัวข้อถูกจำกัดไว้ 420px ตารางแบบ auto จึงเอาที่ว่างที่เหลือไปแจกให้คอลัมน์อื่น
+ * ผู้รับผิดชอบกับบริษัทเลยห่างกันเป็นช่องโหว่ใหญ่ ขณะที่ป้าย SLA ถูกบีบจนตัดสามบรรทัด
+ *
+ * ⚠️ max-w-0 ในช่องหัวข้อจำเป็น — ถ้าไม่มี หัวข้อยาว ๆ ที่ตัดด้วย truncate ยังนับความกว้างเต็ม
+ *    ของข้อความ แล้วดันตารางให้กว้างเกินกล่องจนต้องเลื่อนแนวนอน
+ */
 function TicketTable({ tickets }: { tickets: TicketListItem[] }): React.JSX.Element {
   const columns: Column<TicketListItem>[] = [
     {
       key: 'ticket_no',
       header: 'ເລກທີ່ / ຫົວຂໍ້',
+      width: '100%',
+      cellClassName: 'max-w-0',
       render: (t) => (
-        <Link href={`/tickets/${t.id}`} className="group block max-w-[420px]">
+        <Link href={`/tickets/${t.id}`} className="group block min-w-0" title={t.subject}>
           <span className="tabular block text-caption text-ink-3">{t.ticket_no}</span>
           <span className="block truncate text-body-sm font-semibold text-ink group-hover:text-primary">
             {t.subject}
@@ -135,7 +150,8 @@ function TicketTable({ tickets }: { tickets: TicketListItem[] }): React.JSX.Elem
     {
       key: 'priority',
       header: 'ລະດັບ',
-      width: '76px',
+      width: '1%',
+      cellClassName: 'whitespace-nowrap',
       render: (t) => (
         <span className="inline-flex items-center gap-2">
           <PriorityMeter priority={t.priority} />
@@ -146,23 +162,24 @@ function TicketTable({ tickets }: { tickets: TicketListItem[] }): React.JSX.Elem
     {
       key: 'status',
       header: 'ສະຖານະ',
-      width: '124px',
-      render: (t) => <StatusBadge status={t.status} pendingReason={t.pending_reason} />,
+      width: '1%',
+      cellClassName: 'whitespace-nowrap',
+      /*
+       * min-w-max กันป้ายแตกเป็นสองบรรทัด (ไอคอนบน ข้อความล่าง)
+       * คอลัมน์ที่ width 1% หดเหลือความกว้างต่ำสุด ซึ่งป้ายแบบ flex-wrap ยอมตัดบรรทัดให้พอดี
+       * whitespace-nowrap ที่ช่องไม่ช่วย เพราะไม่ได้ห้าม flex item ขึ้นแถวใหม่
+       */
+      render: (t) => <StatusBadge status={t.status} pendingReason={t.pending_reason} className="min-w-max" />,
     },
     {
-      /*
-       * ต้องกำหนดความกว้างไว้ ไม่งั้นตารางแบบ auto จะบีบคอลัมน์นี้จนแคบที่สุด
-       * เท่าที่ทำได้ แล้วป้าย "ເກີນກຳນົດ · ເກີນມາ 1 ຊມ. 12 ນທ." จะตัดบรรทัด
-       * ทีละตัวอักษรกลายเป็นแถบสูงในแนวตั้งที่อ่านไม่ออก
-       *
-       * เกิดกับคอลัมน์นี้เป็นพิเศษเพราะข้อความยาวและแปรผันตามเวลาที่เหลือ
-       * จึงยาวกว่าคอลัมน์อื่นเสมอ และเป็นข้อมูลที่ผู้ใช้ต้องอ่านเร็วที่สุด
-       */
+      // ป้ายแบบย่อบรรทัดเดียว — ข้อความเต็มอยู่ใน tooltip (ดู SlaBadge compact)
       key: 'sla',
       header: 'SLA',
-      width: '168px',
+      width: '1%',
+      cellClassName: 'whitespace-nowrap',
       render: (t) => (
         <SlaBadge
+          compact
           status={t.sla.status}
           remainingMinutes={t.sla.remaining_minutes}
           remainingUnit={t.sla.remaining_unit}
@@ -173,23 +190,45 @@ function TicketTable({ tickets }: { tickets: TicketListItem[] }): React.JSX.Elem
       key: 'assignee',
       header: 'ຜູ້ຮັບຜິດຊອບ',
       hideBelow: 'xl',
+      width: '1%',
+      cellClassName: 'whitespace-nowrap',
       render: (t) =>
         t.assignee ? (
-          <span className="text-body-sm">{t.assignee.full_name}</span>
+          <span className="flex w-[168px] items-center gap-2" title={t.assignee.full_name}>
+            <Avatar name={t.assignee.full_name} size="sm" />
+            <span className="min-w-0 truncate text-body-sm text-ink">{t.assignee.full_name}</span>
+          </span>
         ) : (
-          <span className="text-body-sm text-ink-3">ຍັງບໍ່ມີ</span>
+          <span className="flex w-[168px] items-center gap-2">
+            {/* วงประ = ช่องที่ยังว่าง อ่านออกว่า "ยังไม่มีคนรับ" โดยไม่ต้องอ่านตัวอักษร */}
+            <span
+              aria-hidden="true"
+              className="grid h-7 w-7 flex-none place-items-center rounded-full border border-dashed border-control text-ink-3"
+            >
+              <UserRound className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-body-sm text-ink-3">ຍັງບໍ່ມີ</span>
+          </span>
         ),
     },
     {
       key: 'company',
       header: 'ບໍລິສັດ',
       hideBelow: 'xl',
-      render: (t) => <span className="text-caption text-ink-2">{t.company.code}</span>,
+      width: '1%',
+      cellClassName: 'whitespace-nowrap',
+      render: (t) => (
+        <span className="inline-flex rounded-sm border border-hair bg-subtle px-1.5 py-0.5 text-caption font-semibold text-ink-2">
+          {t.company.code}
+        </span>
+      ),
     },
     {
       key: 'updated',
       header: 'ອັບເດດ',
       align: 'right',
+      width: '1%',
+      cellClassName: 'whitespace-nowrap',
       render: (t) => (
         <span className="inline-flex items-center gap-2 text-caption text-ink-3">
           <TicketCounters ticket={t} />

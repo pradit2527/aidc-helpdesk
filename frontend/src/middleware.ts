@@ -28,6 +28,8 @@ export function middleware(req: NextRequest) {
   const csp = [
     "default-src 'self'",
     `img-src 'self' data: blob:${chatwoot.origin}`,
+    // ข้อความเสียงในแชทเล่นจาก /api/v1 ('self') · blob: สำหรับเสียงที่เพิ่งอัดในเครื่อง
+    "media-src 'self' blob:",
     "font-src 'self'",
     // Next.js inject critical CSS เป็น style tag — ยังต้องเปิด unsafe-inline ให้ style
     "style-src 'self' 'unsafe-inline'",
@@ -38,7 +40,7 @@ export function middleware(req: NextRequest) {
     // dev ต้องเปิด websocket ให้ hot reload คุยกลับได้
     isDev
       ? `connect-src 'self' ws: wss:${chatwoot.origin}`
-      : `connect-src 'self'${chatwoot.origin}${chatwoot.websocket}`,
+      : `connect-src 'self'${chatwoot.origin}${chatwoot.websocket}${realtimeSource()}`,
     // หน้าต่างแชทเป็น iframe จากเซิร์ฟเวอร์ Chatwoot — ไม่มีบรรทัดนี้จะตกไปที่ default-src 'self'
     `frame-src 'self'${chatwoot.origin}`,
     "frame-ancestors 'self'",
@@ -72,6 +74,23 @@ function chatwootSources(): { origin: string; websocket: string } {
     return { origin: ` ${url.origin}`, websocket: ` ${wsProtocol}//${url.host}` };
   } catch {
     return { origin: '', websocket: '' };
+  }
+}
+
+/**
+ * ที่อยู่ WebSocket ของแชทเรียลไทม์บน production
+ *
+ * dev เปิด ws: ทั้งหมดไว้แล้ว ส่วน production ต้องระบุ origin ให้ตรง — ถ้าไม่ตั้ง
+ * NEXT_PUBLIC_WS_ORIGIN เบราว์เซอร์จะบล็อกการเชื่อมต่อเงียบ ๆ แชทยังส่งได้แต่ไม่เด้งเอง
+ */
+function realtimeSource(): string {
+  const raw = process.env.NEXT_PUBLIC_WS_ORIGIN?.trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    return ` ${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}`;
+  } catch {
+    return '';
   }
 }
 

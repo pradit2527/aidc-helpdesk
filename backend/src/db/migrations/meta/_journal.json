@@ -22,6 +22,27 @@
       "when": 1788233704919,
       "tag": "0002_natural_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789374956397,
+      "tag": "0003_support_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789378511169,
+      "tag": "0004_support_chat_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789435758601,
+      "tag": "0005_support_chat_chatwoot_sync",
+      "breakpoints": true
     }
   ]
 }

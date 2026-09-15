@@ -6,6 +6,8 @@ import { elapsedMinutes, slaStatus } from '../../common/sla/business-time';
 import { AssignTicketUseCase } from '../../application/use-cases/assign-ticket.use-case';
 import { CreateTicketUseCase } from '../../application/use-cases/create-ticket.use-case';
 import { SuperworkService } from '../../integrations/superwork/superwork.service';
+import { MasterDataService } from '../master-data/master-data.service';
+import { RealtimeGateway, type TicketUpdateKind } from '../realtime/realtime.gateway';
 import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
 import { ReassessTicketPriorityUseCase } from '../../application/use-cases/reassess-ticket-priority.use-case';
 import { SlaConfigRepository } from '../../db/repositories/sla-config.repository';
@@ -66,6 +68,8 @@ export class TicketsService {
     private readonly assignTicket: AssignTicketUseCase,
     private readonly writes: TicketWriteRepository,
     private readonly superwork: SuperworkService,
+    private readonly realtime: RealtimeGateway,
+    private readonly master: MasterDataService,
   ) {}
 
   async list(scope: AccessScope, query: Record<string, string>): Promise<TicketListResponseDto> {
@@ -224,6 +228,9 @@ export class TicketsService {
   }
 
   async create(scope: AccessScope, dto: CreateTicketDto): Promise<TicketDetailDto> {
+    // หมวดหลักที่มีหมวดย่อยใช้แจ้งตรง ๆ ไม่ได้ — รายงานรายหมวดย่อยจะนับขาด
+    await this.master.assertCategoryUsableForTicket(scope, dto.category_id);
+
     const id = await this.createTicket.execute(scope, {
       companyId: dto.company_id,
       requesterId: dto.requester_id,
@@ -268,7 +275,9 @@ export class TicketsService {
       resolutionNote: dto.resolution_note,
       satisfactionScore: dto.satisfaction_score,
     });
-    return this.detail(scope, id);
+    const ticket = await this.detail(scope, id);
+    this.announce(ticket, scope.userId, 'status');
+    return ticket;
   }
 
   async changePriority(
@@ -281,7 +290,9 @@ export class TicketsService {
       urgency: dto.urgency as Urgency | undefined,
       reason: dto.reason,
     });
-    return this.detail(scope, id);
+    const ticket = await this.detail(scope, id);
+    this.announce(ticket, scope.userId, 'priority');
+    return ticket;
   }
 
   /** มอบหมายผู้รับผิดชอบ หรือรับงานเอง (POST /tickets/{id}/assign) */
@@ -291,7 +302,28 @@ export class TicketsService {
       comment: dto.comment,
       reason: dto.reason,
     });
-    return this.detail(scope, id);
+    const ticket = await this.detail(scope, id);
+    this.announce(ticket, scope.userId, 'assign');
+    return ticket;
+  }
+
+  /**
+   * แจ้งหน้าจอทุกคนที่เกี่ยวกับเรื่องนี้ให้ดึงใหม่ — เรียกหลังเขียนสำเร็จเท่านั้น
+   *
+   * ใช้ค่าจาก detail ที่อ่านหลังเขียน ผู้รับผิดชอบคนใหม่ (กรณีมอบหมาย) จึงได้สัญญาณด้วย
+   */
+  private announce(ticket: TicketDetailDto, actorId: number, kind: TicketUpdateKind): void {
+    this.realtime.ticketUpdated({
+      ticketId: ticket.id,
+      ticketNo: ticket.ticket_no,
+      status: ticket.status,
+      companyId: ticket.company.id,
+      requesterId: ticket.requester.id,
+      assigneeId: ticket.assignee?.id ?? null,
+      isSecurityIncident: ticket.is_security_incident,
+      actorId,
+      kind,
+    });
   }
 
   /**
@@ -540,8 +572,29 @@ export class TicketsService {
       now: new Date(),
     });
 
+    const commentDto = await this.writes.commentById(created!.id);
+
+    // คอมเมนต์ใหม่ขึ้นทันทีบนหน้าที่เปิดเรื่องนี้อยู่
+    // ⚠️ เฉพาะคอมเมนต์สาธารณะ — ห้องนี้มีผู้แจ้งอยู่ด้วย คอมเมนต์ภายในห้ามส่งเข้ามาเด็ดขาด
+    if (!wantsInternal) {
+      this.realtime.broadcastComment(id, { ...commentDto, attachments: [] });
+    }
+    // สัญญาณรีเฟรชส่งทั้งคอมเมนต์สาธารณะและภายใน — ไม่มีเนื้อหาติดไป (ดู ticketUpdated)
+    // การตอบรับครั้งแรกเปลี่ยนช่อง "ตอบรับครั้งแรก" บนหน้าของผู้แจ้งด้วย
+    this.realtime.ticketUpdated({
+      ticketId: row.id,
+      ticketNo: row.ticketNo,
+      status: row.status,
+      companyId: row.companyId,
+      requesterId: row.requesterId,
+      assigneeId: row.assigneeId,
+      isSecurityIncident: row.isSecurityIncident,
+      actorId: scope.userId,
+      kind: 'comment',
+    });
+
     return {
-      ...(await this.writes.commentById(created!.id)),
+      ...commentDto,
       counted_as_first_response: isFirstResponse,
     };
   }

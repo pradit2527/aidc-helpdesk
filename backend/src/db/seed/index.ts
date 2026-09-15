@@ -17,6 +17,8 @@ import postgres from 'postgres';
 
 import * as schema from '../schema';
 import { CATALOG_ITEMS, CHECKLIST_TEMPLATES, KB_CATEGORIES, TICKET_CATEGORIES } from './data/catalog';
+import { seedServices } from './services';
+import { seedTicketSubcategories } from './ticket-subcategories';
 import { COMPANIES, OWNER_COMPANY_CODE } from './data/organization';
 import { PERMISSIONS, ROLES, ROW_LEVEL_ONLY_PERMISSIONS } from './data/permissions';
 import {
@@ -317,6 +319,8 @@ async function seedCatalog(db: Db): Promise<void> {
     .returning({ id: schema.ticketCategory.id, code: schema.ticketCategory.code });
   record('ticket_category', categories.length);
   const categoryId = new Map(categories.map((c) => [c.code, c.id]));
+  record('ticket_category', await seedTicketSubcategories(db, categoryId));
+  record('service', (await seedServices(db)).length);
 
   const templates = await db
     .insert(schema.checklistTemplate)

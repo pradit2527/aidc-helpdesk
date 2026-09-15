@@ -1,0 +1,281 @@
+'use client';
+
+import { ArrowLeft, CheckCircle2, Headphones, MessagesSquare } from 'lucide-react';
+import * as React from 'react';
+import { toast } from 'sonner';
+
+import { ChatThread } from '@/components/support-chat/chat-thread';
+import { Button } from '@/components/ui/button';
+import { Alert, PageHeader } from '@/components/ui/misc';
+import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
+import {
+  useChatInbox,
+  useChatThread,
+  useCloseChat,
+  useMarkChatRead,
+  useSendChatFile,
+  useSendChatMessage,
+  type ChatFileInput,
+  type ChatInboxStatus,
+  type SupportChatSummary,
+} from '@/lib/queries/support-chat';
+import { useCan, useSession } from '@/lib/session';
+
+const relative = new Intl.RelativeTimeFormat('lo-LA', { numeric: 'auto' });
+
+function ago(iso: string): string {
+  const minutes = Math.round((new Date(iso).getTime() - Date.now()) / 60_000);
+  if (Math.abs(minutes) < 60) return relative.format(minutes, 'minute');
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return relative.format(hours, 'hour');
+  return relative.format(Math.round(hours / 24), 'day');
+}
+
+/**
+ * กล่องแชทของทีมไอที — รายการห้องซ้าย ห้องที่เลือกขวา
+ *
+ * ข้อความใหม่เข้ามาแบบเรียลไทม์ผ่าน SupportChatRealtime ใน AppShell
+ * หน้านี้ไม่ต้องเชื่อมต่อเอง อ่านจาก cache ที่ถูกเติมให้แล้ว
+ */
+export default function ChatInboxPage(): React.JSX.Element {
+  const isStaff = useCan('ticket.change_status');
+  const [status, setStatus] = React.useState<ChatInboxStatus>('open');
+  const [selectedId, setSelectedId] = React.useState<number | null>(null);
+  const inbox = useChatInbox(status, isStaff);
+
+  // ลิงก์จากการแจ้งเตือน (/chats?id=12) เปิดห้องนั้นให้เลย — อ่านครั้งเดียวตอนเข้าหน้า
+  React.useEffect(() => {
+    const id = Number(new URLSearchParams(window.location.search).get('id'));
+    if (Number.isInteger(id) && id > 0) setSelectedId(id);
+  }, []);
+
+  if (!isStaff) {
+    return (
+      <div className="mx-auto w-full max-w-3xl">
+        <Alert tone="warning" title="ບໍ່ມີສິດເຂົ້າກ່ອງແຊັດ">
+          ກ່ອງແຊັດສຳລັບທີມໄອທີ — ຖ້າຕ້ອງການສອບຖາມ ກົດປຸ່ມແຊັດມຸມຂວາລຸ່ມ
+        </Alert>
+      </div>
+    );
+  }
+
+  const chats = inbox.data ?? [];
+  const unreadCount = chats.filter((chat) => chat.unread).length;
+
+  return (
+    <div className="flex w-full flex-col gap-4">
+      <PageHeader
+        title="ກ່ອງແຊັດ"
+        description="ແຊັດຈາກຜູ້ໃຊ້ໃນບໍລິສັດທີ່ທ່ານດູແລ — ຂໍ້ຄວາມໃໝ່ເຂົ້າມາທັນທີ ບໍ່ຕ້ອງໂຫຼດໜ້າໃໝ່"
+      />
+
+      <div className="grid min-h-[560px] overflow-hidden rounded-lg border border-hair bg-surface shadow-card lg:h-[calc(100dvh-15rem)] lg:grid-cols-[340px_1fr]">
+        {/* ── รายการห้อง ── */}
+        <aside className={cn('flex min-h-0 flex-col border-hair lg:border-r', selectedId !== null && 'hidden lg:flex')}>
+          <div className="flex flex-none gap-1 border-b border-hair p-2" role="tablist" aria-label="ສະຖານະແຊັດ">
+            {(['open', 'closed'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={status === value}
+                onClick={() => {
+                  setStatus(value);
+                  setSelectedId(null);
+                }}
+                className={cn(
+                  'min-h-tap flex-1 rounded px-3 text-body-sm font-semibold',
+                  status === value ? 'bg-primary-subtle text-[color:var(--primary-subtle-ink)]' : 'text-ink-2 hover:bg-subtle',
+                )}
+              >
+                {value === 'open' ? 'ກຳລັງສົນທະນາ' : 'ປິດແລ້ວ'}
+                {value === 'open' && unreadCount > 0 && (
+                  <span className="tabular ml-1.5 rounded-full bg-sla-breach-solid px-1.5 text-[11px] text-white">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <ul className="min-h-0 flex-1 overflow-y-auto">
+            {inbox.isLoading && <li className="p-4 text-body-sm text-ink-3">ກຳລັງໂຫຼດ...</li>}
+            {!inbox.isLoading && chats.length === 0 && (
+              <li className="flex flex-col items-center gap-2 p-8 text-center text-body-sm text-ink-3">
+                <MessagesSquare className="h-8 w-8" aria-hidden="true" />
+                {status === 'open' ? 'ຍັງບໍ່ມີແຊັດທີ່ລໍຖ້າຢູ່' : 'ຍັງບໍ່ມີແຊັດທີ່ປິດແລ້ວ'}
+              </li>
+            )}
+            {chats.map((chat) => (
+              <ChatListItem
+                key={chat.id}
+                chat={chat}
+                selected={chat.id === selectedId}
+                onSelect={() => setSelectedId(chat.id)}
+              />
+            ))}
+          </ul>
+        </aside>
+
+        {/* ── ห้องที่เลือก ── */}
+        <section className={cn('min-h-0', selectedId === null && 'hidden lg:block')}>
+          {selectedId === null ? (
+            <div className="grid h-full place-items-center p-8 text-center text-body-sm text-ink-3">
+              <div className="flex flex-col items-center gap-3">
+                <Headphones className="h-10 w-10" aria-hidden="true" />
+                ເລືອກແຊັດທາງຊ້າຍເພື່ອເລີ່ມຕອບ
+              </div>
+            </div>
+          ) : (
+            <StaffThread chatId={selectedId} onBack={() => setSelectedId(null)} />
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ChatListItem({
+  chat,
+  selected,
+  onSelect,
+}: {
+  chat: SupportChatSummary;
+  selected: boolean;
+  onSelect: () => void;
+}): React.JSX.Element {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected ? 'true' : undefined}
+        className={cn(
+          'flex w-full flex-col gap-1 border-b border-[color:var(--border-soft)] px-4 py-3 text-left transition-colors',
+          selected ? 'bg-primary-subtle shadow-[inset_3px_0_0_0_var(--accent-fill)]' : 'hover:bg-subtle',
+        )}
+      >
+        <span className="flex items-center gap-2">
+          <span className={cn('min-w-0 flex-1 truncate text-body-sm', chat.unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>
+            {chat.requester.full_name}
+          </span>
+          <span className="flex-none text-caption tabular text-ink-3">{ago(chat.last_message_at)}</span>
+          {chat.unread && <span className="h-2.5 w-2.5 flex-none rounded-full bg-sla-breach-solid" aria-label="ຍັງບໍ່ໄດ້ອ່ານ" />}
+        </span>
+        <span className="truncate text-caption text-ink-3">
+          {chat.company.code}
+          {chat.requester.department ? ` · ${chat.requester.department}` : ''}
+          {chat.assignee ? ` · ${chat.assignee.full_name}` : ' · ຍັງບໍ່ມີຄົນຮັບ'}
+        </span>
+        {chat.last_message && (
+          <span className={cn('line-clamp-2 text-caption', chat.unread ? 'text-ink' : 'text-ink-2')}>
+            {chat.last_message.from_staff ? 'ທີມໄອທີ: ' : ''}
+            {chat.last_message.body}
+          </span>
+        )}
+      </button>
+    </li>
+  );
+}
+
+function StaffThread({ chatId, onBack }: { chatId: number; onBack: () => void }): React.JSX.Element {
+  const { user } = useSession();
+  const thread = useChatThread(chatId);
+  const send = useSendChatMessage(chatId);
+  const sendFile = useSendChatFile(chatId);
+  const close = useCloseChat(chatId);
+  const markRead = useMarkChatRead();
+  const markReadMutate = markRead.mutate;
+
+  const data = thread.data;
+  const unread = data?.unread ?? false;
+
+  // เปิดห้องอยู่แล้วมีข้อความใหม่เข้ามา = อ่านแล้ว
+  React.useEffect(() => {
+    if (unread) markReadMutate(chatId);
+  }, [unread, chatId, markReadMutate]);
+
+  if (thread.isLoading) {
+    return <div className="grid h-full place-items-center text-body-sm text-ink-3">ກຳລັງໂຫຼດ...</div>;
+  }
+  if (!data) {
+    return (
+      <div className="p-6">
+        <Alert tone="warning" title="ບໍ່ພົບແຊັດນີ້">ແຊັດອາດຢູ່ນອກຂອບເຂດບໍລິສັດທີ່ທ່ານດູແລ</Alert>
+      </div>
+    );
+  }
+
+  const onSend = async (body: string): Promise<boolean> => {
+    try {
+      await send.mutateAsync(body);
+      return true;
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'ສົ່ງຂໍ້ຄວາມບໍ່ສຳເລັດ');
+      return false;
+    }
+  };
+
+  const onSendFile = async (input: ChatFileInput): Promise<boolean> => {
+    try {
+      await sendFile.mutateAsync(input);
+      return true;
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'ສົ່ງໄຟລ໌ບໍ່ສຳເລັດ');
+      return false;
+    }
+  };
+
+  const onClose = async (): Promise<void> => {
+    try {
+      await close.mutateAsync();
+      toast.success('ປິດແຊັດແລ້ວ');
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'ປິດແຊັດບໍ່ສຳເລັດ');
+    }
+  };
+
+  return (
+    <div className="flex h-full min-h-[520px] flex-col">
+      <header className="flex flex-none items-center gap-3 border-b border-hair px-4 py-3">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="ກັບໄປລາຍການແຊັດ"
+          className="grid h-tap w-tap flex-none place-items-center rounded text-ink-2 hover:bg-subtle lg:hidden"
+        >
+          <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-body-sm font-semibold text-ink">{data.requester.full_name}</p>
+          <p className="truncate text-caption text-ink-3">
+            {data.company.code}
+            {data.requester.department ? ` · ${data.requester.department}` : ''}
+            {data.requester.job_title ? ` · ${data.requester.job_title}` : ''}
+          </p>
+        </div>
+        {data.status === 'open' ? (
+          <Button size="sm" variant="secondary" onClick={() => void onClose()} disabled={close.isPending}>
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            ປິດແຊັດ
+          </Button>
+        ) : (
+          <span className="rounded-full bg-subtle px-2.5 py-0.5 text-caption font-semibold text-ink-2">ປິດແລ້ວ</span>
+        )}
+      </header>
+      <div className="min-h-0 flex-1">
+        <ChatThread
+          messages={data.messages}
+          viewerId={user.id}
+          onSend={onSend}
+          onSendFile={onSendFile}
+          sending={send.isPending || sendFile.isPending}
+          composerDisabled={data.status !== 'open'}
+          composerNotice={data.status !== 'open' ? 'ແຊັດນີ້ປິດແລ້ວ — ຖ້າຜູ້ໃຊ້ພິມມາໃໝ່ ລະບົບຈະເປີດແຊັດໃໝ່ໃຫ້' : undefined}
+          placeholder="ພິມຄຳຕອບ... (Enter ເພື່ອສົ່ງ)"
+        />
+      </div>
+    </div>
+  );
+}

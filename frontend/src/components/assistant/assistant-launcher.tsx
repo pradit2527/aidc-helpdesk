@@ -9,7 +9,6 @@ import { AssistantConversation } from '@/components/assistant/assistant-conversa
 import { useT } from '@/components/layout/preference-controls';
 import { useAssistantStatus } from '@/lib/assistant';
 import { useAssistantChat } from '@/lib/assistant-chat';
-import { CHATWOOT_ENABLED } from '@/lib/chatwoot';
 import { cn } from '@/lib/cn';
 
 /**
@@ -114,7 +113,8 @@ export function AssistantLauncher(): React.JSX.Element | null {
         className={cn(
           'fixed z-40 h-14 w-14 place-items-center rounded-full border border-primary/40 bg-surface text-primary shadow-dialog hover:bg-subtle',
           'bottom-[144px] sm:bottom-[76px] lg:bottom-6',
-          CHATWOOT_ENABLED ? 'right-[92px]' : 'right-4 lg:right-6',
+          // ข้างปุ่มแชทกับทีมไอทีซึ่งอยู่มุมขวาสุดเสมอ
+          'right-[92px] lg:right-[100px]',
           // บนมือถือแผงเต็มจอมีปุ่มปิดของตัวเอง ปุ่มลอยจะบังช่องพิมพ์ จึงซ่อนระหว่างเปิด
           open ? 'hidden sm:grid' : 'grid',
         )}

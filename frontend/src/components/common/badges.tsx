@@ -27,8 +27,8 @@ import { formatSlaRemaining } from '@/lib/format';
  * flex-wrap จำเป็นคู่กับ whitespace-normal เพราะ inline-flex
  * ไม่ขึ้นบรรทัดใหม่ให้เอง ไอคอนกับข้อความจะเรียงเป็นแถวยาวแถวเดียว
  */
-const BADGE =
-  'inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full px-2.5 py-0.5 text-caption font-semibold';
+const BADGE_BASE = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-caption font-semibold';
+const BADGE = `${BADGE_BASE} max-w-full flex-wrap`;
 
 export function StatusBadge({
   status,
@@ -103,12 +103,15 @@ export function SlaBadge({
   remainingMinutes,
   remainingUnit = 'business_minutes',
   dueAt,
+  compact = false,
   className,
 }: {
   status: SlaStatus;
   remainingMinutes?: number | null;
   remainingUnit?: 'business_minutes' | 'calendar_minutes';
   dueAt?: string | null;
+  /** บรรทัดเดียวสำหรับตาราง — ข้อความเต็มอยู่ใน tooltip และโปรแกรมอ่านหน้าจอ */
+  compact?: boolean;
   className?: string;
 }) {
   const meta = SLA_STATUS[status];
@@ -117,6 +120,26 @@ export function SlaBadge({
   // ປ້າຍບອກສະຖານະຢູ່ແລ້ວ ຈຶ່ງບອກຕົວເລກເພີ່ມສະເພາະຕອນທີ່ເພີ່ມຄວາມໝາຍຈິງ
   // "ຢຸດນັບຊົ່ວຄາວ · ຢຸດນັບຢູ່" ຄືການເວົ້າຄຳດຽວກັນສອງເທື່ອ
   const showRemaining = typeof remainingMinutes === 'number' && status !== 'paused';
+
+  if (compact) {
+    const full = showRemaining
+      ? `${meta.label} · ${formatSlaRemaining(remainingMinutes, remainingUnit)}`
+      : meta.label;
+    /*
+     * ตารางต้องอ่านทีละแถวได้เร็ว ป้ายสองสามบรรทัดทำให้แถวสูงไม่เท่ากันและตาต้องไล่ลงหาเอง
+     * จึงย่อเหลือบรรทัดเดียว: ไอคอน + คำนำสั้นที่ยังบอกสถานะ + เวลาแบบย่อ
+     * ยังครบ สี + ไอคอน + ข้อความ ตามกฎ — ข้อความเต็มพร้อมหน่วย "ມື້ເຮັດວຽກ" อยู่ใน title
+     */
+    return (
+      <span className={cn(BADGE_BASE, 'whitespace-nowrap', meta.className, className)} title={full}>
+        <Icon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+        <span className="sr-only">{full}</span>
+        <span className="tabular" aria-hidden="true">
+          {compactSlaText(status, showRemaining ? remainingMinutes : null, remainingUnit)}
+        </span>
+      </span>
+    );
+  }
 
   return (
     <span className="inline-flex max-w-full flex-col items-start gap-0.5">
@@ -141,4 +164,39 @@ export function SlaBadge({
       {dueAt && <span className="tabular text-caption text-ink-3">ຄົບກຳນົດ {dueAt}</span>}
     </span>
   );
+}
+
+/**
+ * ข้อความ SLA บรรทัดเดียว เช่น "ເຫຼືອ 2 ຊມ. 24 ນທ." · "ໃກ້ຄົບ · 2 ຊມ." · "ເກີນ 1 ມື້ 4 ຊມ."
+ *
+ * คำนำต่างกันทุกสถานะ ผู้ใช้ตาบอดสีจึงแยก "ยังทัน" "ใกล้ครบ" "เกิน" ออกจากตัวอักษรได้เอง
+ *
+ * ⚠️ "ມື້" ในตารางนี้คือวันทำการ (540 นาที) เสมอ — เวลาแบบนับปฏิทิน (P1) ไม่ถูกแปลงเป็นวัน
+ *    เหมือน formatMinutes ใช้ floor ไม่ใช่ round เพราะ 539 นาทีปัดขึ้นจะได้ "0 ມື້ 9 ຊມ." ที่เท่ากับหนึ่งวันเต็ม
+ */
+function compactSlaText(
+  status: SlaStatus,
+  minutes: number | null | undefined,
+  unit: 'business_minutes' | 'calendar_minutes',
+): string {
+  if (status === 'paused' || minutes === null || minutes === undefined) return 'ຢຸດນັບ';
+
+  const abs = Math.abs(minutes);
+  let span: string;
+  if (unit === 'business_minutes' && abs >= 540) {
+    const days = Math.floor(abs / 540);
+    const hours = Math.floor((abs % 540) / 60);
+    span = hours > 0 ? `${days} ມື້ ${hours} ຊມ.` : `${days} ມື້`;
+  } else if (abs >= 60) {
+    const hours = Math.floor(abs / 60);
+    const rest = abs % 60;
+    // เกินสิบชั่วโมงแล้ว นาทีไม่ช่วยตัดสินใจอะไร ตัดทิ้งให้สั้น
+    span = hours >= 10 || rest === 0 ? `${hours} ຊມ.` : `${hours} ຊມ. ${rest} ນທ.`;
+  } else {
+    span = `${abs} ນທ.`;
+  }
+
+  if (status === 'breached' || minutes < 0) return `ເກີນ ${span}`;
+  if (status === 'at_risk') return `ໃກ້ຄົບ · ${span}`;
+  return `ເຫຼືອ ${span}`;
 }

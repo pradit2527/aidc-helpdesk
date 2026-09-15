@@ -176,6 +176,8 @@ export interface TicketDetail extends TicketListItem {
   is_major_incident: boolean;
   is_security_incident: boolean;
   can: TicketCan;
+  /** สถานะที่ผู้เรียกคนนี้เปลี่ยนไปได้จากสถานะปัจจุบัน — backend ใช้กฎชุดเดียวกับตอนบันทึกจริง */
+  available_transitions: TicketStatus[];
   comments: TicketComment[];
   history: TicketHistoryEntry[];
   approvals: ApprovalStep[];

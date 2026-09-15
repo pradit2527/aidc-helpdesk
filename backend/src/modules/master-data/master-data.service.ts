@@ -709,6 +709,8 @@ export class MasterDataService {
       code: string;
       name_th: string;
       company_id?: number | null;
+      /** null = หมวดหลัก */
+      parent_id?: number | null;
       default_impact?: string;
       default_urgency?: string;
       sort_order?: number;
@@ -746,12 +748,14 @@ export class MasterDataService {
     if (companyId !== null && !scope.inScope(companyId)) {
       throw new ForbiddenError('FORBIDDEN', 'ບໍລິສັດນີ້ຢູ່ນອກຂອບເຂດຂອງທ່ານ');
     }
+    const parentId = await this.resolveCategoryParent(scope, input.parent_id ?? null, companyId, null);
 
     try {
       const [row] = await this.db
         .insert(ticketCategory)
         .values({
           companyId,
+          parentId,
           code,
           nameTh,
           defaultImpact: input.default_impact ?? 'individual',
@@ -786,6 +790,8 @@ export class MasterDataService {
     id: number,
     input: {
       name_th?: string;
+      /** null = ย้ายขึ้นเป็นหมวดหลัก */
+      parent_id?: number | null;
       default_impact?: string;
       default_urgency?: string;
       sort_order?: number;
@@ -798,6 +804,16 @@ export class MasterDataService {
     const current = await this.categoryById(scope, id);
 
     const patch: Record<string, unknown> = {};
+    if (input.parent_id !== undefined) {
+      // บริษัทของหมวดแก้ไม่ได้หลังสร้าง จึงตรวจกับบริษัทเดิมของหมวดนี้
+      patch.parentId = await this.resolveCategoryParent(
+        scope,
+        input.parent_id,
+        current.company?.id ?? null,
+        id,
+      );
+    }
+
     if (input.name_th !== undefined) {
       const nameTh = input.name_th.trim();
       if (nameTh.length < 2) {
@@ -816,6 +832,64 @@ export class MasterDataService {
 
     await this.db.update(ticketCategory).set(patch).where(eq(ticketCategory.id, id));
     return this.categoryById(scope, id);
+  }
+
+  /**
+   * ตรวจหมวดหลักที่เลือก — ต้นไม้มีสองชั้นเท่านั้น (หมวดหลัก › หมวดย่อย)
+   *
+   * ⚠️ ห้ามซ้อนเกินสองชั้น — ฟอร์มแจ้งเรื่องมีสองช่องเลือก หมวดชั้นที่สามจะเลือกไม่ได้เลย
+   *    และหมวดที่มีหมวดย่อยอยู่แล้วย้ายไปเป็นหมวดย่อยไม่ได้ ด้วยเหตุผลเดียวกัน
+   * ⚠️ หมวดย่อยของบริษัทหนึ่งอยู่ใต้หมวดหลักของบริษัทอื่นไม่ได้ — ผู้แจ้งอีกบริษัทจะเห็นหมวดหลัก
+   *    ที่ดูเหมือนไม่มีหมวดย่อย ส่วนหมวดหลักระดับกลุ่มรับหมวดย่อยของทุกบริษัทได้
+   *
+   * @param selfId id ของหมวดที่กำลังแก้ · null ตอนสร้างใหม่
+   */
+  private async resolveCategoryParent(
+    scope: AccessScope,
+    parentId: number | null,
+    companyId: number | null,
+    selfId: number | null,
+  ): Promise<number | null> {
+    if (parentId === null) return null;
+
+    const invalid = (message: string): ValidationError =>
+      new ValidationError('VALIDATION_ERROR', message, [{ field: 'parent_id', message }]);
+
+    if (parentId === selfId) throw invalid('ໝວດໝູ່ເປັນໝວດຫຼັກຂອງຕົວເອງບໍ່ໄດ້');
+
+    const all = await this.categories(scope);
+    const parent = all.find((c) => c.id === parentId);
+    if (!parent) throw invalid('ບໍ່ພົບໝວດຫຼັກທີ່ເລືອກ');
+    if (parent.parent_id !== null) {
+      throw invalid('ເລືອກໄດ້ສະເພາະໝວດຫຼັກ — ໝວດຍ່ອຍຊ້ອນຕໍ່ອີກຊັ້ນບໍ່ໄດ້');
+    }
+    if (parent.company !== null && parent.company.id !== companyId) {
+      throw invalid('ໝວດຫຼັກຕ້ອງເປັນຂອງບໍລິສັດດຽວກັນ ຫຼື ໃຊ້ທັງກຸ່ມ');
+    }
+    if (selfId !== null && all.some((c) => c.parent_id === selfId)) {
+      throw invalid('ໝວດນີ້ມີໝວດຍ່ອຍຢູ່ແລ້ວ ຈຶ່ງຍ້າຍໄປເປັນໝວດຍ່ອຍບໍ່ໄດ້');
+    }
+    return parentId;
+  }
+
+  /**
+   * หมวดที่ใช้แจ้งเรื่องใหม่ได้ — ต้องเปิดใช้อยู่ และถ้ามีหมวดย่อยที่เปิดใช้ ต้องเลือกหมวดย่อย
+   *
+   * ตรวจฝั่งเซิร์ฟเวอร์ด้วย ไม่ใช่แค่ฟอร์ม — ช่องทางอื่นที่เรียก API ตรง (สคริปต์นำเข้า
+   * การเชื่อมระบบภายนอก) จะส่งหมวดหลักมาได้ แล้วรายงานรายหมวดย่อยจะนับขาดโดยไม่มีใครรู้
+   */
+  async assertCategoryUsableForTicket(scope: AccessScope, categoryId: number): Promise<void> {
+    const active = await this.categories(scope, true);
+    if (!active.some((c) => c.id === categoryId)) {
+      throw new ValidationError('VALIDATION_ERROR', 'ໝວດໝູ່ນີ້ປິດໃຊ້ງານແລ້ວ ຫຼື ບໍ່ມີຢູ່', [
+        { field: 'category_id', message: 'ກະລຸນາເລືອກໝວດໝູ່ໃໝ່' },
+      ]);
+    }
+    if (active.some((c) => c.parent_id === categoryId)) {
+      throw new ValidationError('VALIDATION_ERROR', 'ກະລຸນາເລືອກໝວດໝູ່ຍ່ອຍ', [
+        { field: 'category_id', message: 'ໝວດນີ້ມີໝວດຍ່ອຍ ຕ້ອງເລືອກໝວດຍ່ອຍໜຶ່ງລາຍການ' },
+      ]);
+    }
   }
 
   /** อ่านหมวดเดียวพร้อมตรวจขอบเขต — ใช้ยืนยันผลหลังเขียน */

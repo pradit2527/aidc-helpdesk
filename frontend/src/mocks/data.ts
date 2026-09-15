@@ -297,6 +297,7 @@ export function ticketDetail(id: number): TicketDetail | null {
     is_major_incident: base.priority === 'P1',
     is_security_incident: false,
     satisfaction_score: base.status === 'closed' ? 5 : null,
+    available_transitions: closed ? [] : ['in_progress', 'pending_user', 'cancelled'],
     can: {
       update: !closed,
       assign: !closed,

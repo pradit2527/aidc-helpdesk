@@ -15,7 +15,7 @@ import { Avatar, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { formatRelative } from '@/lib/format';
-import { useSession } from '@/lib/session';
+import { useCan, useSession } from '@/lib/session';
 import { useCompanies } from '@/lib/queries/master-data';
 import { useUsers } from '@/lib/queries/operations';
 import { useDebounced } from '@/lib/use-debounced';
@@ -30,6 +30,7 @@ import type { AdminUser } from '@/lib/types';
  */
 export default function AdminUsersPage(): React.JSX.Element {
   const { user } = useSession();
+  const canCreate = useCan('user.create');
   const t = useT();
   const [q, setQ] = React.useState('');
   const [company, setCompany] = React.useState('');
@@ -181,10 +182,15 @@ export default function AdminUsersPage(): React.JSX.Element {
                 ນຳເຂົ້າຈາກໄຟລ໌
               </Link>
             </Button>
-            <Button onClick={() => toast.info('ຟອມສ້າງຜູ້ໃຊ້ໃໝ່')}>
-              <UserPlus className="h-4 w-4" aria-hidden="true" />
-              ສ້າງຜູ້ໃຊ້
-            </Button>
+            {/* ซ่อนจากคนที่ไม่มีสิทธิ์ user.create — กดแล้วโดนปฏิเสธแน่ ๆ ไม่ควรให้เห็นปุ่ม */}
+            {canCreate && (
+              <Button asChild>
+                <Link href="/admin/users/new">
+                  <UserPlus className="h-4 w-4" aria-hidden="true" />
+                  ສ້າງຜູ້ໃຊ້
+                </Link>
+              </Button>
+            )}
           </>
         }
       />

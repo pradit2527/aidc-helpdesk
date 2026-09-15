@@ -393,7 +393,7 @@ export default function LoginPage(): React.JSX.Element {
               className="mt-1 inline-flex min-h-[52px] w-full items-center justify-center gap-2 px-6 text-[15px] font-semibold text-white transition-colors disabled:opacity-50"
               style={{
                 background: 'var(--primary)',
-                boxShadow: 'inset 0 -2px 0 0 rgba(77,23,14,.42)',
+                boxShadow: 'inset 0 -2px 0 0 var(--btn-edge)',
               }}
             >
               <Lock className="h-[18px] w-[18px]" aria-hidden="true" />

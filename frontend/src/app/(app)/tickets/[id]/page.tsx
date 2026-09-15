@@ -19,12 +19,19 @@ import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Select, Textarea } from '@/components/ui/field';
 import { Alert, Avatar, BackLink, DefRow, Tabs } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
-import { CHANNEL, PENDING_REASON, TICKET_STATUS, TICKET_TYPE } from '@/config/enums';
+import { CHANNEL, PENDING_REASON, TICKET_STATUS, TICKET_TYPE, type TicketStatus } from '@/config/enums';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatFileSize, formatRelative } from '@/lib/format';
 import { ApiError } from '@/lib/api';
-import { useTicket } from '@/lib/queries/tickets';
+import {
+  useAddComment,
+  useAssignTicket,
+  useChangeTicketStatus,
+  useTicket,
+} from '@/lib/queries/tickets';
+import { useSession } from '@/lib/session';
 import type { TicketDetail } from '@/lib/types';
+import { useTicketChat } from '@/lib/ws';
 
 type DetailTab = 'conversation' | 'approvals' | 'checklist' | 'history';
 
@@ -65,6 +72,7 @@ export default function TicketDetailPage({
 
 function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   const [tab, setTab] = React.useState<DetailTab>('conversation');
+  useTicketChat(ticket.id);
 
   const tabs = [
     { key: 'conversation' as const, label: 'ການສົນທະນາ', count: ticket.comments.length },
@@ -165,12 +173,24 @@ function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Eleme
 function Conversation({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   const [body, setBody] = React.useState('');
   const [internal, setInternal] = React.useState(false);
+  const addComment = useAddComment(ticket.id);
 
   function send(event: React.FormEvent): void {
     event.preventDefault();
-    if (body.trim().length === 0) return;
-    toast.success(internal ? 'ບັນທຶກຄອມເມັນພາຍໃນແລ້ວ' : 'ສົ່ງຄອມເມັນໃຫ້ຜູ້ແຈ້ງແລ້ວ');
-    setBody('');
+    const trimmed = body.trim();
+    if (trimmed.length === 0 || addComment.isPending) return;
+    addComment.mutate(
+      { body: trimmed, is_internal: internal },
+      {
+        onSuccess: () => {
+          toast.success(internal ? 'ບັນທຶກຄອມເມັນພາຍໃນແລ້ວ' : 'ສົ່ງຄອມເມັນໃຫ້ຜູ້ແຈ້ງແລ້ວ');
+          setBody('');
+        },
+        onError: (error) => {
+          toast.error(error instanceof ApiError ? error.message : 'ສົ່ງຄອມເມັນບໍ່ສຳເລັດ');
+        },
+      },
+    );
   }
 
   return (
@@ -253,7 +273,11 @@ function Conversation({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
                 ບັນທຶກເປັນຄອມເມັນພາຍໃນ
               </label>
             )}
-            <Button type="submit" disabled={body.trim().length === 0} className="ml-auto">
+            <Button
+              type="submit"
+              disabled={body.trim().length === 0 || addComment.isPending}
+              className="ml-auto"
+            >
               <Send className="h-4 w-4" aria-hidden="true" />
               ສົ່ງ
             </Button>
@@ -403,8 +427,17 @@ function History({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   );
 }
 
+/** ข้อความผิดพลาดจากเซิร์ฟเวอร์ตรง ๆ — "บันทึกไม่สำเร็จ" เฉย ๆ ทำให้ต้องเดาว่าช่องไหนผิด */
+function toastApiError(error: unknown, fallback: string): Record<string, string> | undefined {
+  const apiError = error instanceof ApiError ? error : null;
+  toast.error(apiError?.message ?? fallback);
+  return apiError?.fields;
+}
+
 function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   const can = ticket.can;
+  const { user } = useSession();
+  const assign = useAssignTicket();
   const nothingAvailable = !Object.values(can).some(Boolean);
 
   return (
@@ -418,26 +451,25 @@ function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
         )}
 
         {can.assign_self && (
-          <Button className="w-full" onClick={() => toast.success('ຮັບວຽກນີ້ແລ້ວ')}>
+          <Button
+            className="w-full"
+            loading={assign.isPending}
+            onClick={() =>
+              assign.mutate(
+                { id: ticket.id, assignee_id: user.id },
+                {
+                  onSuccess: () => toast.success('ຮັບວຽກນີ້ແລ້ວ'),
+                  onError: (error) => void toastApiError(error, 'ຮັບວຽກບໍ່ສຳເລັດ'),
+                },
+              )
+            }
+          >
             <UserPlus className="h-4 w-4" aria-hidden="true" />
             ຮັບວຽກນີ້
           </Button>
         )}
 
-        {can.change_status && (
-          <Field label="ປ່ຽນສະຖານະ" htmlFor="status-change">
-            <Select
-              defaultValue={ticket.status}
-              onChange={(e) => toast.success(`ປ່ຽນສະຖານະເປັນ ${TICKET_STATUS[e.target.value as keyof typeof TICKET_STATUS].label}`)}
-            >
-              {Object.entries(TICKET_STATUS).map(([key, meta]) => (
-                <option key={key} value={key}>
-                  {meta.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
+        {can.change_status && <StatusChanger ticket={ticket} />}
 
         {can.change_priority && (
           <p className="rounded border border-hair bg-subtle px-3 py-2 text-caption text-ink-2">
@@ -479,20 +511,265 @@ function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
           </Button>
         )}
 
-        {can.close_own && (
-          <Button className="w-full" onClick={() => toast.success('ປິດເລື່ອງແລ້ວ ຂອບໃຈຫຼາຍ')}>
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            ຢືນຢັນປິດເລື່ອງ
-          </Button>
-        )}
-
-        {can.reopen && (
-          <Button variant="secondary" className="w-full" onClick={() => toast.info('ເປີດເລື່ອງຄືນແລ້ວ')}>
-            ເປີດເລື່ອງຄືນ
-          </Button>
-        )}
+        {/* เจ้าหน้าที่ปิดและเปิดคืนผ่านช่องเปลี่ยนสถานะอยู่แล้ว — ปุ่มสองอันนี้สำหรับผู้แจ้ง */}
+        {can.close_own && !can.change_status && <CloseOwnTicket ticket={ticket} />}
+        {can.reopen && !can.change_status && <ReopenTicket ticket={ticket} />}
       </CardBody>
     </Card>
+  );
+}
+
+const MIN_REASON: Partial<Record<TicketStatus, number>> = { pending_user: 10, cancelled: 5 };
+const MIN_REOPEN_REASON = 10;
+const MIN_RESOLUTION_NOTE = 15;
+
+/**
+ * เปลี่ยนสถานะของเจ้าหน้าที่ — บันทึกจริงผ่าน POST /tickets/{id}/status
+ *
+ * ตัวเลือกมาจาก available_transitions ที่ backend คำนวณด้วยกฎชุดเดียวกับตอนบันทึก
+ * เดิมแสดงทั้ง 7 สถานะแล้วไม่ได้บันทึกอะไรเลย สถานะบนหน้าผู้แจ้งจึงไม่เคยเปลี่ยน
+ *
+ * ช่องที่ต้องกรอกเปลี่ยนตามปลายทาง — พักต้องบอกว่ารออะไร แก้เสร็จต้องบันทึกวิธีแก้
+ * ยกเลิกและเปิดคืนต้องมีเหตุผล (ขั้นต่ำตรงกับ ChangeTicketStatusUseCase)
+ */
+function StatusChanger({ ticket }: { ticket: TicketDetail }): React.JSX.Element | null {
+  const changeStatus = useChangeTicketStatus();
+  const [to, setTo] = React.useState<TicketStatus | ''>('');
+  const [pendingReason, setPendingReason] = React.useState<keyof typeof PENDING_REASON>('user');
+  const [reason, setReason] = React.useState('');
+  const [resolution, setResolution] = React.useState('');
+  const [comment, setComment] = React.useState('');
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  // มีคนอื่นเปลี่ยนสถานะไปก่อน — ตัวเลือกเดิมอาจใช้ไม่ได้แล้ว เริ่มใหม่จากสถานะล่าสุด
+  React.useEffect(() => {
+    setTo('');
+    setErrors({});
+  }, [ticket.status]);
+
+  const options = ticket.available_transitions ?? [];
+  if (options.length === 0) return null;
+
+  const reopening = (ticket.status === 'resolved' || ticket.status === 'closed') && to === 'in_progress';
+  const minReason = reopening ? MIN_REOPEN_REASON : to ? (MIN_REASON[to] ?? 0) : 0;
+  const reasonLabel = reopening
+    ? 'ຍັງພົບບັນຫາຫຍັງ'
+    : to === 'cancelled'
+      ? 'ເຫດຜົນທີ່ຍົກເລີກ'
+      : 'ລໍຖ້າຫຍັງ ແລະ ຄາດວ່າຈະໄດ້ເມື່ອໃດ';
+
+  function reset(): void {
+    setTo('');
+    setReason('');
+    setResolution('');
+    setComment('');
+    setErrors({});
+  }
+
+  function submit(event: React.FormEvent): void {
+    event.preventDefault();
+    if (!to || changeStatus.isPending) return;
+
+    changeStatus.mutate(
+      {
+        id: ticket.id,
+        to_status: to,
+        ...(to === 'pending_user' ? { pending_reason: pendingReason } : {}),
+        ...(minReason > 0 ? { reason: reason.trim() } : {}),
+        ...(to === 'resolved' ? { resolution_note: resolution.trim() } : {}),
+        ...(comment.trim() ? { comment: comment.trim() } : {}),
+      },
+      {
+        onSuccess: (updated) => {
+          toast.success(`ປ່ຽນສະຖານະເປັນ “${TICKET_STATUS[updated.status].label}” ແລ້ວ`);
+          reset();
+        },
+        onError: (error) => setErrors(toastApiError(error, 'ປ່ຽນສະຖານະບໍ່ສຳເລັດ') ?? {}),
+      },
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3" noValidate>
+      <Field label="ປ່ຽນສະຖານະ" htmlFor="status-change" error={errors.to_status}>
+        <Select
+          value={to}
+          onChange={(e) => {
+            setTo(e.target.value as TicketStatus | '');
+            setErrors({});
+          }}
+        >
+          <option value="">— ປັດຈຸບັນ: {TICKET_STATUS[ticket.status].label} —</option>
+          {options.map((status) => (
+            <option key={status} value={status}>
+              {TICKET_STATUS[status].label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      {to === 'pending_user' && (
+        <Field label="ລໍຖ້າຈາກໃຜ" htmlFor="pending-reason" required error={errors.pending_reason}>
+          <Select
+            value={pendingReason}
+            onChange={(e) => setPendingReason(e.target.value as keyof typeof PENDING_REASON)}
+          >
+            {Object.entries(PENDING_REASON).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+
+      {minReason > 0 && (
+        <Field
+          label={reasonLabel}
+          htmlFor="status-reason"
+          required
+          error={errors.reason}
+          hint={`ຢ່າງໜ້ອຍ ${minReason} ຕົວອັກສອນ · ບັນທຶກໃນປະຫວັດ`}
+        >
+          <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </Field>
+      )}
+
+      {to === 'resolved' && (
+        <Field
+          label="ວິທີແກ້ໄຂ"
+          htmlFor="resolution-note"
+          required
+          error={errors.resolution_note}
+          hint={`ຢ່າງໜ້ອຍ ${MIN_RESOLUTION_NOTE} ຕົວອັກສອນ · ຜູ້ແຈ້ງຈະເຫັນ`}
+        >
+          <Textarea rows={3} value={resolution} onChange={(e) => setResolution(e.target.value)} />
+        </Field>
+      )}
+
+      {to && (
+        <>
+          <Field
+            label="ຂໍ້ຄວາມເຖິງຜູ້ແຈ້ງ (ບໍ່ບັງຄັບ)"
+            htmlFor="status-comment"
+            hint="ຖ້າພິມ ລະບົບສ້າງຄອມເມັນທີ່ຜູ້ແຈ້ງເຫັນໃຫ້"
+          >
+            <Textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
+          </Field>
+          <div className="flex gap-2">
+            <Button type="submit" className="flex-1" loading={changeStatus.isPending}>
+              ບັນທຶກສະຖານະ
+            </Button>
+            <Button type="button" variant="ghost" onClick={reset} disabled={changeStatus.isPending}>
+              ຍົກເລີກ
+            </Button>
+          </div>
+        </>
+      )}
+    </form>
+  );
+}
+
+/** ผู้แจ้งยืนยันว่าแก้แล้วจริง พร้อมให้คะแนน (ไม่บังคับ) — คะแนนเป็นตัวตั้งของ KPI-4 */
+function CloseOwnTicket({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
+  const changeStatus = useChangeTicketStatus();
+  const [score, setScore] = React.useState<number | null>(null);
+
+  return (
+    <div className="space-y-2 rounded border border-hair p-3">
+      <p className="text-body-sm font-semibold text-ink">ບັນຫາຖືກແກ້ແລ້ວແທ້ບໍ?</p>
+      <div className="flex gap-1" role="radiogroup" aria-label="ຄະແນນຄວາມພໍໃຈ">
+        {[1, 2, 3, 4, 5].map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={score === value}
+            onClick={() => setScore(score === value ? null : value)}
+            className={cn(
+              'tabular grid h-9 flex-1 place-items-center rounded border text-body-sm font-semibold transition-colors',
+              score !== null && value <= score
+                ? 'border-primary bg-primary-subtle text-primary'
+                : 'border-control text-ink-2 hover:border-primary',
+            )}
+          >
+            {value}
+          </button>
+        ))}
+      </div>
+      <p className="text-caption text-ink-3">ໃຫ້ຄະແນນ 1–5 (ບໍ່ບັງຄັບ)</p>
+      <Button
+        className="w-full"
+        loading={changeStatus.isPending}
+        onClick={() =>
+          changeStatus.mutate(
+            { id: ticket.id, to_status: 'closed', ...(score !== null ? { satisfaction_score: score } : {}) },
+            {
+              onSuccess: () => toast.success('ປິດເລື່ອງແລ້ວ ຂອບໃຈຫຼາຍ'),
+              onError: (error) => void toastApiError(error, 'ປິດເລື່ອງບໍ່ສຳເລັດ'),
+            },
+          )
+        }
+      >
+        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+        ຢືນຢັນປິດເລື່ອງ
+      </Button>
+    </div>
+  );
+}
+
+/** ผู้แจ้งเปิดเรื่องคืน (ภายใน 7 วันหลังปิด) — ต้องบอกว่ายังพบปัญหาอะไร */
+function ReopenTicket({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
+  const changeStatus = useChangeTicketStatus();
+  const [open, setOpen] = React.useState(false);
+  const [reason, setReason] = React.useState('');
+  const [error, setError] = React.useState<string | undefined>();
+
+  if (!open) {
+    return (
+      <Button variant="secondary" className="w-full" onClick={() => setOpen(true)}>
+        ເປີດເລື່ອງຄືນ
+      </Button>
+    );
+  }
+
+  return (
+    <form
+      className="space-y-2"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        changeStatus.mutate(
+          { id: ticket.id, to_status: 'in_progress', reason: reason.trim() },
+          {
+            onSuccess: () => {
+              toast.success('ເປີດເລື່ອງຄືນແລ້ວ ທີມງານຈະກວດສອບອີກຄັ້ງ');
+              setOpen(false);
+              setReason('');
+            },
+            onError: (err) => setError(toastApiError(err, 'ເປີດເລື່ອງຄືນບໍ່ສຳເລັດ')?.reason),
+          },
+        );
+      }}
+    >
+      <Field
+        label="ຍັງພົບບັນຫາຫຍັງ"
+        htmlFor="reopen-reason"
+        required
+        error={error}
+        hint={`ຢ່າງໜ້ອຍ ${MIN_REOPEN_REASON} ຕົວອັກສອນ`}
+      >
+        <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+      </Field>
+      <div className="flex gap-2">
+        <Button type="submit" className="flex-1" loading={changeStatus.isPending}>
+          ຢືນຢັນເປີດຄືນ
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+          ຍົກເລີກ
+        </Button>
+      </div>
+    </form>
   );
 }
 

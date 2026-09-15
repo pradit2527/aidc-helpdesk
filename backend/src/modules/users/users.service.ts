@@ -466,6 +466,178 @@ export class UsersService {
     return this.detail(scope, id);
   }
 
+  /**
+   * สร้างผู้ใช้หนึ่งคน (POST /users) — หน้า "สร้างผู้ใช้" ของผู้ดูแล
+   *
+   * ⚠️ กฎชุดเดียวกับการนำเข้าไฟล์และการแก้ไขผู้ใช้ ห้ามผ่อนข้อใดข้อหนึ่ง
+   *
+   *   1. บริษัทต้องอยู่ในขอบเขตของผู้เรียกและยังเปิดใช้งาน — ไม่งั้นผู้ดูแลบริษัท ก.
+   *      สร้างบัญชีในบริษัท ข. แล้วใช้บัญชีนั้นเข้าไปดูข้อมูลของบริษัท ข. ได้
+   *   2. แผนกต้องเป็นของบริษัทที่เลือก — ฐานข้อมูลไม่ได้บังคับข้อนี้ให้
+   *   3. เฉพาะ super_admin เท่านั้นที่สร้าง super_admin ได้ และบทบาทอื่นนอกจากผู้ใช้ทั่วไป
+   *      ต้องมีสิทธิ์ user.assign_role ด้วย — การสร้างบัญชีพร้อมบทบาทคือการมอบสิทธิ์
+   *   4. รหัสผ่านตามนโยบาย 3.2 — ยาว ≥ 12 และมีครบ 4 ประเภทอักขระ
+   *
+   * must_change_password = true เหมือนบัญชีที่นำเข้า — ความหมายที่เหลืออยู่คือ
+   * "ยังใช้รหัสตั้งต้นที่ผู้ดูแลตั้งให้" ซึ่งผู้ดูแลอยากเห็นในรายการผู้ใช้
+   */
+  async createUser(
+    scope: AccessScope,
+    input: {
+      username?: string;
+      full_name?: string;
+      email?: string | null;
+      employee_code?: string | null;
+      job_title?: string | null;
+      phone?: string | null;
+      company_id?: number;
+      department_id?: number | null;
+      role?: string;
+      password?: string;
+    },
+  ) {
+    const issues: { field: string; message: string }[] = [];
+
+    const username = String(input.username ?? '').trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,50}$/.test(username)) {
+      issues.push({ field: 'username', message: 'ໃຊ້ a-z 0-9 . _ - ຍາວ 3–50 ຕົວອັກສອນ' });
+    }
+
+    const fullName = String(input.full_name ?? '').trim();
+    if (fullName.length < 2 || fullName.length > 150) {
+      issues.push({ field: 'full_name', message: 'ຊື່ຕ້ອງຍາວ 2–150 ຕົວອັກສອນ' });
+    }
+
+    const optional = (value: string | null | undefined, max: number, field: string): string | null => {
+      const text = String(value ?? '').trim();
+      if (text.length > max) issues.push({ field, message: `ຍາວໄດ້ບໍ່ເກີນ ${max} ຕົວອັກສອນ` });
+      return text || null;
+    };
+    const email = optional(input.email, 150, 'email');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      issues.push({ field: 'email', message: 'ຮູບແບບອີເມວບໍ່ຖືກຕ້ອງ' });
+    }
+    const employeeCode = optional(input.employee_code, 50, 'employee_code');
+    const jobTitle = optional(input.job_title, 100, 'job_title');
+    const phone = optional(input.phone, 30, 'phone');
+
+    const roleCode = String(input.role ?? 'end_user');
+    const password = String(input.password ?? '');
+    const classes = [/[A-Z]/, /[a-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((re) => re.test(password)).length;
+    if (password.length < 12 || password.length > 128 || classes < 4) {
+      issues.push({
+        field: 'password',
+        message: 'ຍາວ 12 ຕົວອັກສອນຂຶ້ນໄປ ມີຕົວພິມໃຫຍ່ ຕົວພິມນ້ອຍ ຕົວເລກ ແລະ ສັນຍາລັກ (ນະໂຍບາຍ 3.2)',
+      });
+    } else if (username && password.toLowerCase().includes(username)) {
+      issues.push({ field: 'password', message: 'ລະຫັດຜ່ານຫ້າມມີຊື່ຜູ້ໃຊ້ຢູ່ໃນນັ້ນ' });
+    }
+
+    // ── บริษัท: ไม่มีอยู่จริงกับอยู่นอกขอบเขต ตอบข้อความเดียวกัน กันการไล่เดา ──
+    const companyId = Number(input.company_id);
+    let companyOk = false;
+    if (Number.isInteger(companyId) && companyId > 0 && scope.inScope(companyId)) {
+      const [target] = await this.db
+        .select({ isActive: company.isActive })
+        .from(company)
+        .where(eq(company.id, companyId))
+        .limit(1);
+      if (target?.isActive) companyOk = true;
+    }
+    if (!companyOk) issues.push({ field: 'company_id', message: 'ເລືອກບໍລິສັດທີ່ທ່ານດູແລ ແລະ ຍັງເປີດໃຊ້ງານ' });
+
+    let departmentId: number | null = null;
+    if (input.department_id !== undefined && input.department_id !== null && String(input.department_id) !== '') {
+      const wanted = Number(input.department_id);
+      const [dept] = Number.isInteger(wanted)
+        ? await this.db
+            .select({ companyId: department.companyId, isActive: department.isActive })
+            .from(department)
+            .where(eq(department.id, wanted))
+            .limit(1)
+        : [];
+      if (!dept || dept.companyId !== companyId || !dept.isActive) {
+        issues.push({ field: 'department_id', message: 'ເລືອກພະແນກທີ່ເປີດໃຊ້ງານຂອງບໍລິສັດນີ້' });
+      } else {
+        departmentId = wanted;
+      }
+    }
+
+    const [roleRow] = await this.db
+      .select({ id: role.id })
+      .from(role)
+      .where(eq(role.code, roleCode))
+      .limit(1);
+    if (!roleRow) issues.push({ field: 'role', message: 'ບໍ່ຮູ້ຈັກບົດບາດນີ້' });
+
+    if (issues.length === 0) {
+      const [taken] = await this.db
+        .select({ id: appUser.id })
+        .from(appUser)
+        .where(sql`lower(${appUser.username}) = ${username}`)
+        .limit(1);
+      if (taken) issues.push({ field: 'username', message: 'ຊື່ຜູ້ໃຊ້ນີ້ມີຢູ່ແລ້ວ' });
+    }
+
+    if (issues.length > 0) {
+      throw new ValidationError('VALIDATION_ERROR', issues[0]!.message, issues);
+    }
+
+    // ── สิทธิ์การมอบบทบาท — ตรวจหลังข้อมูลถูกต้อง เพื่อให้ข้อความผิดพลาดตรงประเด็น ──
+    if (roleCode !== 'end_user') scope.require('user.assign_role');
+    if (roleCode === 'super_admin' && !scope.isSuperAdmin) {
+      throw new ForbiddenError('FORBIDDEN', 'ມີແຕ່ຜູ້ດູແລລະບົບເທົ່ານັ້ນທີ່ສ້າງ super_admin ໄດ້');
+    }
+
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+
+    let createdId: number;
+    try {
+      createdId = await this.db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(appUser)
+          .values({
+            companyId,
+            departmentId,
+            username,
+            fullName,
+            email,
+            employeeCode,
+            jobTitle,
+            phone,
+            passwordHash,
+            authProvider: 'local',
+            mustChangePassword: true,
+            passwordChangedAt: new Date(),
+            isAdminAccount: roleCode === 'super_admin',
+            isActive: true,
+          })
+          .returning({ id: appUser.id });
+
+        const [granted] = await tx
+          .insert(userRole)
+          .values({ userId: created!.id, roleId: roleRow!.id, grantedBy: scope.userId })
+          .returning({ id: userRole.id });
+
+        // super_admin ข้ามขอบเขตอยู่แล้ว · บทบาทอื่นผูกกับบริษัทต้นสังกัด ขยายเพิ่มได้ที่หน้ามอบบทบาท
+        if (roleCode !== 'super_admin') {
+          await tx.insert(userRoleScope).values({ userRoleId: granted!.id, companyId });
+        }
+        return created!.id;
+      });
+    } catch (err) {
+      // กดสร้างซ้ำสองแท็บพร้อมกัน — ตัวที่สองชน unique ของ username
+      if ((err as { code?: string }).code === '23505') {
+        throw new ValidationError('VALIDATION_ERROR', 'ຊື່ຜູ້ໃຊ້ນີ້ມີຢູ່ແລ້ວ', [
+          { field: 'username', message: 'ຊື່ຜູ້ໃຊ້ນີ້ມີຢູ່ແລ້ວ' },
+        ]);
+      }
+      throw err;
+    }
+
+    return this.detail(scope, createdId);
+  }
+
   /** จำนวนผู้ใช้ที่ยังมีบทบาทไม่หมดอายุ — ใช้ในรายงาน Access Expiry */
   async activeRoleCount(userId: number): Promise<number> {
     const [row] = await this.db

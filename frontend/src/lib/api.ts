@@ -173,7 +173,12 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
  */
 function buildInit({ method = 'GET', body, signal }: RequestOptions): RequestInit {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  /*
+   * ส่งไฟล์ (FormData) ห้ามตั้ง Content-Type เอง — เบราว์เซอร์ต้องใส่ boundary ของ multipart ต่อท้าย
+   * ถ้าตั้งเป็นค่าตายตัว server แยกส่วนของไฟล์ไม่ออกและปฏิเสธทั้งคำขอ
+   */
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
 
   // GET/HEAD ไม่เปลี่ยนสถานะ จึงไม่ต้องมี CSRF token
   if (method !== 'GET') {
@@ -190,7 +195,7 @@ function buildInit({ method = 'GET', body, signal }: RequestOptions): RequestIni
   };
   // ใส่คีย์เฉพาะเมื่อมีค่าจริง เพราะ tsconfig เปิด exactOptionalPropertyTypes
   // การส่ง body: undefined ไม่เท่ากับการไม่ส่ง body
-  if (body !== undefined) init.body = JSON.stringify(body);
+  if (body !== undefined) init.body = isForm ? (body as FormData) : JSON.stringify(body);
   if (signal) init.signal = signal;
   return init;
 }

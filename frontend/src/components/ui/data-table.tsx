@@ -22,6 +22,8 @@ export interface Column<T> {
   hideBelow?: 'sm' | 'md' | 'lg' | 'xl' | undefined;
   align?: 'left' | 'right' | 'center' | undefined;
   width?: string | undefined;
+  /** คลาสเพิ่มทั้งหัวคอลัมน์และช่องข้อมูล เช่น whitespace-nowrap ของคอลัมน์ที่ต้องอยู่บรรทัดเดียว */
+  cellClassName?: string | undefined;
   render: (row: T) => React.ReactNode;
 }
 
@@ -111,6 +113,7 @@ export function DataTable<T>({
                     col.align === 'right' && 'text-right',
                     col.align === 'center' && 'text-center',
                     col.hideBelow && HIDE_CLASS[col.hideBelow],
+                    col.cellClassName,
                   )}
                 >
                   {col.header}
@@ -136,6 +139,7 @@ export function DataTable<T>({
                       col.align === 'right' && 'text-right',
                       col.align === 'center' && 'text-center',
                       col.hideBelow && HIDE_CLASS[col.hideBelow],
+                      col.cellClassName,
                     )}
                   >
                     {col.render(row)}

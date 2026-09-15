@@ -202,6 +202,11 @@ export class MasterDataController {
         code: { type: 'string', example: 'AI_TOOLS', description: 'A–Z, 0–9, _ ยาว 2–40' },
         name_th: { type: 'string', example: 'ຂໍສິດໃຊ້ເຄື່ອງມື AI' },
         company_id: { type: 'number', nullable: true, description: 'null = ระดับกลุ่ม' },
+        parent_id: {
+          type: 'number',
+          nullable: true,
+          description: 'null = หมวดหลัก · เลือกได้เฉพาะหมวดหลัก (ต้นไม้สองชั้น)',
+        },
         default_impact: { type: 'string', enum: ['org_wide', 'department', 'individual'] },
         default_urgency: { type: 'string', enum: ['high', 'medium', 'low'] },
         sort_order: { type: 'number', example: 110 },
@@ -216,6 +221,7 @@ export class MasterDataController {
       code: string;
       name_th: string;
       company_id?: number | null;
+      parent_id?: number | null;
       default_impact?: string;
       default_urgency?: string;
       sort_order?: number;
@@ -239,6 +245,7 @@ export class MasterDataController {
       type: 'object',
       properties: {
         name_th: { type: 'string' },
+        parent_id: { type: 'number', nullable: true, description: 'null = ย้ายขึ้นเป็นหมวดหลัก' },
         default_impact: { type: 'string', enum: ['org_wide', 'department', 'individual'] },
         default_urgency: { type: 'string', enum: ['high', 'medium', 'low'] },
         sort_order: { type: 'number' },
@@ -252,6 +259,7 @@ export class MasterDataController {
     @Body()
     body: {
       name_th?: string;
+      parent_id?: number | null;
       default_impact?: string;
       default_urgency?: string;
       sort_order?: number;

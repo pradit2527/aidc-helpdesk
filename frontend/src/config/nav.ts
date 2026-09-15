@@ -18,6 +18,7 @@ import {
   Gauge,
   Inbox,
   Layers,
+  MessagesSquare,
   Plus,
   SlidersHorizontal,
   User,
@@ -147,6 +148,18 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         icon: Layers,
         roles: STAFF_AND_VIEWER,
       },
+      /*
+       * กล่องแชท — ทีมไอทีตอบแชทของผู้ใช้แบบเรียลไทม์
+       * บทบาทเดียวกับที่รับเรื่องในคิวได้ ผู้บริหารที่ดูอย่างเดียว (manager_viewer) ไม่มี
+       * backend ตัดสินจากสิทธิ์ ticket.change_status อีกชั้นอยู่แล้ว
+       */
+      {
+        href: '/chats',
+        labelKey: 'nav.chats',
+        shortKey: 'navShort.chats',
+        icon: MessagesSquare,
+        roles: SETTINGS_VIEWERS,
+      },
       {
         href: '/dashboard',
         labelKey: 'nav.dashboard',
@@ -255,6 +268,7 @@ export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
   '/tickets': 'nav.allTickets',
   '/tickets/new': 'page.newTicket',
   '/assistant': 'nav.assistant',
+  '/chats': 'nav.chats',
   '/queue': 'nav.queue',
   '/approvals': 'nav.approvals',
   '/dashboard': 'nav.dashboard',
@@ -267,6 +281,7 @@ export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
   '/admin': 'page.adminConsole',
   '/admin/users': 'nav.users',
   '/admin/users/import': 'page.importUsers',
+  '/admin/users/new': 'page.newUser',
   '/admin/departments': 'nav.departments',
   '/admin/categories': 'nav.categories',
   '/admin/roles': 'nav.roles',

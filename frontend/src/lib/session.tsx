@@ -7,6 +7,7 @@ import { SESSION_EXPIRED_EVENT } from '@/lib/api';
 import { fetchMe, logout as logoutRequest, takePrimedUser } from '@/lib/auth';
 import { identifyChatwootUser, resetChatwoot } from '@/lib/chatwoot';
 import type { RoleCode, SessionUser } from '@/lib/types';
+import { disconnectRealtime } from '@/lib/ws';
 
 /**
  * ผู้ใช้ที่ล็อกอินอยู่ ใช้ร่วมกันทั้งแอป
@@ -161,6 +162,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
     await logoutRequest();
     // ล้างแชทด้วย — มิฉะนั้นคนที่นั่งเครื่องนี้ต่อจะเปิดอ่านบทสนทนาของคนที่เพิ่งออกได้
     resetChatwoot();
+    // socket เดิมยังอยู่ในห้องแชทของคนที่เพิ่งออก ข้อความใหม่จะยังเด้งเข้ามา
+    disconnectRealtime();
     setUser(null);
     setState('anonymous');
     router.replace('/login');

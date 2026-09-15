@@ -87,6 +87,27 @@ export function useTicket(id: number): UseQueryResult<TicketDetail, Error> {
   });
 }
 
+export interface AddCommentInput {
+  body: string;
+  is_internal?: boolean;
+}
+
+/**
+ * ส่งคอมเมนต์เข้าเรื่อง
+ *
+ * คอมเมนต์สาธารณะที่สร้างสำเร็จจะถูกดันกลับมาซ้ำผ่าน WebSocket (ดู useTicketChat)
+ * invalidate ตรงนี้จึงจำเป็นเฉพาะตอนเครือข่ายเรียลไทม์หลุด หรือคอมเมนต์ภายในที่ไม่ถูกกระจาย
+ */
+export function useAddComment(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AddCommentInput) => api.post(`/tickets/${ticketId}/comments`, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) });
+    },
+  });
+}
+
 export interface CreateTicketInput {
   ticket_type: string;
   subject: string;
@@ -101,6 +122,16 @@ export interface CreateTicketInput {
   impact: string;
   urgency: string;
   channel?: string | undefined;
+  source_device?: 'web' | 'mobile_web' | undefined;
+  /** ค่าเริ่มต้นฝั่ง backend = บริษัทของผู้เรียก · ระบุได้เฉพาะบริษัทในขอบเขตสิทธิ์ */
+  company_id?: number | undefined;
+  department_id?: number | undefined;
+  service_id?: number | undefined;
+  /** บังคับเมื่อ ticket_type = service_request */
+  catalog_item_id?: number | undefined;
+  asset_tag?: string | undefined;
+  /** แจ้งแทนผู้อื่น — ต้องมีสิทธิ์ ticket.create_for_other */
+  requester_id?: number | undefined;
   attachment_ids?: number[] | undefined;
 }
 

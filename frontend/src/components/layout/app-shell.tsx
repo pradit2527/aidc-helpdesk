@@ -2,10 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, LogOut, Menu, Plus, Search, X } from 'lucide-react';
+import { Bell, ChevronRight, LogOut, Menu, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
 
 import { AssistantLauncher } from '@/components/assistant/assistant-launcher';
+import { ChatLauncher } from '@/components/support-chat/chat-launcher';
+import { SupportChatRealtime } from '@/components/support-chat/chat-realtime';
+import { TicketRealtime } from '@/components/tickets/ticket-realtime';
 import { Brand } from '@/components/layout/brand';
 import { AssistantChatProvider } from '@/lib/assistant-chat';
 import { PreferenceButtons, useT } from '@/components/layout/preference-controls';
@@ -177,7 +180,13 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
         })}
       </nav>
 
-      {/* แชทผู้ช่วย AI ลอยทุกหน้า */}
+      {/* แชทกับทีมไอทีแบบเรียลไทม์ — ตัวรับข้อความวางครั้งเดียวระดับ shell ปุ่มลอยอยู่ทุกหน้า */}
+      <SupportChatRealtime />
+      {/* สถานะเรื่องแจ้งเปลี่ยนแบบเรียลไทม์ — ต้องอยู่คู่ SupportChatRealtime ที่พาเข้าห้อง user:{id} */}
+      <TicketRealtime />
+      <ChatLauncher />
+
+      {/* แชทผู้ช่วย AI — แสดงเฉพาะเมื่อ backend เปิดใช้ */}
       <AssistantLauncher />
     </div>
     </AssistantChatProvider>
@@ -231,7 +240,7 @@ function Sidebar({
         {/* เว้นช่องว่างคั่นสองบล็อกแทนการใช้เส้นคั่นชิด ๆ
             ตราสัญลักษณ์กับตัวตนของผู้ใช้เป็นคนละเรื่องกัน จึงไม่ควรติดกันเป็นก้อนเดียว */}
         <div className="px-3 pb-3 pt-1">
-          <Link href="/profile" className="side-user-card">
+          <Link href="/profile" className="side-user-card group">
             <span className="side-avatar grid h-10 w-10 flex-none place-items-center rounded-full text-body-sm font-bold">
               {initials(user.full_name)}
             </span>
@@ -239,48 +248,58 @@ function Sidebar({
               <span className="block truncate text-body-sm font-semibold leading-snug text-[color:var(--side-ink)]">
                 {user.full_name}
               </span>
-              {/* บทบาทของผู้ใช้เอง มาจาก session ไม่ใช่ตัวเลือก
-                  ผู้ใช้เปลี่ยนบทบาทตัวเองไม่ได้ — ต้องให้ผู้ดูแลมอบผ่านหน้าจัดการผู้ใช้ */}
-              <span className="side-role-chip mt-1 inline-block rounded-sm px-1.5 py-0.5 text-caption font-semibold">
-                {t(ROLE_LABEL_KEY[primaryRole(user.roles)])}
+              <span className="mt-1 flex min-w-0 items-center gap-1.5">
+                {/* บทบาทของผู้ใช้เอง มาจาก session ไม่ใช่ตัวเลือก
+                    ผู้ใช้เปลี่ยนบทบาทตัวเองไม่ได้ — ต้องให้ผู้ดูแลมอบผ่านหน้าจัดการผู้ใช้ */}
+                <span className="side-role-chip inline-flex flex-none items-center rounded-full px-2 py-px text-[11px] font-semibold leading-5">
+                  {t(ROLE_LABEL_KEY[primaryRole(user.roles)])}
+                </span>
+                {/* บริษัทต้นสังกัด — พนักงาน 7 บริษัทใช้ระบบเดียวกัน ต้องรู้ว่ากำลังแจ้งในนามบริษัทไหน */}
+                <span className="truncate text-caption text-[color:var(--side-ink-3)]">{user.company.code}</span>
               </span>
             </span>
+            <ChevronRight
+              className="h-4 w-4 flex-none text-[color:var(--side-ink-3)] transition-transform group-hover:translate-x-0.5"
+              aria-hidden="true"
+            />
           </Link>
         </div>
       </div>
 
-      {/* แผงห่อรายการเมนู กอดเนื้อหาไว้ ไม่ยืดเต็มความสูงที่เหลือ
-          nav เป็นตัวกินพื้นที่ว่างแทน เมนูจึงยังอยู่ชิดบนเหมือนเดิม */}
-      <nav className="flex-1 px-3 pb-3 pt-1" aria-label={t('action.mainMenu')}>
-        <div className="side-panel side-nav-panel py-1.5">
+      {/*
+        เมนูเป็นเม็ดยาลอยบนพื้นแถบ ไม่ห่อด้วยแผงกรอบอีกชั้น
+        nav กินพื้นที่ว่างที่เหลือ เมนูจึงอยู่ชิดบน และปุ่มออกจากระบบอยู่ล่างสุดเสมอ
+      */}
+      <nav className="flex-1 px-3 pb-3 pt-3" aria-label={t('action.mainMenu')}>
         {sections.map((section, index) => (
-          <div key={section.titleKey ?? `section-${index}`} className="py-1">
+          <div key={section.titleKey ?? `section-${index}`} className={cn(index > 0 && 'mt-4')}>
             {section.titleKey && (
-              <p className="px-5 pb-1 pt-3 text-caption font-semibold uppercase tracking-wide text-[color:var(--side-ink-3)]">
+              <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[color:var(--side-ink-3)]">
                 {t(section.titleKey)}
               </p>
             )}
-            {section.items.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item, pathname);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? 'page' : undefined}
-                  className="side-link"
-                >
-                  <Icon className="h-[18px] w-[18px] flex-none" aria-hidden="true" />
-                  <span className="flex-1 truncate">{t(item.labelKey)}</span>
-                </Link>
-              );
-            })}
+            <ul className="flex flex-col gap-1">
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item, pathname);
+                return (
+                  <li key={item.href}>
+                    <Link href={item.href} aria-current={active ? 'page' : undefined} className="side-link">
+                      <span className="side-link-icon">
+                        <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+                      </span>
+                      {/* เว้นขวาให้จุดบอกหน้าปัจจุบัน ไม่ให้ชื่อเมนูยาววิ่งทับ */}
+                      <span className="flex-1 truncate pr-3">{t(item.labelKey)}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         ))}
-        </div>
       </nav>
 
-      <div className="side-hair flex-none border-t px-5 py-1">
+      <div className="side-hair flex-none border-t px-3 py-2">
         {/*
           ต้องเป็นปุ่มที่เรียก POST /auth/logout ไม่ใช่ลิงก์ไป /login
 
@@ -290,9 +309,11 @@ function Sidebar({
         <button
           type="button"
           onClick={() => void signOut()}
-          className="inline-flex min-h-tap items-center gap-2 text-body-sm text-[color:var(--side-ink-2)] transition-colors hover:text-[color:var(--side-ink)]"
+          className="side-link w-full text-left hover:bg-sla-breach-bg hover:text-sla-breach"
         >
-          <LogOut className="h-4 w-4" aria-hidden="true" />
+          <span className="side-link-icon">
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+          </span>
           {t('action.logout')}
         </button>
       </div>

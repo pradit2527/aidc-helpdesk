@@ -56,6 +56,54 @@ export class UsersController {
     });
   }
 
+  @Post()
+  @ApiOperation({
+    summary: 'สร้างผู้ใช้หนึ่งคน (สำหรับผู้ดูแล)',
+    description:
+      'ต้องมีสิทธิ์ `user.create` · บทบาทอื่นนอกจาก `end_user` ต้องมี `user.assign_role` ด้วย · ' +
+      '**เฉพาะ super_admin สร้าง super_admin ได้** · บริษัทต้องอยู่ในขอบเขตของผู้เรียกและเปิดใช้งาน · ' +
+      'แผนกต้องเป็นของบริษัทนั้น · รหัสผ่าน ≥ 12 อักขระ มีตัวพิมพ์ใหญ่ เล็ก ตัวเลข สัญลักษณ์ (นโยบาย 3.2) · ' +
+      'ข้อมูลผิดตอบ 422 พร้อมรายช่อง · บัญชีที่สร้างมี `must_change_password = true` · ' +
+      'คืนรายละเอียดผู้ใช้ที่สร้าง',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['username', 'full_name', 'company_id', 'role', 'password'],
+      properties: {
+        username: { type: 'string', example: 'demo.cosi', description: 'a-z 0-9 . _ - ยาว 3–50 · แก้ภายหลังไม่ได้' },
+        full_name: { type: 'string', example: 'ດີໂມ COSI' },
+        company_id: { type: 'number', example: 1 },
+        department_id: { type: 'number', nullable: true },
+        role: { type: 'string', enum: ['end_user', 'agent', 'company_admin', 'manager_viewer', 'super_admin'] },
+        password: { type: 'string', format: 'password' },
+        email: { type: 'string', nullable: true },
+        employee_code: { type: 'string', nullable: true },
+        job_title: { type: 'string', nullable: true },
+        phone: { type: 'string', nullable: true },
+      },
+    },
+  })
+  createUser(
+    @CurrentScope() scope: AccessScope,
+    @Body()
+    body: {
+      username?: string;
+      full_name?: string;
+      email?: string | null;
+      employee_code?: string | null;
+      job_title?: string | null;
+      phone?: string | null;
+      company_id?: number;
+      department_id?: number | null;
+      role?: string;
+      password?: string;
+    },
+  ) {
+    scope.require('user.create');
+    return this.users.createUser(scope, body);
+  }
+
   @Patch('me')
   @ApiOperation({
     summary: 'แก้ไขข้อมูลติดต่อของตนเอง',

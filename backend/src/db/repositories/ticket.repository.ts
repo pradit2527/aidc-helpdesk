@@ -221,16 +221,21 @@ export class TicketRepository implements Partial<ITicketRepository> {
 
     const where = and(...parts) as SQL;
 
-    const rows = await selectTicketsQuery(this.db)
-      .where(where)
-      .orderBy(desc(ticket.updatedAt))
-      .limit(filters.pageSize)
-      .offset((filters.page - 1) * filters.pageSize);
-
-    const [counted] = await this.db
-      .select({ total: sql<number>`count(*)::int` })
-      .from(ticket)
-      .where(where);
+    /*
+     * แถวของหน้ากับจำนวนทั้งหมดไม่พึ่งผลของกันเลย จึงยิงพร้อมกัน
+     * บนฐานข้อมูลที่อยู่ไกล การยิงทีละตัวเสียรอบเครือข่ายเพิ่มหนึ่งรอบทุกครั้งที่เปิดรายการ
+     */
+    const [rows, [counted]] = await Promise.all([
+      selectTicketsQuery(this.db)
+        .where(where)
+        .orderBy(desc(ticket.updatedAt))
+        .limit(filters.pageSize)
+        .offset((filters.page - 1) * filters.pageSize),
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(ticket)
+        .where(where),
+    ]);
 
     return { rows, total: counted?.total ?? 0 };
   }
