@@ -15,6 +15,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
+import { CHATWOOT_OPENAPI } from './integrations/chatwoot/chatwoot.openapi';
 import { SUPERWORK_OPENAPI } from './integrations/superwork/superwork.openapi';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -153,6 +154,22 @@ async function bootstrap(): Promise<void> {
     },
   });
 
+  /*
+   * เอกสารของ Chatwoot — API ของระบบแชทที่เราซิงก์ด้วย แยกหน้าเช่นเดียวกับ Super Work
+   *
+   * มีเฉพาะ endpoint ที่ ChatwootSyncService เรียกจริง ไม่ใช่ทั้งหมดที่ Chatwoot มี
+   * เพราะจุดประสงค์คือให้ทีมรู้ว่า integration พึ่งอะไรอยู่ ไม่ใช่แทนเอกสารของ Chatwoot
+   */
+  SwaggerModule.setup(`${API_PREFIX}/docs-chatwoot`, app, CHATWOOT_OPENAPI, {
+    jsonDocumentUrl: `${API_PREFIX}/openapi-chatwoot.json`,
+    customSiteTitle: 'Chatwoot Application API (ระบบภายนอก)',
+    swaggerOptions: {
+      persistAuthorization: true,
+      docExpansion: 'list',
+      tryItOutEnabled: true,
+    },
+  });
+
   const port = Number(process.env.PORT ?? 8000);
   await app.listen(port, '0.0.0.0');
 
@@ -165,6 +182,7 @@ async function bootstrap(): Promise<void> {
       `  - เอกสาร    : http://localhost:${port}/${API_PREFIX}/docs`,
       `  - OpenAPI  : http://localhost:${port}/${API_PREFIX}/openapi.json`,
       `  - Super Work: http://localhost:${port}/${API_PREFIX}/docs-superwork`,
+      `  - Chatwoot : http://localhost:${port}/${API_PREFIX}/docs-chatwoot`,
       '',
     ].join('\n'),
   );
