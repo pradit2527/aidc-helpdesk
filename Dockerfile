@@ -75,4 +75,17 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8000)+'/api/v1/livez').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "dist/main.js"]
+
+# รัน migration ที่ยังค้างก่อนเปิดแอปทุกครั้ง
+#
+#   deploy ที่มี migration ใหม่ (เช่น 0003–0005 ของแชท) เคยขึ้นไปโดยฐานข้อมูลยังไม่มี
+#   ตารางนั้น แอปบูตติดแต่ endpoint ที่ใช้ตารางใหม่ตอบ 500 จนกว่าจะมีคนรัน
+#   db:migrate เองจากเครื่องตัวเอง ซึ่งต้องมี connection string ของ production อยู่ในมือ
+#
+#   migrator ของ drizzle ข้ามไฟล์ที่รันแล้วตามสมุดบันทึกใน meta/_journal.json และถือ
+#   advisory lock ระหว่างรัน — รีสตาร์ตบ่อยแค่ไหน (Render free tier หลับ/ตื่นเอง) ก็ปลอดภัย
+#   ใช้ MIGRATE_URL ถ้ามี ไม่มีก็ DATABASE_URL (migrate.ts ตกลงมาเอง)
+#
+#   exec เพื่อให้ node มาแทน sh — tini จะส่ง SIGTERM ถึงแอปตรง ๆ ตอน deploy ใหม่
+#   ถ้าไม่ exec สัญญาณจะหยุดที่ sh แล้วคอนเทนเนอร์ถูกฆ่าทิ้งเมื่อหมดเวลารอ
+CMD ["sh", "-c", "node dist/db/migrate.js && exec node dist/main.js"]
