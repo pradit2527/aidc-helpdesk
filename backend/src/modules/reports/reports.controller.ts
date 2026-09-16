@@ -1,9 +1,36 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
+import { TICKET_STATUS, type TicketStatus } from '../../common/constants';
+import { ApiEnvelope } from '../../common/http/envelope.dto';
+import { clampPage, clampPageSize } from '../../common/http/pagination';
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
+import { TicketReportDto } from './dto/ticket-report.dto';
 import { ReportsService } from './reports.service';
+
+/**
+ * แปลง id จาก query string — รับเฉพาะจำนวนเต็มบวก ค่าอื่นถือว่าไม่ได้ส่ง
+ *
+ * ไม่ตอบ 422 เพราะ id ที่ "ไม่ถูกต้อง" กับ id ที่ "อยู่นอกขอบเขต" ต้องได้ผลเหมือนกัน
+ * (รายงานเปล่า) — ถ้าแยกคำตอบ ผู้เรียกจะเดาได้ว่าเลขไหนมีอยู่จริง
+ */
+function parseId(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+/** คั่นด้วยจุลภาค · ค่าที่ไม่ใช่สถานะจริงถูกตัดทิ้ง ไม่ส่งต่อไปฐานข้อมูล */
+function parseStatuses(raw: string | undefined): TicketStatus[] {
+  if (!raw) return [];
+  const known = new Set<string>(TICKET_STATUS);
+  const wanted = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => known.has(s));
+  return [...new Set(wanted)] as TicketStatus[];
+}
 
 @ApiTags('Reports')
 @Controller('reports')
@@ -44,5 +71,67 @@ export class ReportsController {
   ) {
     scope.require('report.view', 'report.export');
     return this.reports.slaCompliance(scope, this.reports.resolvePeriod(from, to));
+  }
+
+  @Get('tickets')
+  @ApiOperation({
+    summary: 'รายงานเรื่องแจ้ง กรองตาม บริษัท / แผนก / สถานะ / รายบุคคล',
+    description: [
+      'คืนยอดรวม แยกตามสถานะ ระดับ ผู้รับผิดชอบ บริษัท แผนก และรายการเรื่องที่ตรงเงื่อนไข **ในคำขอเดียว** — ทุกส่วนใช้เงื่อนไขชุดเดียวกัน',
+      '',
+      '- ช่วงเวลาตัดจาก `created_at` (เรื่องที่แจ้งเข้ามาในช่วงนั้น) · ค่าเริ่มต้น = ต้นเดือนปัจจุบันถึงตอนนี้',
+      '- ใช้ขอบเขตเดียวกับ `GET /tickets` ทุกข้อ (row-level scoping): บริษัทตาม user_role_scope · ',
+      '  `company_id` ที่อยู่นอกขอบเขตถูก **ตัดทิ้งเงียบ ๆ** แล้วได้รายงานเปล่า ไม่ตอบ 403 (US-07 AC-2) · ',
+      '  เรื่องที่ตั้งธงเหตุความปลอดภัยเห็นเฉพาะผู้เกี่ยวข้อง (SOP-10 ข้อ 2)',
+      '- ไม่ระบุ `company_id` = ทุกบริษัทในขอบเขตของผู้เรียก · super_admin = ทั้งกลุ่ม',
+      '- `breached` = เกินกำหนดแก้ไข: ธง `is_resolution_breached` · หรือ `resolved_at > resolution_due_at` · ',
+      '  หรือยังเปิดอยู่ (ไม่รวม pending_user ที่หยุดนับ) และเลยกำหนดแล้ว · ตัดใบที่มี `sla_exclusion_code` ออก (SLA ภาคผนวก ก.2)',
+      '- `met_percent` ของแต่ละมิติคิดเฉพาะกลุ่ม resolved + closed · ตัวหารเป็นศูนย์คืน `null` ไม่ใช่ 0 หรือ 100',
+      '- `assignee_id` กับ `requester_id` ระบุพร้อมกันได้ (AND) · `tickets.total` เท่ากับ `totals.total` เสมอ',
+      '- ต้องมีสิทธิ์ `report.view` หรือ `report.export`',
+    ].join('\n'),
+  })
+  @ApiQuery({ name: 'company_id', required: false, type: Number, description: 'ต้องอยู่ในขอบเขตของผู้เรียก' })
+  @ApiQuery({ name: 'department_id', required: false, type: Number })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: TICKET_STATUS,
+    isArray: true,
+    description: 'คั่นด้วยจุลภาค เช่น `new,in_progress` · ไม่ระบุ = ทุกสถานะ',
+  })
+  @ApiQuery({ name: 'assignee_id', required: false, type: Number, description: 'ผู้รับผิดชอบ' })
+  @ApiQuery({ name: 'requester_id', required: false, type: Number, description: 'ผู้แจ้ง' })
+  @ApiQuery({ name: 'from', required: false, description: 'ISO 8601 · ค่าเริ่มต้น = ต้นเดือนปัจจุบัน' })
+  @ApiQuery({ name: 'to', required: false, description: 'ISO 8601 · ค่าเริ่มต้น = ตอนนี้' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1, description: 'ของส่วน tickets' })
+  @ApiQuery({ name: 'page_size', required: false, type: Number, example: 20, description: 'สูงสุด 100' })
+  @ApiEnvelope(TicketReportDto)
+  ticketReport(
+    @CurrentScope() scope: AccessScope,
+    @Query('company_id') companyId?: string,
+    @Query('department_id') departmentId?: string,
+    @Query('status') status?: string,
+    @Query('assignee_id') assigneeId?: string,
+    @Query('requester_id') requesterId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('page') page?: string,
+    @Query('page_size') pageSize?: string,
+  ): Promise<TicketReportDto> {
+    scope.require('report.view', 'report.export');
+    return this.reports.ticketReport(
+      scope,
+      {
+        companyId: parseId(companyId),
+        departmentId: parseId(departmentId),
+        status: parseStatuses(status),
+        assigneeId: parseId(assigneeId),
+        requesterId: parseId(requesterId),
+        page: clampPage(page),
+        pageSize: clampPageSize(pageSize),
+      },
+      this.reports.resolvePeriod(from, to),
+    );
   }
 }

@@ -13,6 +13,7 @@
  */
 
 import {
+  BarChart3,
   Bot,
   Clock,
   Gauge,
@@ -168,6 +169,20 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         roles: STAFF_AND_VIEWER,
       },
       /*
+       * รายงานเรื่องแจ้งแบบกรองได้ (บริษัท / แผนก / สถานะ / รายบุคคล)
+       *
+       * บทบาทชุดนี้คือชุดเดียวกับที่ถือ report.view ใน seed permissions
+       * (agent · company_admin · manager_viewer · super_admin) — พนักงานทั่วไปไม่มี
+       * backend ตรวจ report.view ซ้ำที่ GET /reports/tickets อีกชั้นอยู่แล้ว
+       */
+      {
+        href: '/reports/tickets',
+        labelKey: 'nav.ticketReport',
+        shortKey: 'navShort.ticketReport',
+        icon: BarChart3,
+        roles: STAFF_AND_VIEWER,
+      },
+      /*
        * ตั้งค่าระบบเป็น "หน้าเดียว 10 แท็บ" ตามต้นแบบ ไม่ใช่ 16 หน้าแยกกัน
        *
        * matchPrefix เพื่อให้เมนูยังไฮไลต์อยู่เมื่อสลับแท็บ (/admin?tab=sla)
@@ -274,6 +289,7 @@ export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
   '/dashboard': 'nav.dashboard',
   '/reports': 'nav.reports',
   '/reports/sla-compliance': 'page.slaReport',
+  '/reports/tickets': 'nav.ticketReport',
   '/kb': 'nav.kb',
   '/kb/new': 'page.newArticle',
   '/notifications': 'nav.notifications',

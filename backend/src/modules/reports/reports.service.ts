@@ -1,10 +1,89 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
-import { PRIORITY } from '../../common/constants';
+import {
+  PRIORITY,
+  TICKET_STATUS,
+  type PendingReason,
+  type Priority,
+  type TicketStatus,
+  type TicketType,
+} from '../../common/constants';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
+import { appUser, company, department, ticket, ticketCategory } from '../../db/schema';
+import type {
+  TicketReportDto,
+  TicketReportFilters,
+  TicketReportItemDto,
+  TicketReportRollupDto,
+} from './dto/ticket-report.dto';
+
+/**
+ * ตาราง app_user ถูก join สองครั้งในคิวรีรายการ (ผู้แจ้ง กับ ผู้รับผิดชอบ)
+ * จึงต้องตั้งชื่อแทนคนละชื่อ — กติกาเดียวกับ TicketRepository
+ */
+const requester = alias(appUser, 'requester');
+const assignee = alias(appUser, 'assignee');
+
+/** สถานะที่ถือว่า "ยังเปิดอยู่" — ชุดเดียวกับ KPI-5 และแดชบอร์ด */
+const OPEN_STATUSES: readonly TicketStatus[] = ['new', 'assigned', 'in_progress', 'pending_user'];
+
+/** ยังเปิดอยู่และนาฬิกา SLA ยังเดิน — pending_user หยุดนับ จึงยังไม่ถือว่าเกินกำหนด */
+const RUNNING_STATUSES: readonly TicketStatus[] = ['new', 'assigned', 'in_progress'];
+
+/** resolved + closed — ตัวหารของ "% ทัน SLA" */
+const DONE_STATUSES: readonly TicketStatus[] = ['resolved', 'closed'];
+
+/**
+ * เงื่อนไข "เกินกำหนดแก้ไข" ที่ใช้ทั้งในยอดรวม ทุกมิติ และคอลัมน์ในรายการ
+ *
+ * ประกาศครั้งเดียวแล้วใช้ซ้ำ — ถ้าแต่ละคิวรีเขียนนิยามของตัวเอง วันหนึ่งตัวเลข
+ * ในการ์ดสรุปจะไม่เท่ากับผลรวมของตาราง แล้วไม่มีใครบอกได้ว่าอันไหนถูก
+ *
+ * นับเป็นเกินกำหนดเมื่อข้อใดข้อหนึ่งจริง
+ *   1. ธง is_resolution_breached ที่งานกวาด SLA ตั้งไว้
+ *   2. แก้ไขเสร็จหลังกำหนด (resolved_at > resolution_due_at) — ใช้ได้แม้งานกวาดไม่ทำงาน
+ *   3. ยังเปิดอยู่ นาฬิกายังเดิน และเลยกำหนดแล้ว ณ ตอนที่เรียก
+ * และต้องไม่มี sla_exclusion_code — เหตุยกเว้นตาม SLA ภาคผนวก ก.2 ไม่ถือว่าผิด SLA
+ */
+const RESOLUTION_BREACHED: SQL = sql`(
+  ${ticket.slaExclusionCode} IS NULL AND (
+    ${ticket.isResolutionBreached} = true
+    OR (
+      ${ticket.resolvedAt} IS NOT NULL
+      AND ${ticket.resolutionDueAt} IS NOT NULL
+      AND ${ticket.resolvedAt} > ${ticket.resolutionDueAt}
+    )
+    OR (
+      ${ticket.resolvedAt} IS NULL
+      AND ${ticket.status} IN ${RUNNING_STATUSES}
+      AND ${ticket.resolutionDueAt} IS NOT NULL
+      AND ${ticket.resolutionDueAt} < now()
+    )
+  )
+)`;
+
+const IS_OPEN: SQL = sql`${ticket.status} IN ${OPEN_STATUSES}`;
+const IS_DONE: SQL = sql`${ticket.status} IN ${DONE_STATUSES}`;
+
+/** นับเฉพาะแถวที่เข้าเงื่อนไข · ::int เพื่อให้ได้ number ไม่ใช่สตริงของ bigint */
+function countWhere(condition: SQL): SQL<number> {
+  return sql<number>`count(*) FILTER (WHERE ${condition})::int`;
+}
+
+/** คอลัมน์ตัวเลขชุดเดียวกันสำหรับทุกมิติ (ผู้รับผิดชอบ · บริษัท · แผนก) */
+const ROLLUP_COLUMNS = {
+  total: sql<number>`count(*)::int`,
+  open: countWhere(IS_OPEN),
+  done: countWhere(IS_DONE),
+  breached: countWhere(RESOLUTION_BREACHED),
+  met: countWhere(sql`${IS_DONE} AND NOT ${RESOLUTION_BREACHED}`),
+};
+
+type RollupRow = { total: number; open: number; done: number; breached: number; met: number };
 
 export interface ReportPeriod {
   from: Date;
@@ -512,5 +591,289 @@ export class ReportsService {
           ? `${failing.join(', ')} ຕ່ຳກວ່າເປົ້າໝາຍ — SLA 7.3 ບັງຄັບໃຫ້ຈັດທຳແຜນປັບປຸງບໍລິການ (SIP)`
           : null,
     };
+  }
+
+  // ── รายงานเรื่องแจ้งแบบกรองได้ (บริษัท / แผนก / สถานะ / รายบุคคล) ────────
+
+  /**
+   * เงื่อนไขขอบเขตของตาราง ticket — ต้องเท่ากับ TicketRepository.baseWhere ทุกข้อ
+   *
+   * เขียนซ้ำที่นี่ด้วย query builder เพราะ baseWhere เป็น private ของ repository
+   * และรายงานนี้ต้องใช้ WHERE เดียวกันกับ GROUP BY หลายมิติซึ่ง repository ไม่มีให้
+   *
+   *   1. ตัดแถวที่ถูกลบแบบ soft delete
+   *   2. จำกัดบริษัทตาม user_role_scope — company_id ที่ขอมานอกขอบเขตถูก
+   *      visibleCompanyIds ตัดทิ้งเงียบ ๆ จนเหลือเซตว่าง → `false` → ได้รายงานเปล่า
+   *      ไม่ตอบ 403 เพื่อไม่ยืนยันว่าบริษัทนั้นมีอยู่ (US-07 AC-2)
+   *   3. ผู้ที่ไม่มี ticket.read เห็นเฉพาะเรื่องที่ตนแจ้งหรือตนสร้าง
+   *   4. เหตุความปลอดภัยเห็นเฉพาะผู้เกี่ยวข้อง — แคบกว่าบริษัท (SOP-10 ข้อ 2)
+   *
+   * ⚠️ ถ้า TicketRepository.baseWhere เปลี่ยน ต้องเปลี่ยนที่นี่ด้วย
+   *    รายงานที่เห็นมากกว่าหน้ารายการคือการรั่วข้อมูลข้ามบริษัทแบบหนึ่ง
+   */
+  private ticketScopeWhere(scope: AccessScope, requestedCompanyId: number | undefined): SQL {
+    const parts: SQL[] = [isNull(ticket.deletedAt) as SQL];
+
+    const visible = scope.visibleCompanyIds(requestedCompanyId ? [requestedCompanyId] : null);
+    if (!scope.isSuperAdmin) {
+      parts.push(visible.size > 0 ? (inArray(ticket.companyId, [...visible]) as SQL) : sql`false`);
+    } else if (visible.size > 0) {
+      parts.push(inArray(ticket.companyId, [...visible]) as SQL);
+    }
+
+    if (!scope.isSuperAdmin && !scope.has('ticket.read')) {
+      parts.push(
+        or(eq(ticket.requesterId, scope.userId), eq(ticket.createdBy, scope.userId)) as SQL,
+      );
+    }
+
+    if (!scope.isSecurityIncidentViewer) {
+      parts.push(
+        or(
+          eq(ticket.isSecurityIncident, false),
+          eq(ticket.requesterId, scope.userId),
+          eq(ticket.assigneeId, scope.userId),
+          eq(ticket.incidentCommanderId, scope.userId),
+        ) as SQL,
+      );
+    }
+
+    return and(...parts) as SQL;
+  }
+
+  /**
+   * รายงานเรื่องแจ้งตามตัวกรอง — ทุกส่วนใช้ WHERE ก้อนเดียวกัน
+   *
+   * ช่วงเวลาตัดจาก created_at ("เรื่องที่แจ้งเข้ามาในช่วงนี้") ไม่ใช่ closed_at
+   * เพราะรายงานนี้กรองสถานะได้ทุกค่า รวมเรื่องที่ยังเปิดอยู่ซึ่งไม่มีวันปิด
+   *
+   * รวมยอดใน SQL ด้วย GROUP BY ทั้งหมด ไม่ดึงแถวมานับใน JS — เดือนหนึ่งของทั้ง
+   * 7 บริษัทมีหลักพันแถว และฐานข้อมูล dev อยู่คนละทวีป การดึงทั้งก้อนช้ากว่า
+   * การยิง 7 คิวรีพร้อมกันหลายเท่า
+   */
+  async ticketReport(
+    scope: AccessScope,
+    filters: TicketReportFilters,
+    period: ReportPeriod,
+  ): Promise<TicketReportDto> {
+    const parts: SQL[] = [
+      this.ticketScopeWhere(scope, filters.companyId),
+      gte(ticket.createdAt, period.from) as SQL,
+      lte(ticket.createdAt, period.to) as SQL,
+    ];
+    if (filters.departmentId) parts.push(eq(ticket.departmentId, filters.departmentId) as SQL);
+    if (filters.status.length > 0) parts.push(inArray(ticket.status, [...filters.status]) as SQL);
+    if (filters.assigneeId) parts.push(eq(ticket.assigneeId, filters.assigneeId) as SQL);
+    if (filters.requesterId) parts.push(eq(ticket.requesterId, filters.requesterId) as SQL);
+    const where = and(...parts) as SQL;
+
+    const offset = (filters.page - 1) * filters.pageSize;
+
+    const [[totals], byStatus, byPriority, byAssignee, byCompany, byDepartment, rows] =
+      await Promise.all([
+        this.db
+          .select({
+            total: sql<number>`count(*)::int`,
+            open: countWhere(IS_OPEN),
+            resolved: countWhere(sql`${ticket.status} = 'resolved'`),
+            closed: countWhere(sql`${ticket.status} = 'closed'`),
+            cancelled: countWhere(sql`${ticket.status} = 'cancelled'`),
+            breached: countWhere(RESOLUTION_BREACHED),
+            // avg ของ smallint คืน numeric ซึ่ง postgres.js ส่งมาเป็นสตริง — แปลงตอนประกอบผล
+            avgSatisfaction: sql<string | null>`avg(${ticket.satisfactionScore})`,
+            rated: sql<number>`count(${ticket.satisfactionScore})::int`,
+          })
+          .from(ticket)
+          .where(where),
+
+        this.db
+          .select({ status: ticket.status, n: count() })
+          .from(ticket)
+          .where(where)
+          .groupBy(ticket.status),
+
+        this.db
+          .select({ priority: ticket.priority, n: count() })
+          .from(ticket)
+          .where(where)
+          .groupBy(ticket.priority),
+
+        // แถวที่ assignee_id เป็น null คือเรื่องที่ยังไม่มีผู้รับผิดชอบ — ต้องคงไว้
+        // ให้ผลรวมทุกแถวเท่ากับยอดรวม มิฉะนั้นผู้อ่านจะหาว่าที่หายไปอยู่ไหน
+        this.db
+          .select({ id: ticket.assigneeId, fullName: assignee.fullName, ...ROLLUP_COLUMNS })
+          .from(ticket)
+          .leftJoin(assignee, eq(assignee.id, ticket.assigneeId))
+          .where(where)
+          .groupBy(ticket.assigneeId, assignee.fullName)
+          .orderBy(desc(sql`count(*)`), asc(assignee.fullName)),
+
+        this.db
+          .select({ id: company.id, code: company.code, nameTh: company.nameTh, ...ROLLUP_COLUMNS })
+          .from(ticket)
+          .innerJoin(company, eq(company.id, ticket.companyId))
+          .where(where)
+          .groupBy(company.id, company.code, company.nameTh)
+          .orderBy(asc(company.code)),
+
+        this.db
+          .select({
+            companyId: company.id,
+            companyCode: company.code,
+            departmentId: ticket.departmentId,
+            departmentName: department.name,
+            ...ROLLUP_COLUMNS,
+          })
+          .from(ticket)
+          .innerJoin(company, eq(company.id, ticket.companyId))
+          .leftJoin(department, eq(department.id, ticket.departmentId))
+          .where(where)
+          .groupBy(company.id, company.code, ticket.departmentId, department.name)
+          .orderBy(asc(company.code), desc(sql`count(*)`)),
+
+        this.db
+          .select({
+            id: ticket.id,
+            ticketNo: ticket.ticketNo,
+            ticketType: ticket.ticketType,
+            subject: ticket.subject,
+            status: ticket.status,
+            pendingReason: ticket.pendingReason,
+            priority: ticket.priority,
+            companyId: ticket.companyId,
+            companyCode: company.code,
+            departmentId: ticket.departmentId,
+            departmentName: department.name,
+            categoryId: ticket.categoryId,
+            categoryName: ticketCategory.nameTh,
+            requesterId: ticket.requesterId,
+            requesterName: requester.fullName,
+            assigneeId: ticket.assigneeId,
+            assigneeName: assignee.fullName,
+            createdAt: ticket.createdAt,
+            resolutionDueAt: ticket.resolutionDueAt,
+            resolvedAt: ticket.resolvedAt,
+            closedAt: ticket.closedAt,
+            breached: sql<boolean>`${RESOLUTION_BREACHED}`,
+            slaExclusionCode: ticket.slaExclusionCode,
+            satisfactionScore: ticket.satisfactionScore,
+            reopenCount: ticket.reopenCount,
+            updatedAt: ticket.updatedAt,
+          })
+          .from(ticket)
+          .innerJoin(company, eq(company.id, ticket.companyId))
+          .innerJoin(ticketCategory, eq(ticketCategory.id, ticket.categoryId))
+          .innerJoin(requester, eq(requester.id, ticket.requesterId))
+          .leftJoin(department, eq(department.id, ticket.departmentId))
+          .leftJoin(assignee, eq(assignee.id, ticket.assigneeId))
+          .where(where)
+          .orderBy(desc(ticket.createdAt), desc(ticket.id))
+          .limit(filters.pageSize)
+          .offset(offset),
+      ]);
+
+    const total = totals?.total ?? 0;
+    const breached = totals?.breached ?? 0;
+
+    const items: TicketReportItemDto[] = rows.map((r) => ({
+      id: r.id,
+      ticket_no: r.ticketNo,
+      // คอลัมน์เหล่านี้เป็น varchar ที่มี CHECK คุมค่าอยู่แล้วในฐานข้อมูล
+      // TypeScript เห็นแค่ string จึงต้องบอกชนิดที่แคบกว่าตรงนี้ — เหมือน TicketsService
+      ticket_type: r.ticketType as TicketType,
+      subject: r.subject,
+      status: r.status as TicketStatus,
+      pending_reason: r.pendingReason as PendingReason | null,
+      priority: r.priority as Priority,
+      company: { id: r.companyId, code: r.companyCode },
+      department: r.departmentId ? { id: r.departmentId, name: r.departmentName ?? '' } : null,
+      category: { id: r.categoryId, name_th: r.categoryName },
+      requester: { id: r.requesterId, full_name: r.requesterName },
+      assignee: r.assigneeId ? { id: r.assigneeId, full_name: r.assigneeName ?? '' } : null,
+      created_at: r.createdAt.toISOString(),
+      resolution_due_at: r.resolutionDueAt?.toISOString() ?? null,
+      resolved_at: r.resolvedAt?.toISOString() ?? null,
+      closed_at: r.closedAt?.toISOString() ?? null,
+      is_resolution_breached: r.breached,
+      sla_exclusion_code: r.slaExclusionCode,
+      satisfaction_score: r.satisfactionScore,
+      reopen_count: r.reopenCount,
+      updated_at: r.updatedAt.toISOString(),
+    }));
+
+    return {
+      period: { from: period.from.toISOString(), to: period.to.toISOString(), label: period.label },
+      filters: {
+        company_id: filters.companyId ?? null,
+        department_id: filters.departmentId ?? null,
+        status: filters.status,
+        assignee_id: filters.assigneeId ?? null,
+        requester_id: filters.requesterId ?? null,
+      },
+      totals: {
+        total,
+        open: totals?.open ?? 0,
+        resolved: totals?.resolved ?? 0,
+        closed: totals?.closed ?? 0,
+        cancelled: totals?.cancelled ?? 0,
+        breached,
+        breached_percent: this.percent(breached, total),
+        avg_satisfaction: this.round2(totals?.avgSatisfaction ?? null),
+        rated: totals?.rated ?? 0,
+      },
+      // ครบทุกค่าเสมอ — สถานะที่ไม่มีเรื่องเลยต้องเป็น 0 ไม่ใช่หายจากตาราง
+      by_status: TICKET_STATUS.map((s) => ({
+        status: s,
+        count: byStatus.find((r) => r.status === s)?.n ?? 0,
+      })),
+      by_priority: PRIORITY.map((p) => ({
+        priority: p,
+        count: byPriority.find((r) => r.priority === p)?.n ?? 0,
+      })),
+      by_assignee: byAssignee.map((r) => ({
+        assignee: r.id ? { id: r.id, full_name: r.fullName ?? '' } : null,
+        ...this.rollup(r),
+      })),
+      by_company: byCompany.map((r) => ({
+        company: { id: r.id, code: r.code, name_th: r.nameTh },
+        ...this.rollup(r),
+      })),
+      by_department: byDepartment.map((r) => ({
+        company: { id: r.companyId, code: r.companyCode },
+        department: r.departmentId ? { id: r.departmentId, name: r.departmentName ?? '' } : null,
+        ...this.rollup(r),
+      })),
+      tickets: {
+        items,
+        page: filters.page,
+        page_size: filters.pageSize,
+        // ใช้ยอดรวมจากคิวรีสรุปแทนการ count ซ้ำ — WHERE เดียวกัน ค่าจึงเท่ากันเสมอ
+        total,
+        total_pages: Math.max(1, Math.ceil(total / filters.pageSize)),
+      },
+    };
+  }
+
+  private rollup(r: RollupRow): TicketReportRollupDto {
+    return {
+      total: r.total,
+      open: r.open,
+      done: r.done,
+      breached: r.breached,
+      met_percent: this.percent(r.met, r.done),
+    };
+  }
+
+  /** ทศนิยม 1 ตำแหน่ง · ตัวหารเป็นศูนย์คืน null — กฎข้อ 1 ของไฟล์นี้ */
+  private percent(numerator: number, denominator: number): number | null {
+    if (denominator === 0) return null;
+    return Math.round((numerator / denominator) * 1000) / 10;
+  }
+
+  /** ปัดเป็นทศนิยม 2 ตำแหน่ง · null ผ่านทะลุไปโดยไม่กลายเป็น 0 */
+  private round2(v: unknown): number | null {
+    if (v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
   }
 }
