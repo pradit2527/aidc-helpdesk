@@ -53,7 +53,8 @@ export const TICKET_STATUS = {
     className: 'bg-st-pending-bg text-st-pending-fg',
   },
   resolved: {
-    label: 'ແກ້ໄຂແລ້ວ',
+    // "ແກ້ໄຂແລ້ວ" ຢ່າງດຽວອ່ານໄດ້ວ່າ "ແກ້ (ຂໍ້ຄວາມ) ແລ້ວ" — ເຈົ້າຂອງລະບົບຢືນຢັນວ່າຕ້ອງສື່ວ່າ "ສຳເລັດ"
+    label: 'ແກ້ໄຂສຳເລັດ',
     icon: CheckCircle2,
     className: 'bg-st-resolved-bg text-st-resolved-fg',
   },

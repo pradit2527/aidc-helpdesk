@@ -497,7 +497,15 @@ export class TicketsService {
         update: !closed && (scope.has('ticket.update') || (isOwner && row.status === 'new')),
         assign: !closed && scope.has('ticket.assign'),
         assign_self: !closed && row.assigneeId === null && scope.has('ticket.assign_self'),
-        change_status: !closed && scope.has('ticket.change_status'),
+        /*
+         * เจ้าหน้าที่ยังมีงานกับเรื่องที่ "แก้แล้ว" และ "ปิดแล้ว" — ปิดแทนผู้แจ้งที่เงียบไป
+         * หรือเปิดคืนเมื่อพบว่ายังไม่หาย จึงผูกกับรายการสถานะที่ไปต่อได้จริง
+         * ไม่ใช่ธง closed ที่นับ resolved เป็นจบแล้ว
+         *
+         * เดิมช่องเปลี่ยนสถานะหายไปทันทีที่เรื่องเป็น resolved หน้าจอจึงไปหยิบ
+         * แผงให้คะแนนของผู้แจ้งมาแสดงให้เจ้าหน้าที่แทน (ดู close_own ด้านล่าง)
+         */
+        change_status: scope.has('ticket.change_status') && availableTransitions.length > 0,
         change_priority: !closed && scope.has('ticket.change_priority'),
         request_priority_review: !closed && scope.has('ticket.request_priority_review'),
         set_workaround:
@@ -508,8 +516,17 @@ export class TicketsService {
         attach: !closed && (scope.has('ticket.attach') || isOwner),
         // สามข้อนี้อ่านจากรายการเดียวกับปุ่มเปลี่ยนสถานะ — เดิมคำนวณแยก
         // และบอกว่าผู้แจ้งยกเลิกหรือเปิดคืนได้ ทั้งที่คำสั่งจริงปฏิเสธทุกครั้ง
-        close_own: status === 'resolved' && availableTransitions.includes('closed'),
+        /*
+         * close_own กับ reopen เป็นปุ่มของผู้แจ้งเท่านั้น (docs/22-component-spec.md ตารางปุ่ม)
+         *
+         * คะแนนความพอใจที่มากับการยืนยันปิดคือ KPI-4 — ถ้าเจ้าหน้าที่เห็นแผงให้คะแนนด้วย
+         * ทีมจะให้คะแนนตัวเองได้ และตัวเลขที่รายงานผู้บริหารจะไม่มีความหมาย
+         * (use case ปฏิเสธคะแนนจากคนที่ไม่ใช่ผู้แจ้งอยู่แล้ว แต่ปุ่มไม่ควรโผล่ให้กดตั้งแต่แรก)
+         * เจ้าหน้าที่ปิดเรื่องหรือเปิดคืนผ่าน change_status ซึ่งมีสองปลายทางนี้ให้อยู่แล้ว
+         */
+        close_own: isOwner && status === 'resolved' && availableTransitions.includes('closed'),
         reopen:
+          isOwner &&
           (status === 'resolved' || status === 'closed') &&
           availableTransitions.includes('in_progress'),
         cancel: availableTransitions.includes('cancelled'),

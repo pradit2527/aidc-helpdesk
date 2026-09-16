@@ -208,7 +208,13 @@ export class TicketCanDto {
   @ApiProperty({ example: true }) update!: boolean;
   @ApiProperty({ example: false }) assign!: boolean;
   @ApiProperty({ example: false }) assign_self!: boolean;
-  @ApiProperty({ example: false }) change_status!: boolean;
+  @ApiProperty({
+    example: false,
+    description:
+      'มีสิทธิ์ ticket.change_status และ available_transitions ไม่ว่าง — ' +
+      'รวมเรื่องที่ resolved/closed ซึ่งเจ้าหน้าที่ยังปิดแทนหรือเปิดคืนได้',
+  })
+  change_status!: boolean;
   @ApiProperty({ example: false }) change_priority!: boolean;
   @ApiProperty({ example: true }) request_priority_review!: boolean;
   @ApiProperty({ example: false }) set_workaround!: boolean;
@@ -216,8 +222,18 @@ export class TicketCanDto {
   @ApiProperty({ example: true }) comment!: boolean;
   @ApiProperty({ example: false }) comment_internal!: boolean;
   @ApiProperty({ example: true }) attach!: boolean;
-  @ApiProperty({ example: false }) close_own!: boolean;
-  @ApiProperty({ example: false }) reopen!: boolean;
+  @ApiProperty({
+    example: false,
+    description:
+      'ผู้แจ้งเท่านั้น — ยืนยันปิดเรื่องที่ resolved พร้อมให้คะแนนความพอใจ (KPI-4) ' +
+      'เจ้าหน้าที่ปิดแทนผ่าน change_status โดยไม่มีคะแนน',
+  })
+  close_own!: boolean;
+  @ApiProperty({
+    example: false,
+    description: 'ผู้แจ้งเท่านั้น — เปิดเรื่องคืนภายใน 7 วันหลังปิด เจ้าหน้าที่ใช้ change_status',
+  })
+  reopen!: boolean;
   @ApiProperty({ example: true }) cancel!: boolean;
   @ApiProperty({ example: false }) delete!: boolean;
   @ApiProperty({ example: true }) view_history!: boolean;

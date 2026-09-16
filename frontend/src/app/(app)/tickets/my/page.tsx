@@ -22,14 +22,19 @@ type MyTab = 'open' | 'waiting' | 'done' | 'all';
  */
 const TAB_FILTER: Record<MyTab, TicketListParams> = {
   open: { requester_id: 'me', status: 'new,assigned,in_progress' },
-  waiting: { requester_id: 'me', status: 'pending_user' },
-  done: { requester_id: 'me', status: 'resolved,closed,cancelled' },
+  /*
+   * "แก้ไขสำเร็จ" (resolved) อยู่แท็บนี้ ไม่ใช่แท็บ "จบแล้ว" — เรื่องยังไม่จบจนกว่า
+   * ผู้แจ้งจะยืนยันปิดพร้อมให้คะแนน หรือเปิดคืนถ้ายังไม่หาย ทั้งสองอย่างเป็นงานของ
+   * ผู้แจ้ง เหมือนกับตอนเจ้าหน้าที่รอข้อมูลเพิ่ม (pending_user)
+   */
+  waiting: { requester_id: 'me', status: 'pending_user,resolved' },
+  done: { requester_id: 'me', status: 'closed,cancelled' },
   all: { requester_id: 'me' },
 };
 
 const TAB_LABEL: Record<MyTab, string> = {
   open: 'ກຳລັງດຳເນີນການ',
-  waiting: 'ລໍຖ້າຂ້ອຍຕອບ',
+  waiting: 'ລໍຖ້າຂ້ອຍຕອບ / ຢືນຢັນ',
   done: 'ຈົບແລ້ວ',
   all: 'ທັງໝົດ',
 };

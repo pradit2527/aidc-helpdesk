@@ -14,6 +14,12 @@ import * as React from 'react';
 import { toast } from 'sonner';
 
 import { PriorityBadge, SlaBadge, StatusBadge } from '@/components/common/badges';
+import {
+  CloseOwnTicket,
+  MIN_REOPEN_REASON,
+  ReopenTicket,
+  toastApiError,
+} from '@/components/tickets/owner-actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Select, Textarea } from '@/components/ui/field';
@@ -427,13 +433,6 @@ function History({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   );
 }
 
-/** ข้อความผิดพลาดจากเซิร์ฟเวอร์ตรง ๆ — "บันทึกไม่สำเร็จ" เฉย ๆ ทำให้ต้องเดาว่าช่องไหนผิด */
-function toastApiError(error: unknown, fallback: string): Record<string, string> | undefined {
-  const apiError = error instanceof ApiError ? error : null;
-  toast.error(apiError?.message ?? fallback);
-  return apiError?.fields;
-}
-
 function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   const can = ticket.can;
   const { user } = useSession();
@@ -511,16 +510,21 @@ function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
           </Button>
         )}
 
-        {/* เจ้าหน้าที่ปิดและเปิดคืนผ่านช่องเปลี่ยนสถานะอยู่แล้ว — ปุ่มสองอันนี้สำหรับผู้แจ้ง */}
-        {can.close_own && !can.change_status && <CloseOwnTicket ticket={ticket} />}
-        {can.reopen && !can.change_status && <ReopenTicket ticket={ticket} />}
+        {/*
+          แผงให้คะแนนและปุ่มเปิดคืนเป็นของผู้แจ้ง — backend ส่ง close_own / reopen มาให้
+          เฉพาะผู้แจ้งอยู่แล้ว หน้านี้จึงไม่ต้องเดาเองจาก change_status อีก
+          (เดิมเดาว่า "ไม่มีช่องเปลี่ยนสถานะ = เป็นผู้แจ้ง" แล้วเจ้าหน้าที่เลยเห็นแผงให้คะแนน
+          ตอนเรื่องเป็น resolved เพราะช่องเปลี่ยนสถานะหายไปพอดี)
+          เจ้าหน้าที่ปิดเรื่องหรือเปิดคืนผ่านช่องเปลี่ยนสถานะด้านบน
+        */}
+        {can.close_own && <CloseOwnTicket ticketId={ticket.id} />}
+        {can.reopen && <ReopenTicket ticketId={ticket.id} />}
       </CardBody>
     </Card>
   );
 }
 
 const MIN_REASON: Partial<Record<TicketStatus, number>> = { pending_user: 10, cancelled: 5 };
-const MIN_REOPEN_REASON = 10;
 const MIN_RESOLUTION_NOTE = 15;
 
 /**
@@ -670,108 +674,10 @@ function StatusChanger({ ticket }: { ticket: TicketDetail }): React.JSX.Element 
   );
 }
 
-/** ผู้แจ้งยืนยันว่าแก้แล้วจริง พร้อมให้คะแนน (ไม่บังคับ) — คะแนนเป็นตัวตั้งของ KPI-4 */
-function CloseOwnTicket({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
-  const changeStatus = useChangeTicketStatus();
-  const [score, setScore] = React.useState<number | null>(null);
-
-  return (
-    <div className="space-y-2 rounded border border-hair p-3">
-      <p className="text-body-sm font-semibold text-ink">ບັນຫາຖືກແກ້ແລ້ວແທ້ບໍ?</p>
-      <div className="flex gap-1" role="radiogroup" aria-label="ຄະແນນຄວາມພໍໃຈ">
-        {[1, 2, 3, 4, 5].map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={score === value}
-            onClick={() => setScore(score === value ? null : value)}
-            className={cn(
-              'tabular grid h-9 flex-1 place-items-center rounded border text-body-sm font-semibold transition-colors',
-              score !== null && value <= score
-                ? 'border-primary bg-primary-subtle text-primary'
-                : 'border-control text-ink-2 hover:border-primary',
-            )}
-          >
-            {value}
-          </button>
-        ))}
-      </div>
-      <p className="text-caption text-ink-3">ໃຫ້ຄະແນນ 1–5 (ບໍ່ບັງຄັບ)</p>
-      <Button
-        className="w-full"
-        loading={changeStatus.isPending}
-        onClick={() =>
-          changeStatus.mutate(
-            { id: ticket.id, to_status: 'closed', ...(score !== null ? { satisfaction_score: score } : {}) },
-            {
-              onSuccess: () => toast.success('ປິດເລື່ອງແລ້ວ ຂອບໃຈຫຼາຍ'),
-              onError: (error) => void toastApiError(error, 'ປິດເລື່ອງບໍ່ສຳເລັດ'),
-            },
-          )
-        }
-      >
-        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-        ຢືນຢັນປິດເລື່ອງ
-      </Button>
-    </div>
-  );
-}
-
-/** ผู้แจ้งเปิดเรื่องคืน (ภายใน 7 วันหลังปิด) — ต้องบอกว่ายังพบปัญหาอะไร */
-function ReopenTicket({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
-  const changeStatus = useChangeTicketStatus();
-  const [open, setOpen] = React.useState(false);
-  const [reason, setReason] = React.useState('');
-  const [error, setError] = React.useState<string | undefined>();
-
-  if (!open) {
-    return (
-      <Button variant="secondary" className="w-full" onClick={() => setOpen(true)}>
-        ເປີດເລື່ອງຄືນ
-      </Button>
-    );
-  }
-
-  return (
-    <form
-      className="space-y-2"
-      noValidate
-      onSubmit={(event) => {
-        event.preventDefault();
-        changeStatus.mutate(
-          { id: ticket.id, to_status: 'in_progress', reason: reason.trim() },
-          {
-            onSuccess: () => {
-              toast.success('ເປີດເລື່ອງຄືນແລ້ວ ທີມງານຈະກວດສອບອີກຄັ້ງ');
-              setOpen(false);
-              setReason('');
-            },
-            onError: (err) => setError(toastApiError(err, 'ເປີດເລື່ອງຄືນບໍ່ສຳເລັດ')?.reason),
-          },
-        );
-      }}
-    >
-      <Field
-        label="ຍັງພົບບັນຫາຫຍັງ"
-        htmlFor="reopen-reason"
-        required
-        error={error}
-        hint={`ຢ່າງໜ້ອຍ ${MIN_REOPEN_REASON} ຕົວອັກສອນ`}
-      >
-        <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
-      </Field>
-      <div className="flex gap-2">
-        <Button type="submit" className="flex-1" loading={changeStatus.isPending}>
-          ຢືນຢັນເປີດຄືນ
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-          ຍົກເລີກ
-        </Button>
-      </div>
-    </form>
-  );
-}
+/*
+ * CloseOwnTicket กับ ReopenTicket (ปุ่มของผู้แจ้ง) ย้ายไป components/tickets/owner-actions.tsx
+ * เพราะหน้าประวัติการแจ้งใช้ตัวเดียวกัน — ผู้แจ้งให้คะแนนและยืนยันปิดจากหน้านั้นได้ด้วย
+ */
 
 function DetailsPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   return (
