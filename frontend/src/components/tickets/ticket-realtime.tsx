@@ -1,6 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import { toast } from 'sonner';
 
@@ -17,6 +18,7 @@ import { useTicketUpdates, type TicketUpdatedEvent } from '@/lib/ws';
  */
 export function TicketRealtime(): null {
   const qc = useQueryClient();
+  const router = useRouter();
   const { user } = useSession();
 
   const onUpdate = React.useCallback(
@@ -33,8 +35,25 @@ export function TicketRealtime(): null {
         const label = TICKET_STATUS[event.status]?.label ?? event.status;
         toast.info(`ເລື່ອງ ${event.ticket_no ?? ''} ປ່ຽນສະຖານະເປັນ “${label}”`);
       }
+
+      /*
+       * ถูกหัวหน้ามอบหมายงานให้
+       *
+       * ต้องรู้ทันทีแม้กำลังทำอย่างอื่นอยู่ เพราะนาฬิกา SLA ของเรื่องเดินอยู่แล้ว
+       * ตั้งแต่ตอนแจ้ง ไม่ได้เริ่มนับตอนที่ผู้รับเปิดคิวมาเห็นเอง
+       *
+       * ไม่เตือนตอนกดรับงานเอง (actor_id === ตนเอง) — คนที่เพิ่งกดรู้อยู่แล้ว
+       */
+      if (!bySelf && event.kind === 'assign' && event.assignee_id === user.id) {
+        toast.info(`ທ່ານໄດ້ຮັບມອບໝາຍ ${event.ticket_no ?? ''}`.trim(), {
+          action: {
+            label: 'ເປີດເລື່ອງ',
+            onClick: () => router.push(`/tickets/${event.ticket_id}`),
+          },
+        });
+      }
     },
-    [qc, user.id],
+    [qc, router, user.id],
   );
 
   useTicketUpdates(onUpdate);

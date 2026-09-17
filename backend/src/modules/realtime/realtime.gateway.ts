@@ -60,6 +60,13 @@ export interface TicketUpdateTarget {
   companyId: number;
   requesterId: number;
   assigneeId: number | null;
+  /**
+   * ผู้รับผิดชอบคนก่อน กรณีเพิ่งเปลี่ยนมือ
+   *
+   * ต้องส่งสัญญาณถึงเขาด้วย มิฉะนั้นคิวงานของคนที่เพิ่งถูกดึงเรื่องออกจากมือ
+   * จะยังแสดงเรื่องนั้นค้างอยู่จนกว่าจะถึงรอบ refetch ถัดไป
+   */
+  previousAssigneeId?: number | null;
   isSecurityIncident: boolean;
   actorId: number;
   kind: TicketUpdateKind;
@@ -160,16 +167,26 @@ export class RealtimeGateway {
   ticketUpdated(target: TicketUpdateTarget): void {
     if (!this.server) return;
 
+    const previous = target.previousAssigneeId ?? null;
     const personal = [
       `ticket:${target.ticketId}`,
       `user:${target.requesterId}`,
       ...(target.assigneeId !== null ? [`user:${target.assigneeId}`] : []),
+      // คนที่เพิ่งถูกดึงเรื่องออกจากมือ — ต้องได้สัญญาณเหมือนกัน (ห้องซ้ำ socket.io ตัดให้เอง)
+      ...(previous !== null && previous !== target.assigneeId ? [`user:${previous}`] : []),
     ];
     this.server.to(personal).emit('ticket:updated', {
       ticket_id: target.ticketId,
       ticket_no: target.ticketNo,
       status: target.status,
       requester_id: target.requesterId,
+      /*
+       * ผู้รับผิดชอบคนปัจจุบัน — หน้าจอเทียบกับ id ของตัวเองแล้วขึ้นข้อความ
+       * "คุณได้รับมอบหมายเรื่องนี้" ได้ทันที โดยไม่ต้องยิง REST ก่อนหนึ่งรอบ
+       *
+       * ⚠️ ส่งเฉพาะห้องส่วนตัว — ห้องทีมไอทีทั้งบริษัทได้แค่ id เหมือนเดิม
+       */
+      assignee_id: target.assigneeId,
       actor_id: target.actorId,
       kind: target.kind,
     });

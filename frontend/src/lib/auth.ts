@@ -24,6 +24,14 @@ interface ApiUser {
   roles: string[];
   scoped_companies: { id: number; code: string; name_th?: string }[];
   permissions: string[];
+  /**
+   * ทีมที่ผู้ใช้เป็นหัวหน้า
+   *
+   * เผื่อ undefined ไว้โดยตั้งใจ — เซิร์ฟเวอร์รุ่นก่อนหน้ายังไม่ส่งฟิลด์นี้
+   * ถ้าประกาศเป็นบังคับ หน้าจอจะพังทั้งแอปตอนอ่าน .length จาก undefined
+   * แทนที่จะแค่ไม่แสดงป้ายหัวหน้าทีม
+   */
+  led_teams?: { id: number; name: string }[];
 }
 
 interface LoginResponse {
@@ -51,6 +59,7 @@ function toSessionUser(user: ApiUser, mustChangePassword: boolean): SessionUser 
     roles: user.roles as SessionUser['roles'],
     scoped_companies: user.scoped_companies,
     permissions: user.permissions,
+    led_teams: user.led_teams ?? [],
     must_change_password: mustChangePassword,
     /*
      * backend ยังไม่มี endpoint แจ้งเตือน จึงยังไม่ส่งจำนวนที่ยังไม่อ่านมา

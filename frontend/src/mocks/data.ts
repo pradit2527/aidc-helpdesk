@@ -70,6 +70,8 @@ export const SESSION: SessionUser = {
   permissions: [],
   must_change_password: false,
   unread_notifications: 5,
+  /** เป็นหัวหน้าทีมไอทีของ AIDC-LOG — ใช้ทดสอบปุ่มมอบหมายงานให้คนในทีม */
+  led_teams: [{ id: 1, name: 'ທີມໄອທີ AIDC-LOG' }],
 };
 
 // ── เรื่องแจ้ง ─────────────────────────────────────────────────────────

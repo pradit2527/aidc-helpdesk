@@ -25,9 +25,20 @@ export interface TicketListFilter {
   requesterId?: number | undefined;
   unassigned?: boolean;
   q?: string | undefined;
+  /** ลำดับของรายการ — ไม่ระบุ = แก้ไขล่าสุดก่อน (ดู TicketRepository.list) */
+  sort?: TicketListSort | undefined;
   page: number;
   pageSize: number;
 }
+
+/**
+ * ลำดับที่รายการเรื่องรองรับ — ใหม่สุดอยู่บนเสมอทั้งสามแบบ
+ *
+ *   updated  แก้ไขล่าสุด (ค่าเริ่มต้น)
+ *   created  แจ้งเข้ามาล่าสุด — คิว "ยังไม่มีคนรับ" ของหัวหน้าทีม
+ *   assigned ถูกมอบหมายให้ผู้รับผิดชอบคนปัจจุบันล่าสุด — คิว "งานของฉัน" ของเจ้าหน้าที่
+ */
+export type TicketListSort = 'updated' | 'created' | 'assigned';
 
 /**
  * แถวดิบจากฐานข้อมูล

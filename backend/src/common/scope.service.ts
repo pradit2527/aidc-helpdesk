@@ -9,6 +9,8 @@ import {
   permission,
   role,
   rolePermission,
+  supportTeam,
+  supportTeamMember,
   userRole,
   userRoleScope,
 } from '../db/schema';
@@ -118,15 +120,15 @@ export class ScopeService {
     const activeRole = or(isNull(userRole.expiresAt), gt(userRole.expiresAt, now));
 
     /*
-     * ยิงทั้งสี่คิวรีพร้อมกัน ไม่ใช่ทีละตัว
+     * ยิงทั้งห้าคิวรีพร้อมกัน ไม่ใช่ทีละตัว
      *
-     * ทั้งสี่ตัวไม่ได้พึ่งผลของกันเลย บนฐานข้อมูลที่อยู่ไกล (~250 ms ต่อรอบ)
-     * สี่รอบเรียงกันคือราว 1 วินาที ส่วนยิงพร้อมกันเหลือราวรอบเดียว
+     * ทั้งห้าตัวไม่ได้พึ่งผลของกันเลย บนฐานข้อมูลที่อยู่ไกล (~250 ms ต่อรอบ)
+     * ห้ารอบเรียงกันคือราวหนึ่งวินาทีกว่า ส่วนยิงพร้อมกันเหลือราวรอบเดียว
      *
      * ⚠️ ยังตรวจบัญชีที่ใช้งานไม่ได้ก่อนคืนค่าเหมือนเดิม ถ้าบัญชีถูกปิด ผลของ
-     *    อีกสามคิวรีถูกทิ้งไปโดยไม่เคยถูกใช้ และไม่ถูกเก็บลงแคช
+     *    อีกสี่คิวรีถูกทิ้งไปโดยไม่เคยถูกใช้ และไม่ถูกเก็บลงแคช
      */
-    const [[user], rows, scopeRows, contactRows] = await Promise.all([
+    const [[user], rows, scopeRows, contactRows, teamRows] = await Promise.all([
       this.db
         .select({
           id: appUser.id,
@@ -157,6 +159,20 @@ export class ScopeService {
         .select({ key: escalationContact.contactKey })
         .from(escalationContact)
         .where(and(eq(escalationContact.userId, userId), eq(escalationContact.isActive, true))),
+      /*
+       * ทีมที่สังกัด — เอามาพร้อมกันตรงนี้ ไม่ใช่ถามตอนที่ต้องใช้
+       *
+       * "เป็นหัวหน้าทีมไหนบ้าง" ถูกใช้ในทุกคำขอที่แสดงบล็อก can ของ ticket
+       * ถ้าถามตอนนั้นจะเป็นอีกหนึ่งรอบเครือข่าย (~250 ms) ต่อการเปิดเรื่องหนึ่งใบ
+       * ส่วนตรงนี้ไม่เพิ่มเวลาเลยเพราะวิ่งขนานไปกับอีกสี่คิวรีที่มีอยู่แล้ว
+       *
+       * ⚠️ ทีมที่ปิดใช้งานแล้วต้องไม่นับ — หัวหน้าทีมที่ถูกยุบต้องหมดอำนาจทันที
+       */
+      this.db
+        .select({ id: supportTeam.id, name: supportTeam.name, isLead: supportTeamMember.isLead })
+        .from(supportTeamMember)
+        .innerJoin(supportTeam, eq(supportTeam.id, supportTeamMember.teamId))
+        .where(and(eq(supportTeamMember.userId, userId), eq(supportTeam.isActive, true))),
     ]);
 
     if (!user || !user.isActive || user.deletedAt !== null) {
@@ -183,6 +199,7 @@ export class ScopeService {
         isSuperAdmin,
         contactKeys: contactRows.map((r) => r.key),
         roleCodes,
+        teams: [...teamRows].sort((a, b) => a.name.localeCompare(b.name)),
       }),
       tokenVersion: user.tokenVersion,
       expiresAt: Date.now() + SCOPE_TTL_MS,

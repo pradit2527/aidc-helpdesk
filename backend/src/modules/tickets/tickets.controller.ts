@@ -81,7 +81,14 @@ export class TicketsController {
   @ApiQuery({ name: 'company_id', required: false, type: Number })
   @ApiQuery({ name: 'assignee_id', required: false, type: Number })
   @ApiQuery({ name: 'q', required: false, description: 'ค้นจากเลขที่ หัวข้อ หรือรายละเอียด' })
-  @ApiQuery({ name: 'sort', required: false, example: '-priority,resolution_due_at' })
+  @ApiQuery({
+    name: 'sort',
+    required: false,
+    enum: ['-updated_at', '-created_at', '-assigned_at'],
+    description:
+      'ใหม่สุดอยู่บนเสมอ · `-updated_at` แก้ไขล่าสุด (ค่าเริ่มต้น) · `-created_at` แจ้งเข้ามาล่าสุด · ' +
+      '`-assigned_at` ถูกมอบหมายให้ผู้รับผิดชอบคนปัจจุบันล่าสุด (คิวงานของฉัน) · ค่าอื่นถูกเพิกเฉย',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'page_size', required: false, type: Number, example: 20 })
   @ApiEnvelopePage(TicketListItemDto, {
@@ -188,8 +195,22 @@ export class TicketsController {
   @ApiOperation({
     summary: 'ผู้ที่มอบหมายเรื่องนี้ให้ได้',
     description: [
-      'เฉพาะผู้ที่ถือสิทธิ์ทำงานกับเรื่อง และบริษัทของเรื่องอยู่ในขอบเขตของเขา',
-      'ผู้เรียกเองอยู่บนสุดเสมอ (`is_me`) · ต้องมีสิทธิ์ `ticket.assign`',
+      'คืนเฉพาะคนที่ผู้เรียก **มอบหมายให้ได้จริง** ไม่ใช่ทุกคนที่มีสิทธิ์รับเรื่อง —',
+      'กติกาชุดเดียวกับที่ `POST /tickets/{id}/assign` ตัดสิน จึงไม่มีชื่อที่เลือกแล้วถูกปฏิเสธ',
+      '',
+      '| ผู้เรียก | เห็นใคร |',
+      '|---|---|',
+      '| `user.assign_role` (company_admin / super_admin) | ทุกคนที่รับเรื่องของบริษัทนี้ได้ |',
+      '| หัวหน้าทีม (`is_lead` ในทีมที่เปิดใช้งาน) | สมาชิกในทีมของตน ∩ คนที่รับเรื่องนี้ได้ + ตัวเอง |',
+      '| เจ้าหน้าที่อื่น | ตัวเองคนเดียว (สำหรับปุ่ม "รับงานเอง") |',
+      '',
+      'ต้องมีสิทธิ์ `ticket.assign` หรือ `ticket.assign_self`',
+      '',
+      '- `is_me` ผู้เรียกเอง — อยู่บนสุดเสมอ จากนั้นเรียงคนที่งานค้างน้อยที่สุดก่อน',
+      '- `team` ทีมที่ทำให้คนนี้อยู่ในรายการ · `null` = ยังไม่ได้อยู่ทีมใด',
+      '- `is_lead` เป็นหัวหน้าของทีมที่แสดงในช่อง `team`',
+      '- `open_tickets` เรื่องที่ยังอยู่ในมือ (`new` / `assigned` / `in_progress` / `pending_user`)',
+      '  นับข้ามบริษัท เพราะเป็นภาระจริงของคนคนนั้น',
     ].join('\n'),
   })
   @ApiParam({ name: 'id', example: 1042 })
@@ -205,7 +226,17 @@ export class TicketsController {
   @ApiOperation({
     summary: 'มอบหมายผู้รับผิดชอบ หรือรับงานเอง',
     description: [
-      '- รับเอง (`assignee_id` = ตัวเอง) ต้องมี `ticket.assign_self` · มอบให้คนอื่นต้องมี `ticket.assign`',
+      '- รับเอง (`assignee_id` = ตัวเอง) ต้องมี `ticket.assign_self` — กติกาเดิม ไม่เปลี่ยน',
+      '- **มอบให้คนอื่น** ต้องมี `ticket.assign` **และ** อย่างใดอย่างหนึ่ง',
+      '  - ระดับผู้ดูแล (`user.assign_role`) → มอบให้ใครก็ได้ที่รับเรื่องของบริษัทนี้ได้',
+      '  - เป็นหัวหน้าทีม (`is_lead` ในทีมที่เปิดใช้งาน) → มอบให้สมาชิกในทีมของตนเท่านั้น',
+      '',
+      '  มิฉะนั้นตอบ `403 NOT_TEAM_LEAD` · เป็นหัวหน้าจริงแต่เลือกคนนอกทีม ตอบ',
+      '  `422 ASSIGNEE_NOT_IN_TEAM` (field `assignee_id`)',
+      '',
+      '  ⚠️ `ticket.assign` อย่างเดียวไม่พอแล้ว — เจ้าหน้าที่ทุกคนถือสิทธิ์นี้อยู่',
+      '  ตัวที่แยกหัวหน้าออกจากลูกทีมคือข้อมูลทีม ไม่ใช่ role หรือ permission ใหม่',
+      '',
       '- ผู้รับต้องอยู่ในรายการ `GET /tickets/{id}/assignees` มิฉะนั้นตอบ `422 ASSIGNEE_NOT_ELIGIBLE`',
       '- เรื่องที่เป็น `new` ขยับเป็น `assigned` ในคำสั่งเดียวกัน สถานะอื่นคงเดิม',
       '- เรื่องที่แก้แล้ว / ปิดแล้ว / ยกเลิกแล้ว ตอบ `409 TICKET_NOT_ASSIGNABLE`',
@@ -216,10 +247,16 @@ export class TicketsController {
   @ApiParam({ name: 'id', example: 1042 })
   @ApiBody({ type: AssignTicketDto })
   @ApiEnvelope(TicketDetailDto)
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'NOT_TEAM_LEAD' })
   @ApiResponse({
     status: 409,
     type: ErrorResponseDto,
     description: 'TICKET_NOT_ASSIGNABLE · TICKET_ASSIGNEE_UNCHANGED',
+  })
+  @ApiResponse({
+    status: 422,
+    type: ErrorResponseDto,
+    description: 'ASSIGNEE_NOT_ELIGIBLE · ASSIGNEE_NOT_IN_TEAM',
   })
   assign(
     @CurrentScope() scope: AccessScope,

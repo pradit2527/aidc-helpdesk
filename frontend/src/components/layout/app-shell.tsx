@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, ChevronRight, LogOut, Menu, Plus, Search, X } from 'lucide-react';
+import { Bell, ChevronRight, Crown, LogOut, Menu, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
 
 import { AssistantLauncher } from '@/components/assistant/assistant-launcher';
@@ -254,6 +254,23 @@ function Sidebar({
                 <span className="side-role-chip inline-flex flex-none items-center rounded-full px-2 py-px text-[11px] font-semibold leading-5">
                   {t(ROLE_LABEL_KEY[primaryRole(user.roles)])}
                 </span>
+                {/*
+                  หัวหน้าทีมไม่ใช่บทบาทในตาราง role แต่เป็นสิ่งที่เปลี่ยนสิ่งที่ผู้ใช้ทำได้จริง
+                  (มอบหมายงานให้คนในทีม) จึงต้องเห็นว่าตัวเองถืออยู่
+
+                  เป็นไอคอนอย่างเดียวเพราะการ์ดกว้างแค่ 264px และมีป้ายบทบาท
+                  กับรหัสบริษัทอยู่แล้ว การใส่ข้อความเต็มจะดันรหัสบริษัทตกบรรทัด
+                  ข้อความเต็มอยู่ใน title และใน sr-only สำหรับโปรแกรมอ่านหน้าจอ
+                */}
+                {user.led_teams.length > 0 && (
+                  <span
+                    className="side-role-chip inline-flex flex-none items-center rounded-full px-1.5 py-px leading-5"
+                    title={t('role.teamLead')}
+                  >
+                    <Crown className="h-3 w-3" aria-hidden="true" />
+                    <span className="sr-only">{t('role.teamLead')}</span>
+                  </span>
+                )}
                 {/* บริษัทต้นสังกัด — พนักงาน 7 บริษัทใช้ระบบเดียวกัน ต้องรู้ว่ากำลังแจ้งในนามบริษัทไหน */}
                 <span className="truncate text-caption text-[color:var(--side-ink-3)]">{user.company.code}</span>
               </span>

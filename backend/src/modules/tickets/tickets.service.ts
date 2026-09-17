@@ -14,10 +14,12 @@ import { SlaConfigRepository } from '../../db/repositories/sla-config.repository
 import { TicketDetailRepository } from '../../db/repositories/ticket-detail.repository';
 import { TicketRepository, type TicketRow } from '../../db/repositories/ticket.repository';
 import { TicketWriteRepository } from '../../db/repositories/ticket-write.repository';
+import { SupportTeamRepository } from '../../db/repositories/support-team.repository';
 import {
   actorMayTransition,
   allowedTransitionsFrom,
   isWithinReopenWindow,
+  mayAssignToOthers,
 } from '../../domain/ticket/ticket.entity';
 import { ForbiddenError, ValidationError } from '../../common/errors/domain-error';
 import {
@@ -70,6 +72,7 @@ export class TicketsService {
     private readonly superwork: SuperworkService,
     private readonly realtime: RealtimeGateway,
     private readonly master: MasterDataService,
+    private readonly teams: SupportTeamRepository,
   ) {}
 
   async list(scope: AccessScope, query: Record<string, string>): Promise<TicketListResponseDto> {
@@ -85,6 +88,13 @@ export class TicketsService {
       requesterId: query.requester_id === 'me' ? scope.userId : undefined,
       unassigned: query.unassigned === 'true',
       q: query.q,
+      // รับเฉพาะค่าที่รู้จัก ค่าอื่นถือว่าไม่ได้ส่ง — ไม่เอาข้อความจาก query ไปต่อเป็น ORDER BY
+      sort:
+        query.sort === '-assigned_at'
+          ? ('assigned' as const)
+          : query.sort === '-created_at'
+            ? ('created' as const)
+            : ('updated' as const),
     };
 
     const wanted = query.sla_status?.split(',').filter(Boolean);
@@ -297,13 +307,14 @@ export class TicketsService {
 
   /** มอบหมายผู้รับผิดชอบ หรือรับงานเอง (POST /tickets/{id}/assign) */
   async assign(scope: AccessScope, id: number, dto: AssignTicketDto): Promise<TicketDetailDto> {
-    await this.assignTicket.execute(scope, id, {
+    const { fromAssigneeId } = await this.assignTicket.execute(scope, id, {
       assigneeId: dto.assignee_id,
       comment: dto.comment,
       reason: dto.reason,
     });
     const ticket = await this.detail(scope, id);
-    this.announce(ticket, scope.userId, 'assign');
+    // ผู้รับผิดชอบคนเดิมต้องได้สัญญาณด้วย คิวงานของเขาเพิ่งหายไปหนึ่งเรื่อง
+    this.announce(ticket, scope.userId, 'assign', fromAssigneeId);
     return ticket;
   }
 
@@ -312,7 +323,12 @@ export class TicketsService {
    *
    * ใช้ค่าจาก detail ที่อ่านหลังเขียน ผู้รับผิดชอบคนใหม่ (กรณีมอบหมาย) จึงได้สัญญาณด้วย
    */
-  private announce(ticket: TicketDetailDto, actorId: number, kind: TicketUpdateKind): void {
+  private announce(
+    ticket: TicketDetailDto,
+    actorId: number,
+    kind: TicketUpdateKind,
+    previousAssigneeId: number | null = null,
+  ): void {
     this.realtime.ticketUpdated({
       ticketId: ticket.id,
       ticketNo: ticket.ticket_no,
@@ -320,6 +336,7 @@ export class TicketsService {
       companyId: ticket.company.id,
       requesterId: ticket.requester.id,
       assigneeId: ticket.assignee?.id ?? null,
+      previousAssigneeId,
       isSecurityIncident: ticket.is_security_incident,
       actorId,
       kind,
@@ -332,15 +349,87 @@ export class TicketsService {
    * ผูกกับเรื่อง ไม่ใช่รายชื่อผู้ใช้ทั่วไป เพราะคำตอบขึ้นกับบริษัทของเรื่อง —
    * เจ้าหน้าที่ที่ดูแลบริษัท ก. รับเรื่องของบริษัท ข. ไม่ได้ ถ้าให้หน้าจอกรองเอง
    * จากรายชื่อทั้งหมด กติกาขอบเขตจะต้องถูกเขียนซ้ำอีกชุดที่ฝั่ง frontend
+   *
+   * ⚠️ คืนเฉพาะคนที่ผู้เรียก "มอบหมายให้ได้จริง" ไม่ใช่ทุกคนที่มีสิทธิ์รับเรื่อง
+   *    รายการนี้คือสิ่งที่หน้าจอเอาไปทำเป็นตัวเลือก ถ้ากว้างกว่าที่คำสั่งจริงยอมรับ
+   *    ผู้ใช้จะเลือกชื่อที่ถูกปฏิเสธทุกครั้งที่กด — กติกาต้องเป็นชุดเดียวกัน
+   *
+   *   - หัวหน้าทีม → สมาชิกในทีมที่ตนเป็นหัวหน้า ∩ คนที่รับเรื่องนี้ได้ (+ ตัวเอง)
+   *                  ใช้กับหัวหน้าที่เป็นผู้ดูแลด้วย — เจ้าของระบบสั่งให้หัวหน้าทีมเห็น
+   *                  "ลูกทีมของตัวเอง" ไม่ใช่ทุกบัญชีที่รับเรื่องได้ (รวมบัญชีเดโม/ผู้ดูแลอื่น)
+   *   - ผู้ดูแลที่ไม่ได้เป็นหัวหน้าทีมไหน → คนที่อยู่ในทีมใดทีมหนึ่ง ∩ คนที่รับเรื่องนี้ได้
+   *                  ถ้ายังไม่มีใครถูกจัดเข้าทีมเลย ถอยไปแสดงทุกคนที่รับเรื่องได้
+   *                  ไม่งั้นบริษัทที่ยังไม่ตั้งทีมจะมอบหมายใครไม่ได้เลย
+   *   - คนอื่น    → ตัวเองคนเดียว (สำหรับปุ่ม "รับงานเอง")
+   *
+   *   รายการนี้ "แคบกว่า" สิ่งที่คำสั่งมอบหมายยอมรับได้สำหรับผู้ดูแล (ผู้ดูแลยังมอบให้ใคร
+   *   ก็ได้ที่รับเรื่องได้ผ่าน API) แต่ไม่มีวันกว้างกว่า จึงไม่มีตัวเลือกที่กดแล้วถูกปฏิเสธ
    */
   async assignees(scope: AccessScope, id: number): Promise<TicketAssigneeDto[]> {
     const row = await this.tickets.findById(scope, id);
-    scope.require('ticket.assign');
+    scope.require('ticket.assign', 'ticket.assign_self');
 
-    const users = await this.tickets.assignableUsers(row.companyId);
-    return users
-      .map((u) => ({ id: u.id, full_name: u.fullName, is_me: u.id === scope.userId }))
-      .sort((a, b) => Number(b.is_me) - Number(a.is_me));
+    const eligible = await this.tickets.assignableUsers(row.companyId);
+
+    const mayAssignOthers = mayAssignToOthers({
+      canAssign: scope.has('ticket.assign'),
+      isAdminLevel: scope.isAdminLevel,
+      ledTeamIds: [...scope.ledTeamIds],
+    });
+
+    const visible = mayAssignOthers
+      ? eligible
+      : eligible.filter((u) => u.id === scope.userId);
+
+    /*
+     * ทีมของทุกคนในรายการ และจำนวนงานค้างของทุกคน อ่านคนละคิวรีแต่ยิงพร้อมกัน
+     * ทั้งคู่ต้องรู้รายชื่อก่อน จึงยิงหลัง assignableUsers ไม่ใช่พร้อมกับมัน
+     */
+    const ids = visible.map((u) => u.id);
+    const [teamsByUser, openCounts] = await Promise.all([
+      this.teams.activeTeamsOfUsers(ids),
+      this.tickets.openTicketCounts(ids),
+    ]);
+
+    const ledTeamIds = scope.ledTeamIds;
+    // เป็นหัวหน้าทีม = เห็นเฉพาะทีมตัวเอง ไม่ว่าจะถือสิทธิ์ผู้ดูแลด้วยหรือไม่
+    const restrictToMyTeams = mayAssignOthers && ledTeamIds.size > 0;
+    // ผู้ดูแลที่ไม่ได้นำทีมไหน: แสดงเฉพาะคนที่ถูกจัดเข้าทีมแล้ว — ถ้ามีอย่างน้อยหนึ่งคน
+    const restrictToTeamMembers =
+      mayAssignOthers &&
+      !restrictToMyTeams &&
+      visible.some((u) => u.id !== scope.userId && (teamsByUser.get(u.id) ?? []).length > 0);
+
+    const items: TicketAssigneeDto[] = [];
+    for (const user of visible) {
+      const teams = teamsByUser.get(user.id) ?? [];
+      /*
+       * ทีมที่แสดง = ทีมที่ทำให้คนนี้อยู่ในรายการ
+       *
+       * หัวหน้าทีมเห็นชื่อทีมของตัวเองกำกับ ส่วนผู้ดูแลเห็นทีมแรกของคนนั้น
+       * (ตามลำดับชื่อ) เพื่อให้พอแยกออกว่าใครอยู่ฝั่งไหนโดยไม่ต้องเปิดหน้าทีม
+       */
+      const viaMyTeam = teams.find((t) => ledTeamIds.has(t.teamId));
+      const shown = viaMyTeam ?? teams[0];
+
+      // หัวหน้าทีมมอบให้คนนอกทีมตัวเองไม่ได้ — ตัวเองยังอยู่เสมอ เพราะรับงานเองได้
+      if (restrictToMyTeams && !viaMyTeam && user.id !== scope.userId) continue;
+      if (restrictToTeamMembers && teams.length === 0 && user.id !== scope.userId) continue;
+
+      items.push({
+        id: user.id,
+        full_name: user.fullName,
+        is_me: user.id === scope.userId,
+        is_lead: shown?.isLead ?? false,
+        team: shown ? { id: shown.teamId, name: shown.teamName } : null,
+        open_tickets: openCounts.get(user.id) ?? 0,
+      });
+    }
+
+    // ตัวเองบนสุด แล้วคนที่งานน้อยที่สุดก่อน — ชื่อเรียงมาจาก assignableUsers อยู่แล้ว
+    return items.sort(
+      (a, b) => Number(b.is_me) - Number(a.is_me) || a.open_tickets - b.open_tickets,
+    );
   }
 
   // ── การแปลงแถวเป็น DTO ───────────────────────────────────────────
@@ -495,7 +584,20 @@ export class TicketsService {
       satisfaction_score: row.satisfactionScore,
       can: {
         update: !closed && (scope.has('ticket.update') || (isOwner && row.status === 'new')),
-        assign: !closed && scope.has('ticket.assign'),
+        /*
+         * ปุ่ม "มอบหมายให้คนอื่น" ขึ้นเฉพาะผู้ดูแล หรือหัวหน้าทีม
+         *
+         * ⚠️ ค่านี้ต้องไม่ยิงคิวรีเพิ่มต่อหนึ่งคำขอ — รายชื่อทีมที่เป็นหัวหน้า
+         *    ถูกอ่านมาพร้อมสิทธิ์ใน ScopeService แล้ว (จำไว้ ~30 วินาทีต่อคน)
+         *    ถ้าถามฐานข้อมูลตรงนี้ ทุกครั้งที่เปิดเรื่องจะจ่ายเพิ่มอีกหนึ่งรอบ
+         */
+        assign:
+          !closed &&
+          mayAssignToOthers({
+            canAssign: scope.has('ticket.assign'),
+            isAdminLevel: scope.isAdminLevel,
+            ledTeamIds: [...scope.ledTeamIds],
+          }),
         assign_self: !closed && row.assigneeId === null && scope.has('ticket.assign_self'),
         /*
          * เจ้าหน้าที่ยังมีงานกับเรื่องที่ "แก้แล้ว" และ "ปิดแล้ว" — ปิดแทนผู้แจ้งที่เงียบไป

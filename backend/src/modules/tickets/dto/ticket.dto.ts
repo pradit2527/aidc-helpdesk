@@ -548,9 +548,33 @@ export class AssignTicketDto {
   reason?: string;
 }
 
+export class TicketAssigneeTeamDto {
+  @ApiProperty({ example: 1 }) id!: number;
+  @ApiProperty({ example: 'ທີມ IT Helpdesk' }) name!: string;
+}
+
 export class TicketAssigneeDto {
   @ApiProperty({ example: 12 }) id!: number;
   @ApiProperty({ example: 'ສົມສັກ ວົງສາ' }) full_name!: string;
   @ApiProperty({ example: false, description: 'true = ผู้เรียกเอง ใช้เรียงไว้บนสุดของรายการ' })
   is_me!: boolean;
+
+  @ApiProperty({ example: false, description: 'true = เป็นหัวหน้าของทีมที่แสดงในช่อง team' })
+  is_lead!: boolean;
+
+  @ApiPropertyOptional({
+    type: TicketAssigneeTeamDto,
+    nullable: true,
+    description:
+      'ทีมที่ทำให้คนนี้อยู่ในรายการ — null = ยังไม่ได้อยู่ทีมใด (เห็นได้เฉพาะระดับผู้ดูแล)',
+  })
+  team!: TicketAssigneeTeamDto | null;
+
+  @ApiProperty({
+    example: 3,
+    description:
+      'จำนวนเรื่องที่ยังอยู่ในมือ (new / assigned / in_progress / pending_user) ' +
+      'นับข้ามบริษัท เพราะเป็นภาระจริงของคนคนนั้น · ใช้เรียงคนที่ว่างที่สุดขึ้นก่อน',
+  })
+  open_tickets!: number;
 }

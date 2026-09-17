@@ -36,6 +36,21 @@ export interface AccessScopeInit {
    * ส่วน roles ตอบว่า "เป็นใคร" ซึ่ง frontend ใช้เลือกเมนูและหน้าแรก
    */
   roleCodes?: Iterable<string>;
+
+  /**
+   * ทีมสนับสนุนที่ผู้ใช้คนนี้สังกัด — เฉพาะทีมที่ยังเปิดใช้งาน
+   *
+   * อ่านมาพร้อมกับสิทธิ์ในคิวรีชุดเดียวกัน แล้วจำไว้ใน ScopeService
+   * ตัวตัดสิน "มอบหมายให้คนอื่นได้ไหม" จึงไม่ต้องยิงฐานข้อมูลเพิ่มต่อคำขอ
+   */
+  teams?: Iterable<TeamMembership>;
+}
+
+/** ทีมหนึ่งทีมที่ผู้ใช้สังกัด พร้อมว่าเป็นหัวหน้าหรือไม่ */
+export interface TeamMembership {
+  id: number;
+  name: string;
+  isLead: boolean;
 }
 
 /** immutable โดยเจตนา — ไม่มีใครแก้ขอบเขตกลางทางได้ */
@@ -47,6 +62,11 @@ export class AccessScope {
   readonly isSuperAdmin: boolean;
   readonly contactKeys: ReadonlySet<string>;
   readonly roleCodes: ReadonlySet<string>;
+  /** ทีมที่สังกัด (รวมทีมที่เป็นหัวหน้า) — เฉพาะทีมที่ยังเปิดใช้งาน */
+  readonly teams: readonly TeamMembership[];
+  readonly teamIds: ReadonlySet<number>;
+  /** ทีมที่เป็น "หัวหน้า" — ตัวตั้งของอำนาจมอบหมายงานให้คนอื่น */
+  readonly ledTeamIds: ReadonlySet<number>;
 
   constructor(init: AccessScopeInit) {
     this.userId = init.userId;
@@ -57,7 +77,34 @@ export class AccessScope {
     this.isSuperAdmin = init.isSuperAdmin;
     this.contactKeys = new Set(init.contactKeys ?? []);
     this.roleCodes = new Set(init.roleCodes ?? []);
+    const teams = [...(init.teams ?? [])];
+    this.teams = Object.freeze(teams);
+    this.teamIds = new Set(teams.map((t) => t.id));
+    this.ledTeamIds = new Set(teams.filter((t) => t.isLead).map((t) => t.id));
     Object.freeze(this);
+  }
+
+  // ── ทีมสนับสนุน ──
+
+  /** ทีมที่เป็นหัวหน้า เรียงตามชื่อ — ใช้ตอบ GET /auth/me */
+  get ledTeams(): readonly TeamMembership[] {
+    return this.teams.filter((t) => t.isLead);
+  }
+
+  /**
+   * เป็น "ระดับผู้ดูแล" หรือไม่ — มอบหมายให้ใครก็ได้ที่รับเรื่องนั้นได้
+   *
+   * ใช้ user.assign_role เป็นเกณฑ์ ไม่ใช่ชื่อบทบาท เพราะหน้าจัดการสิทธิ์
+   * แก้ได้ว่าบทบาทไหนถืออะไร — ผูกกับชื่อ company_admin ตรง ๆ แล้ววันหนึ่ง
+   * จะมีบทบาทใหม่ที่มอบบทบาทได้แต่มอบหมายงานให้คนนอกทีมไม่ได้
+   */
+  get isAdminLevel(): boolean {
+    return this.has('user.assign_role');
+  }
+
+  /** เป็นหัวหน้าอย่างน้อยหนึ่งทีมที่ยังเปิดใช้งาน */
+  get isTeamLead(): boolean {
+    return this.ledTeamIds.size > 0;
   }
 
   // ── permission ──

@@ -9,7 +9,7 @@ import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
 import { appUser, company, department, passwordHistory } from '../../db/schema';
-import type { CurrentUserDto } from './dto/auth.dto';
+import type { CurrentUserDto, MeResponseDto } from './dto/auth.dto';
 
 /** กรอกรหัสผิดครบเท่านี้ครั้งติดกัน บัญชีถูกล็อก (นโยบาย 3.2) */
 const MAX_FAILED_LOGINS = 5;
@@ -276,9 +276,20 @@ export class AuthService {
    *    คิวรีที่อ่าน must_change_password แยกไว้อีกตัวก็ถูกรวมเข้ากับคิวรีอ่าน
    *    ข้อมูลผู้ใช้ เพราะเป็นคอลัมน์ของแถวเดียวกันในตารางเดียวกัน
    */
-  async meFor(scope: AccessScope): Promise<CurrentUserDto & { must_change_password: boolean }> {
+  async meFor(scope: AccessScope): Promise<MeResponseDto> {
     const { dto, mustChangePassword } = await this.loadCurrentUser(scope.userId, scope);
-    return { ...dto, must_change_password: mustChangePassword };
+    return {
+      ...dto,
+      must_change_password: mustChangePassword,
+      /*
+       * ทีมที่ผู้ใช้คนนี้เป็นหัวหน้า — มาจาก scope ที่ guard สร้างไว้แล้ว ไม่มีคิวรีเพิ่ม
+       *
+       * frontend ใช้ตัดสินว่าจะแสดงเมนู "ทีมของฉัน" และปุ่มมอบหมายงานหรือไม่
+       * อาเรย์ว่างเสมอเมื่อไม่ได้เป็นหัวหน้าทีมใด ห้ามเป็น undefined —
+       * หน้าจออ่าน .length ตรง ๆ ตามสัญญาที่ประกาศไว้ในชนิดข้อมูล
+       */
+      led_teams: scope.ledTeams.map((t) => ({ id: t.id, name: t.name })),
+    };
   }
 
   private async loadCurrentUser(

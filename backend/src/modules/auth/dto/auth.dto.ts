@@ -76,12 +76,25 @@ export class LoginResponseDto {
   user!: CurrentUserDto;
 }
 
+export class LedTeamDto {
+  @ApiProperty({ example: 1 }) id!: number;
+  @ApiProperty({ example: 'ທີມ IT Helpdesk' }) name!: string;
+}
+
 export class MeResponseDto extends CurrentUserDto {
   @ApiProperty({
     example: false,
     description: 'มีใน /auth/me ด้วย เพื่อให้ frontend รู้แม้ผู้ใช้รีเฟรชหน้า (FE-03)',
   })
   must_change_password!: boolean;
+
+  @ApiProperty({
+    type: [LedTeamDto],
+    description:
+      'ทีมที่ผู้ใช้คนนี้เป็น "หัวหน้า" — เฉพาะทีมที่ยังเปิดใช้งาน · อาเรย์ว่างเมื่อไม่ได้เป็นหัวหน้าทีมใด ' +
+      'ความเป็นหัวหน้าทีมเป็นข้อมูล ไม่ใช่ role จึงไม่โผล่ใน roles หรือ permissions',
+  })
+  led_teams!: LedTeamDto[];
 }
 
 export class HealthResponseDto {

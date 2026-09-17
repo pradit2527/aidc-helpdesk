@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { Priority, TicketStatus } from '../../common/constants';
-import { ValidationError } from '../../common/errors/domain-error';
+import { ForbiddenError, ValidationError } from '../../common/errors/domain-error';
 import type { AccessScope } from '../../common/scope';
+import { SupportTeamRepository } from '../../db/repositories/support-team.repository';
 import { TicketRepository } from '../../db/repositories/ticket.repository';
-import { TicketEntity } from '../../domain/ticket/ticket.entity';
+import { decideAssignment, TicketEntity } from '../../domain/ticket/ticket.entity';
 import { CLOCK, type Clock } from '../ports/clock.port';
 
 export interface AssignTicketInput {
@@ -15,22 +16,36 @@ export interface AssignTicketInput {
   reason?: string | undefined;
 }
 
+/** ผู้รับผิดชอบคนก่อน — ผู้เรียกใช้ส่งสัญญาณให้คิวงานของเขารีเฟรชด้วย */
+export interface AssignTicketResult {
+  fromAssigneeId: number | null;
+}
+
 /**
  * มอบหมายผู้รับผิดชอบ หรือรับงานเอง
  *
  * สิทธิ์แยกสองระดับ
  *   - รับเอง ใช้ ticket.assign_self (หรือ ticket.assign)
- *   - มอบให้คนอื่น ใช้ ticket.assign เท่านั้น — การโยนงานให้คนอื่นเป็นอำนาจของหัวหน้าทีม
- *     ถ้าให้ทุกคนที่รับงานเองได้โยนงานได้ด้วย เรื่องยาก ๆ จะถูกส่งต่อวนไปเรื่อย ๆ
+ *   - มอบให้คนอื่น ใช้ ticket.assign **และ** ต้องเป็นผู้ดูแล หรือเป็นหัวหน้าทีม
+ *     ของคนที่รับ — การโยนงานให้คนอื่นเป็นอำนาจของหัวหน้าทีม ถ้าให้ทุกคนที่
+ *     รับงานเองได้โยนงานได้ด้วย เรื่องยาก ๆ จะถูกส่งต่อวนไปเรื่อย ๆ
+ *
+ * ⚠️ ticket.assign เพียงอย่างเดียวไม่พอ เพราะในชุดสิทธิ์ตั้งต้นเจ้าหน้าที่ทุกคนถืออยู่
+ *    ตัวที่แยกหัวหน้าออกจากลูกทีมคือ support_team_member.is_lead ไม่ใช่ permission
  */
 @Injectable()
 export class AssignTicketUseCase {
   constructor(
     private readonly tickets: TicketRepository,
+    private readonly teams: SupportTeamRepository,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  async execute(scope: AccessScope, id: number, input: AssignTicketInput): Promise<void> {
+  async execute(
+    scope: AccessScope,
+    id: number,
+    input: AssignTicketInput,
+  ): Promise<AssignTicketResult> {
     // อ่านก่อนตรวจสิทธิ์โดยตั้งใจ — เรื่องที่อยู่นอกขอบเขตต้องได้ 404 ไม่ใช่ 403
     const row = await this.tickets.findById(scope, id);
 
@@ -58,16 +73,59 @@ export class AssignTicketUseCase {
     const change = entity.assignTo(input.assigneeId);
 
     /*
+     * สองคิวรีนี้ไม่พึ่งผลของกัน จึงยิงพร้อมกัน
+     *
+     * ทีมของผู้รับต้องถามก็ต่อเมื่อผู้สั่งเป็น "หัวหน้าทีม" จริง ๆ เท่านั้น
+     * รับงานเองและผู้ดูแลระดับบริษัทไม่ต้องใช้ค่านี้เลย จึงไม่เสียรอบเครือข่ายเพิ่ม
+     * ในสองเส้นทางที่พบบ่อยที่สุด
+     */
+    const needsTeamCheck = !self && !scope.isAdminLevel && scope.isTeamLead;
+    const [eligible, assigneeTeamIds] = await Promise.all([
+      this.tickets.assignableUsers(row.companyId),
+      needsTeamCheck ? this.teams.activeTeamIdsOf(input.assigneeId) : Promise.resolve<number[]>([]),
+    ]);
+
+    const decision = decideAssignment(
+      {
+        userId: scope.userId,
+        canAssign: scope.has('ticket.assign'),
+        isAdminLevel: scope.isAdminLevel,
+        ledTeamIds: [...scope.ledTeamIds],
+      },
+      { userId: input.assigneeId, teamIds: assigneeTeamIds },
+    );
+
+    /*
+     * "ไม่ใช่หัวหน้าทีม" ตอบก่อนเรื่องอื่นเสมอ
+     *
+     * เป็นความผิดของผู้สั่ง ไม่ใช่ของค่าที่ส่งมา — และการตอบ "คนนี้รับเรื่องไม่ได้"
+     * ให้คนที่มอบหมายไม่ได้ตั้งแต่ต้น เท่ากับบอกใบ้ว่าใครอยู่บริษัทไหน
+     */
+    if (!decision.allowed && decision.code === 'NOT_TEAM_LEAD') {
+      throw new ForbiddenError(
+        'NOT_TEAM_LEAD',
+        'ສະເພາະຫົວໜ້າທີມ ຫຼື ຜູ້ດູແລ ຈຶ່ງມອບໝາຍໃຫ້ຄົນອື່ນໄດ້',
+        { ticketId: row.id, assigneeId: input.assigneeId },
+      );
+    }
+
+    /*
      * ผู้รับต้องทำงานกับเรื่องของบริษัทนี้ได้จริง
      *
      * ตรวจที่ฝั่งเซิร์ฟเวอร์เสมอ แม้หน้าจอจะแสดงเฉพาะคนที่มีสิทธิ์อยู่แล้ว
      * เพราะ id ส่งมาจากเบราว์เซอร์ แก้เป็นเลขใครก็ได้ — รวมถึงพนักงานบริษัทอื่น
      * ที่จะได้รับมอบหมายเรื่องที่ตัวเองเปิดดูไม่ได้
      */
-    const eligible = await this.tickets.assignableUsers(row.companyId);
     if (!eligible.some((u) => u.id === input.assigneeId)) {
       throw new ValidationError('ASSIGNEE_NOT_ELIGIBLE', 'ຜູ້ນີ້ຮັບເລື່ອງຂອງບໍລິສັດນີ້ບໍ່ໄດ້', [
         { field: 'assignee_id', message: 'ເລືອກເຈົ້າໜ້າທີ່ທີ່ດູແລບໍລິສັດນີ້' },
+      ]);
+    }
+
+    // หัวหน้าทีมจริง แต่เลือกคนนอกทีมตัวเอง — ผิดที่ค่าที่ส่งมา จึงเป็น 422 รายฟิลด์
+    if (!decision.allowed) {
+      throw new ValidationError('ASSIGNEE_NOT_IN_TEAM', 'ຜູ້ນີ້ບໍ່ໄດ້ຢູ່ໃນທີມຂອງທ່ານ', [
+        { field: 'assignee_id', message: 'ເລືອກໄດ້ສະເພາະສະມາຊິກໃນທີມທີ່ທ່ານເປັນຫົວໜ້າ' },
       ]);
     }
 
@@ -95,5 +153,7 @@ export class AssignTicketUseCase {
           }
         : {}),
     });
+
+    return { fromAssigneeId: change.fromAssigneeId };
   }
 }

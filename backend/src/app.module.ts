@@ -24,6 +24,7 @@ import { DbModule } from './db/db.module';
 import { JobsModule } from './jobs/jobs.module';
 import { SlaConfigRepository } from './db/repositories/sla-config.repository';
 import { SupportChatRepository } from './db/repositories/support-chat.repository';
+import { SupportTeamRepository } from './db/repositories/support-team.repository';
 import { TicketDetailRepository } from './db/repositories/ticket-detail.repository';
 import { TicketRepository } from './db/repositories/ticket.repository';
 import { TicketWriteRepository } from './db/repositories/ticket-write.repository';
@@ -56,6 +57,8 @@ import { RealtimeGateway } from './modules/realtime/realtime.gateway';
 import { SupportChatController } from './modules/support-chat/support-chat.controller';
 import { ChatwootSyncService } from './modules/support-chat/chatwoot-sync.service';
 import { SupportChatService } from './modules/support-chat/support-chat.service';
+import { SupportTeamsController } from './modules/support-teams/support-teams.controller';
+import { SupportTeamsService } from './modules/support-teams/support-teams.service';
 import { SystemController } from './modules/system/system.controller';
 import { SystemService } from './modules/system/system.service';
 import { ChecklistController } from './modules/tickets/checklist.controller';
@@ -89,6 +92,7 @@ import { UsersService } from './modules/users/users.service';
     ProblemsController,
     ReportsController,
     SupportChatController,
+    SupportTeamsController,
     SystemController,
     TicketsController,
     UsersController,
@@ -116,11 +120,14 @@ import { UsersService } from './modules/users/users.service';
     TicketWriteRepository,
     SlaConfigRepository,
     SupportChatRepository,
+    SupportTeamRepository,
     // socket.io ตัวเดียวของทั้งระบบ — คอมเมนต์ ticket และแชทช่วยเหลือ
     RealtimeGateway,
     // ซิงก์แชทสองทางกับ Chatwoot — ไม่ทำอะไรจนกว่าจะตั้งค่าใน .env ครบ
     ChatwootSyncService,
     SupportChatService,
+    // ทีมสนับสนุน — ข้อมูลที่ตอบว่า "หัวหน้าคนนี้มอบหมายงานให้ใครได้"
+    SupportTeamsService,
     TicketsService,
 
     /*

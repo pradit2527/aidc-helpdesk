@@ -124,6 +124,7 @@ export const MESSAGES = {
   'nav.services': { lo: 'ທະບຽນລະບົບງານ', th: 'ทะเบียนระบบงาน' },
   'nav.problems': { lo: 'Problem ແລະ RCA', th: 'Problem และ RCA' },
   'nav.auditLogs': { lo: 'ບັນທຶກການໃຊ້ງານ', th: 'บันทึกการใช้งาน' },
+  'nav.teams': { lo: 'ທີມງານ IT', th: 'ทีมงาน IT' },
   'nav.sla': { lo: 'ຕັ້ງຄ່າ SLA', th: 'ตั้งค่า SLA' },
   'nav.businessHours': { lo: 'ເວລາເຮັດວຽກ ແລະ ວັນພັກ', th: 'เวลาทำการและวันหยุด' },
   'nav.escalation': { lo: 'ກົດຍົກລະດັບ', th: 'กฎยกระดับ' },
@@ -155,6 +156,8 @@ export const MESSAGES = {
   'role.company_admin': { lo: 'ຜູ້ດູແລລະດັບບໍລິສັດ', th: 'ผู้ดูแลระดับบริษัท' },
   'role.manager_viewer': { lo: 'ຜູ້ບໍລິຫານ (ອ່ານຢ່າງດຽວ)', th: 'ผู้บริหาร (อ่านอย่างเดียว)' },
   'role.super_admin': { lo: 'ຜູ້ດູແລລະບົບ', th: 'ผู้ดูแลระบบ' },
+  /* ไม่ใช่ role ในตาราง role แต่แสดงคู่กันบนการ์ดผู้ใช้ — มาจาก led_teams ใน session */
+  'role.teamLead': { lo: 'ຫົວໜ້າທີມ', th: 'หัวหน้าทีม' },
 
   // ── สถานะเรื่อง ──
   'status.new': { lo: 'ໃໝ່', th: 'ใหม่' },

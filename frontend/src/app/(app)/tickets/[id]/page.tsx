@@ -14,6 +14,7 @@ import * as React from 'react';
 import { toast } from 'sonner';
 
 import { PriorityBadge, SlaBadge, StatusBadge } from '@/components/common/badges';
+import { AssignPanel } from '@/components/tickets/assign-panel';
 import {
   CloseOwnTicket,
   MIN_REOPEN_REASON,
@@ -467,6 +468,12 @@ function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
             ຮັບວຽກນີ້
           </Button>
         )}
+
+        {/*
+          มอบหมายให้คนอื่น — backend ส่ง can.assign มาเป็นจริงเฉพาะหัวหน้าทีมกับผู้ดูแล
+          คนที่รับงานเองได้ด้วยจะเห็นปุ่มรับงานก่อน แล้วแผงนี้พับอยู่ข้างล่าง
+        */}
+        {can.assign && <AssignPanel ticket={ticket} />}
 
         {can.change_status && <StatusChanger ticket={ticket} />}
 

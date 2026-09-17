@@ -159,6 +159,79 @@ export function actorMayTransition(
   return actor.canChangeStatus;
 }
 
+/**
+ * ── อำนาจมอบหมายงาน ─────────────────────────────────────────────────────
+ *
+ * โจทย์: "หัวหน้าทีมไอทีกดมอบหมายงานให้คนในทีมตัวเองได้"
+ *
+ * สิทธิ์ ticket.assign ตอบได้แค่ "มอบหมายเป็นไหม" ไม่ได้ตอบ "มอบให้ใครได้"
+ * และในชุดสิทธิ์ตั้งต้น เจ้าหน้าที่ทุกคนถือ ticket.assign อยู่แล้ว ถ้าใช้ตัวนั้น
+ * เป็นด่านเดียว ใครก็โยนงานให้ใครก็ได้ ซึ่งเป็นพฤติกรรมที่โจทย์ต้องการเลิก
+ *
+ * ความเป็นหัวหน้าจึงเก็บเป็นข้อมูล (support_team_member.is_lead) แล้วตัดสินที่นี่
+ * — ไม่มี role ใหม่ ไม่มี permission code ใหม่
+ */
+
+/** ผู้สั่งมอบหมาย — ทุกค่ามาจาก AccessScope ที่จำไว้แล้ว ไม่ต้องถามฐานข้อมูล */
+export interface AssignmentActor {
+  userId: number;
+  /** ถือ ticket.assign */
+  canAssign: boolean;
+  /** ถือ user.assign_role — company_admin / super_admin */
+  isAdminLevel: boolean;
+  /** ทีมที่ผู้สั่งเป็นหัวหน้า เฉพาะทีมที่ยังเปิดใช้งาน */
+  ledTeamIds: readonly number[];
+}
+
+/** ผู้รับมอบหมาย */
+export interface AssignmentTarget {
+  userId: number;
+  /** ทีมที่ผู้รับสังกัด (เป็นสมาชิกหรือหัวหน้าร่วมก็นับ) เฉพาะทีมที่ยังเปิดใช้งาน */
+  teamIds: readonly number[];
+}
+
+export type AssignmentDecision =
+  | { allowed: true; via: 'self' | 'admin' | 'team_lead' }
+  /** ไม่ใช่หัวหน้าทีมและไม่ใช่ผู้ดูแล → 403 */
+  | { allowed: false; code: 'NOT_TEAM_LEAD' }
+  /** เป็นหัวหน้าจริง แต่คนที่เลือกไม่ได้อยู่ในทีมของตน → 422 */
+  | { allowed: false; code: 'ASSIGNEE_NOT_IN_TEAM' };
+
+/**
+ * ผู้สั่งคนนี้ "มีอำนาจมอบหมายให้คนอื่น" หรือไม่ (ยังไม่ดูว่าคนที่เลือกเป็นใคร)
+ *
+ * ใช้ตอนประกอบบล็อก can ของหน้ารายละเอียด — ปุ่ม "มอบหมาย" ต้องขึ้นก็ต่อเมื่อ
+ * มีคนให้มอบหมายได้จริง มิฉะนั้นจะเป็นปุ่มที่กดแล้วได้ 403 ทุกครั้ง
+ */
+export function mayAssignToOthers(actor: Omit<AssignmentActor, 'userId'>): boolean {
+  return actor.canAssign && (actor.isAdminLevel || actor.ledTeamIds.length > 0);
+}
+
+/**
+ * ตัดสินการมอบหมายหนึ่งครั้ง
+ *
+ * ลำดับการตัดสินสำคัญ
+ *   1. รับงานเอง ผ่านเสมอ — สิทธิ์ ticket.assign_self ถูกตรวจไปแล้วที่ use case
+ *      และการรับงานเองไม่ใช่การใช้อำนาจเหนือคนอื่น
+ *   2. ผู้ดูแล (user.assign_role) มอบให้ใครก็ได้ที่รับเรื่องของบริษัทนั้นได้
+ *   3. หัวหน้าทีม มอบให้คนในทีมที่ตนเป็นหัวหน้าเท่านั้น
+ *
+ * ⚠️ ข้อ 3 ตรวจ "ทีมร่วมกัน" ไม่ใช่ "ผู้รับอยู่ในทีมใดทีมหนึ่ง" — หัวหน้าทีม ก.
+ *    ต้องมอบงานให้สมาชิกทีม ข. ไม่ได้ แม้ทั้งสองทีมจะอยู่บริษัทเดียวกัน
+ */
+export function decideAssignment(
+  actor: AssignmentActor,
+  target: AssignmentTarget,
+): AssignmentDecision {
+  if (actor.userId === target.userId) return { allowed: true, via: 'self' };
+  if (!actor.canAssign) return { allowed: false, code: 'NOT_TEAM_LEAD' };
+  if (actor.isAdminLevel) return { allowed: true, via: 'admin' };
+  if (actor.ledTeamIds.length === 0) return { allowed: false, code: 'NOT_TEAM_LEAD' };
+
+  const shared = actor.ledTeamIds.some((id) => target.teamIds.includes(id));
+  return shared ? { allowed: true, via: 'team_lead' } : { allowed: false, code: 'ASSIGNEE_NOT_IN_TEAM' };
+}
+
 export class TicketEntity {
   private props: TicketProps;
 

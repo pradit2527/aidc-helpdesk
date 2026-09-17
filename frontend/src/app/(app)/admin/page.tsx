@@ -17,6 +17,7 @@ import {
   Siren,
   Timer,
   Users,
+  UsersRound,
   Wrench,
 } from 'lucide-react';
 import * as React from 'react';
@@ -56,6 +57,9 @@ const SECTIONS: { title: string; note?: string; links: AdminLink[] }[] = [
       { href: '/admin/users', label: 'ຈັດການຜູ້ໃຊ້', description: 'ສ້າງ ປິດການໃຊ້ງານ ຣີເຊັດລະຫັດ ແລະ ມອບບົດບາດ', icon: Users, roles: ['company_admin', 'super_admin'] },
       { href: '/admin/roles', label: 'ບົດບາດ ແລະ ສິດ', description: 'ເມທຣິກ 53 ສິດ ຕໍ່ 5 ບົດບາດ', icon: ShieldCheck, roles: ['company_admin', 'super_admin'] },
       { href: '/admin/departments', label: 'ຈັດການພະແນກ', description: 'ໂຄງສ້າງພະແນກຂອງແຕ່ລະບໍລິສັດ', icon: FolderTree, roles: ['company_admin', 'super_admin'] },
+      /* เจ้าหน้าที่เห็นการ์ดนี้ด้วย เพราะหัวหน้าทีมคือ agent — เข้าไปดูทีมของตัวเองได้แบบอ่านอย่างเดียว
+         การแก้ต้องใช้สิทธิ์ user.assign_role ซึ่งหน้านั้นตรวจอีกชั้นและ backend ตรวจซ้ำ */
+      { href: '/admin/teams', label: 'ທີມງານ IT', description: 'ສະມາຊິກທີມ ແລະ ຫົວໜ້າທີມທີ່ມອບໝາຍວຽກໄດ້', icon: UsersRound, roles: ['agent', 'company_admin', 'super_admin'] },
       { href: '/admin/companies', label: 'ຈັດການບໍລິສັດ', description: 'ຂໍ້ມູນ 7 ບໍລິສັດໃນກຸ່ມ', icon: Building2, roles: ['super_admin'] },
     ],
   },

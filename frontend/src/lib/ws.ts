@@ -85,6 +85,13 @@ export interface TicketUpdatedEvent {
   ticket_no?: string;
   status?: TicketStatus;
   requester_id?: number;
+  /**
+   * ผู้รับผิดชอบคนล่าสุด · null = ถูกถอดผู้รับผิดชอบออก
+   *
+   * มาเฉพาะห้องส่วนตัว เช่นเดียวกับ ticket_no และ requester_id
+   * ห้องทีมไอทีทั้งบริษัทไม่ได้ค่านี้ จึงต้องเผื่อ undefined เสมอ
+   */
+  assignee_id?: number | null;
 }
 
 /**

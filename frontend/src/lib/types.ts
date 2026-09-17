@@ -21,6 +21,11 @@ export interface UserRef {
   full_name: string;
 }
 
+export interface TeamRef {
+  id: number;
+  name: string;
+}
+
 export interface SessionUser {
   id: number;
   username: string;
@@ -35,6 +40,13 @@ export interface SessionUser {
   permissions: string[];
   must_change_password: boolean;
   unread_notifications: number;
+  /**
+   * ทีมที่ผู้ใช้คนนี้เป็นหัวหน้า — รายการว่างแปลว่าไม่ได้เป็นหัวหน้าทีมไหนเลย
+   *
+   * ใช้ตัดสินเรื่องการแสดงผลเท่านั้น (ป้าย "ຫົວໜ້າທີມ" และทางเข้าหน้าทีมงาน)
+   * สิทธิ์มอบหมายงานจริงตัดสินที่ backend ผ่าน can.assign ของแต่ละเรื่อง
+   */
+  led_teams: TeamRef[];
 }
 
 export interface TicketSla {
@@ -244,6 +256,40 @@ export interface Department {
   name: string;
   user_count: number;
   is_active: boolean;
+}
+
+/**
+ * สมาชิกหนึ่งคนในทีมสนับสนุน
+ *
+ * open_tickets คือจำนวนงานที่ยังค้างอยู่กับคนนี้ คำนวณตอนอ่าน ไม่ได้เก็บในตาราง
+ * ใช้ให้หัวหน้าทีมเห็นว่าใครว่างที่สุดก่อนกดมอบหมาย
+ */
+export interface SupportTeamMember {
+  id: number;
+  full_name: string;
+  username: string;
+  is_lead: boolean;
+  open_tickets: number;
+}
+
+export interface SupportTeam {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  /** null = ทีมส่วนกลาง ใช้ร่วมทุกบริษัท เช่นเดียวกับข้อมูลหลักตัวอื่น */
+  company: { id: number; code: string } | null;
+  /** หัวหน้าทีมมาก่อนเสมอ — backend เรียงมาให้แล้ว */
+  members: SupportTeamMember[];
+}
+
+/** ผู้ที่ถูกเพิ่มเข้าทีมได้ — ต้องมีสิทธิ์ user.assign_role จึงเรียกได้ */
+export interface SupportTeamCandidate {
+  id: number;
+  full_name: string;
+  username: string;
+  company: { id: number; code: string };
 }
 
 export interface TicketCategory {

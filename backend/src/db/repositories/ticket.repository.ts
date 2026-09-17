@@ -123,6 +123,14 @@ export type DbTransaction = Parameters<Parameters<Db['transaction']>[0]>[0];
 const HISTORY_REASON_MAX = 500;
 
 /**
+ * สถานะที่ถือว่า "ยังอยู่ในมือเจ้าหน้าที่"
+ *
+ * resolved ไม่นับ เพราะงานของเจ้าหน้าที่จบแล้ว เหลือรอผู้แจ้งยืนยัน
+ * ส่วน pending_user นับ เพราะเรื่องยังเป็นความรับผิดชอบของเขา แม้นาฬิกาจะหยุดเดิน
+ */
+const OPEN_WORKLOAD_STATUSES = ['new', 'assigned', 'in_progress', 'pending_user'] as const;
+
+/**
  * ชั้นเดียวในระบบที่แปลง "สิทธิ์ของผู้ใช้" เป็น "เงื่อนไข WHERE"
  *
  * ⚠️ ห้ามเขียนคิวรีที่อ่านตาราง ticket ไว้นอกไฟล์นี้
@@ -194,6 +202,7 @@ export class TicketRepository implements Partial<ITicketRepository> {
       requesterId?: number | undefined;
       unassigned?: boolean;
       q?: string | undefined;
+      sort?: 'updated' | 'created' | 'assigned' | undefined;
       page: number;
       pageSize: number;
     },
@@ -222,13 +231,34 @@ export class TicketRepository implements Partial<ITicketRepository> {
     const where = and(...parts) as SQL;
 
     /*
+     * ลำดับ — ใหม่สุดอยู่บนเสมอ ต่างกันที่ "ใหม่" วัดจากอะไร
+     *
+     * assigned: เวลาที่เรื่องถูกมอบให้ผู้รับผิดชอบ "คนปัจจุบัน" ครั้งล่าสุด อ่านจากประวัติ
+     *   ไม่ใช้ updated_at เพราะคอมเมนต์ของผู้แจ้งในเรื่องเก่าก็ดัน updated_at ขึ้นมาได้
+     *   เจ้าหน้าที่จะเห็นเรื่องเก่าลอยขึ้นมาทับงานที่หัวหน้าเพิ่งมอบให้
+     *   ไม่เพิ่มคอลัมน์ assigned_at เพราะประวัติมีข้อมูลนี้ครบอยู่แล้ว และ subquery
+     *   วิ่งบนดัชนี ix_ticket_history_ticket (ticket_id, changed_at) ต่อแถวของหน้าเดียว
+     *   เรื่องที่ไม่มีประวัติมอบหมาย (ข้อมูลนำเข้า) ตกไปท้าย แล้วเรียงตามวันที่แจ้ง
+     */
+    const assignedAt = sql`(
+      select max(h.changed_at) from ticket_status_history h
+      where h.ticket_id = ${ticket.id} and h.to_assignee_id = ${ticket.assigneeId}
+    )`;
+    const order =
+      filters.sort === 'assigned'
+        ? [sql`${assignedAt} desc nulls last`, desc(ticket.createdAt)]
+        : filters.sort === 'created'
+          ? [desc(ticket.createdAt)]
+          : [desc(ticket.updatedAt)];
+
+    /*
      * แถวของหน้ากับจำนวนทั้งหมดไม่พึ่งผลของกันเลย จึงยิงพร้อมกัน
      * บนฐานข้อมูลที่อยู่ไกล การยิงทีละตัวเสียรอบเครือข่ายเพิ่มหนึ่งรอบทุกครั้งที่เปิดรายการ
      */
     const [rows, [counted]] = await Promise.all([
       selectTicketsQuery(this.db)
         .where(where)
-        .orderBy(desc(ticket.updatedAt))
+        .orderBy(...order)
         .limit(filters.pageSize)
         .offset((filters.page - 1) * filters.pageSize),
       this.db
@@ -268,6 +298,95 @@ export class TicketRepository implements Partial<ITicketRepository> {
    *    (findById ตอบ 404) เรื่องจะค้างอยู่ในมือคนที่มองไม่เห็นมัน
    */
   async assignableUsers(companyId: number): Promise<{ id: number; fullName: string }[]> {
+    const users = await this.ticketWorkers();
+
+    return users
+      .filter((u) => u.superAdmin || u.scopedCompanyIds.has(companyId))
+      .map(({ id, fullName }) => ({ id, fullName }))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }
+
+  /**
+   * ผู้ที่รับเรื่องได้ ในบริษัทที่ผู้เรียกดูแล — ตัวเลือกตอนตั้งทีม
+   *
+   * ใช้กฎ "ใครทำงานกับเรื่องได้" ชุดเดียวกับ assignableUsers (ticketWorkers)
+   * ถ้าเขียนกฎซ้ำอีกชุด วันหนึ่งหน้าตั้งทีมจะเสนอคนที่มอบหมายจริงไม่ได้
+   */
+  async ticketWorkerCandidates(
+    scope: AccessScope,
+  ): Promise<{ id: number; fullName: string; username: string; companyId: number; companyCode: string }[]> {
+    const users = await this.ticketWorkers();
+    const visible = scope.companyIds;
+
+    return users
+      .filter((u) => {
+        if (scope.isSuperAdmin) return true;
+        // super_admin คนอื่นรับเรื่องได้ทุกบริษัทอยู่แล้ว จึงเป็นตัวเลือกเสมอ
+        if (u.superAdmin) return true;
+        for (const id of u.scopedCompanyIds) if (visible.has(id)) return true;
+        return false;
+      })
+      .map(({ id, fullName, username, homeCompanyId, homeCompanyCode }) => ({
+        id,
+        fullName,
+        username,
+        companyId: homeCompanyId,
+        companyCode: homeCompanyCode,
+      }))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }
+
+  /**
+   * จำนวนเรื่องที่ยังค้างอยู่ในมือของแต่ละคน
+   *
+   * ⚠️ คิวรีเดียวสำหรับทุกคนในรายการ ไม่ใช่คนละคิวรี — รายชื่อผู้รับมอบหมาย
+   *    มีได้หลายสิบคน และฐานข้อมูลพัฒนาอยู่อีกทวีป (~250 ms ต่อรอบ)
+   *
+   * นับข้ามบริษัทโดยตั้งใจ ตัวเลขนี้ตอบคำถาม "ตอนนี้เขางานล้นไหม"
+   * ซึ่งเป็นภาระจริงของคนคนนั้น ไม่ใช่ภาระเฉพาะบริษัทที่กำลังเปิดดูอยู่
+   */
+  async openTicketCounts(userIds: readonly number[]): Promise<Map<number, number>> {
+    const counts = new Map<number, number>();
+    if (userIds.length === 0) return counts;
+
+    const rows = await this.db
+      .select({ assigneeId: ticket.assigneeId, total: sql<number>`count(*)::int` })
+      .from(ticket)
+      .where(
+        and(
+          inArray(ticket.assigneeId, [...userIds]),
+          inArray(ticket.status, [...OPEN_WORKLOAD_STATUSES]),
+          isNull(ticket.deletedAt),
+        ),
+      )
+      .groupBy(ticket.assigneeId);
+
+    for (const row of rows) {
+      if (row.assigneeId !== null) counts.set(row.assigneeId, row.total);
+    }
+    return counts;
+  }
+
+  /**
+   * ผู้ที่ถือสิทธิ์ทำงานกับเรื่อง พร้อมขอบเขตบริษัทของแต่ละคน
+   *
+   * เงื่อนไขสองข้อพร้อมกัน
+   *   1. ถือบทบาทที่ยังไม่หมดอายุซึ่งให้สิทธิ์ ticket.change_status (หรือเป็น super_admin)
+   *      — อ่านจาก role_permission ไม่ผูกกับชื่อบทบาท เพราะหน้าจัดการสิทธิ์แก้ได้
+   *   2. ขอบเขตบริษัท — กติกาเดียวกับ AccessScope: มีแถว user_role_scope ใช้ตามนั้น
+   *      ไม่มีเลยใช้บริษัทต้นสังกัด
+   */
+  private async ticketWorkers(): Promise<
+    {
+      id: number;
+      fullName: string;
+      username: string;
+      homeCompanyId: number;
+      homeCompanyCode: string;
+      superAdmin: boolean;
+      scopedCompanyIds: Set<number>;
+    }[]
+  > {
     const now = new Date();
     const activeRole = or(isNull(userRole.expiresAt), gt(userRole.expiresAt, now));
 
@@ -281,10 +400,13 @@ export class TicketRepository implements Partial<ITicketRepository> {
       .select({
         id: appUser.id,
         fullName: appUser.fullName,
+        username: appUser.username,
         homeCompanyId: appUser.companyId,
+        homeCompanyCode: company.code,
         roleCode: role.code,
       })
       .from(appUser)
+      .innerJoin(company, eq(company.id, appUser.companyId))
       .innerJoin(userRole, eq(userRole.userId, appUser.id))
       .innerJoin(role, eq(role.id, userRole.roleId))
       .where(
@@ -313,10 +435,7 @@ export class TicketRepository implements Partial<ITicketRepository> {
       else scopedCompanies.set(r.userId, new Set([r.companyId]));
     }
 
-    const users = new Map<
-      number,
-      { id: number; fullName: string; homeCompanyId: number; superAdmin: boolean }
-    >();
+    const users = new Map<number, Awaited<ReturnType<TicketRepository['ticketWorkers']>>[number]>();
     for (const c of candidates) {
       const isSuper = c.roleCode === 'super_admin';
       const existing = users.get(c.id);
@@ -327,19 +446,15 @@ export class TicketRepository implements Partial<ITicketRepository> {
       users.set(c.id, {
         id: c.id,
         fullName: c.fullName,
+        username: c.username,
         homeCompanyId: c.homeCompanyId,
+        homeCompanyCode: c.homeCompanyCode,
         superAdmin: isSuper,
+        scopedCompanyIds: scopedCompanies.get(c.id) ?? new Set([c.homeCompanyId]),
       });
     }
 
-    return [...users.values()]
-      .filter((u) => {
-        if (u.superAdmin) return true;
-        const scoped = scopedCompanies.get(u.id);
-        return scoped ? scoped.has(companyId) : u.homeCompanyId === companyId;
-      })
-      .map(({ id, fullName }) => ({ id, fullName }))
-      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+    return [...users.values()];
   }
 
   /**

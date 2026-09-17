@@ -43,6 +43,13 @@
       "when": 1789435758601,
       "tag": "0005_support_chat_chatwoot_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789614924706,
+      "tag": "0006_support_team",
+      "breakpoints": true
     }
   ]
 }
