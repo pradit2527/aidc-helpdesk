@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   FolderTree,
+  Globe,
   ListChecks,
   Package,
   ScrollText,
@@ -79,6 +80,8 @@ const SECTIONS: { title: string; note?: string; links: AdminLink[] }[] = [
       { href: '/admin/catalog', label: 'ແຄັດຕາລັອກບໍລິການ', description: 'ຄຳຂໍບໍລິການ ພ້ອມເປົ້າໝາຍເວລາລາຍລາຍການ', icon: Package, roles: ['company_admin', 'super_admin'] },
       { href: '/admin/checklists', label: 'ແມ່ແບບລາຍການກວດ', description: 'ຂັ້ນຕອນຮັບພະນັກງານໃໝ່ ແລະ ລາອອກ ຕາມ SOP', icon: ClipboardCheck, roles: ['company_admin', 'super_admin'] },
       { href: '/admin/services', label: 'ທະບຽນລະບົບງານ', description: 'ລະບົບງານ ເຫດຂັດຂ້ອງ ແລະ ໜ້າຕ່າງບຳລຸງຮັກສາ', icon: Server, roles: ['agent', 'company_admin', 'super_admin'] },
+      /* เว็บของบริษัทที่ฝังปุ่มแชทไว้ — แชทที่เข้ามาไปโผล่ในกล่องแชทเดียวกับของทีมไอที */
+      { href: '/admin/projects', label: 'ໂຄງການທີ່ຮັບຊັບພອດ', description: 'ເວັບທີ່ຝັງປຸ່ມແຊັດ ແລະ ສະຄຣິບຕິດຕັ້ງ', icon: Globe, roles: ['company_admin', 'super_admin'] },
       { href: '/admin/problems', label: 'Problem ແລະ RCA', description: 'ສາເຫດຮາກ ແລະ ການປ້ອງກັນການເກີດຊ້ຳ', icon: Wrench, roles: ['agent', 'company_admin', 'super_admin'] },
     ],
   },

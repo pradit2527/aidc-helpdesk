@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>ตัวอย่างเว็บที่ฝัง AIDC Support</title>
+    <!--
+      หน้านี้ตั้งใจให้ "ดูไม่สวย"
+
+      มันคือตัวแทนของเว็บทีมอื่นที่เอาสคริปต์ไปวาง ไม่ใช่หน้าจอของ Helpdesk
+      ถ้าแต่งให้เหมือนระบบเรา คนทดสอบจะแยกไม่ออกว่าอะไรมาจากวิดเจ็ต
+      อะไรมาจากหน้าเว็บ ซึ่งเป็นสิ่งเดียวที่หน้านี้มีไว้ให้ดู
+
+      สไตล์จึงเป็น CSS ธรรมดาในไฟล์ ไม่มี Tailwind ไม่มี token ของโปรเจกต์
+    -->
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        max-width: 720px;
+        font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif;
+        color: #1b1b1b;
+        background: #fff;
+      }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      h2 { font-size: 16px; margin: 24px 0 8px; }
+      p { margin: 0 0 12px; }
+      .note {
+        border: 1px solid #c9a227;
+        background: #fdf6e3;
+        padding: 12px;
+        margin: 0 0 20px;
+      }
+      button {
+        min-height: 44px;
+        padding: 0 16px;
+        margin: 0 8px 8px 0;
+        font: inherit;
+        border: 1px solid #555;
+        background: #f4f4f4;
+        cursor: pointer;
+      }
+      button:hover { background: #e8e8e8; }
+      #log {
+        border: 1px solid #ccc;
+        background: #fafafa;
+        padding: 12px;
+        min-height: 120px;
+        max-height: 320px;
+        overflow-y: auto;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      #log p { margin: 0 0 4px; }
+      code { background: #f0f0f0; padding: 1px 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>ตัวอย่างเว็บที่ฝัง AIDC Support</h1>
+    <p>
+      หน้านี้สมมติว่าเป็นเว็บของทีมอื่น ที่วางสคริปต์ของ Helpdesk ไว้บรรทัดเดียวคือ
+      <code>&lt;script src="/kit/v1/aidc-support.js" data-project="DEMO" defer&gt;&lt;/script&gt;</code>
+    </p>
+    <p>
+      ใช้โครงการ <code>DEMO</code> ซึ่งผูกกับ inbox สำหรับทดสอบ ไม่ใช่โครงการของเว็บจริง —
+      เปลี่ยนไปใช้รหัสอื่นได้ด้วยการแก้ <code>data-project</code> ในไฟล์นี้
+    </p>
+
+    <div class="note">
+      <strong>เซิร์ฟเวอร์แชทที่ต่ออยู่เป็นระบบจริงที่ทีมใช้งาน</strong> — กดปุ่มด้านล่างเพื่อดูว่า
+      วิดเจ็ตขึ้นหรือไม่ได้ แต่อย่าพิมพ์ข้อความส่งออกไป เพราะจะกลายเป็นบทสนทนาจริง
+      ที่เจ้าหน้าที่ต้องมานั่งปิดทีหลัง
+    </div>
+
+    <h2>ปุ่มทดสอบ</h2>
+    <p>
+      <button type="button" id="btn-open">เปิดหน้าต่างแชท — open()</button>
+      <button type="button" id="btn-identify">บอกว่าใครล็อกอินอยู่ — identify()</button>
+      <button type="button" id="btn-reset">ออกจากระบบ — reset()</button>
+      <button type="button" id="btn-version">อ่านเวอร์ชันของ kit</button>
+    </p>
+
+    <h2>สิ่งที่เกิดขึ้น</h2>
+    <p>
+      ข้อความด้านล่างคือสิ่งเดียวกับที่ออกใน console ของเบราว์เซอร์ —
+      พิมพ์ซ้ำไว้ตรงนี้เพื่อให้คนทดสอบที่ไม่ได้เปิดเครื่องมือนักพัฒนาเห็นได้ด้วย
+    </p>
+    <div id="log" role="log" aria-live="polite" aria-label="บันทึกสถานะของ kit"></div>
+
+    <script>
+      /*
+       * ดักข้อความเตือนของ kit มาแสดงบนหน้า
+       *
+       * ต้องทำก่อนโหลด kit เพราะ kit เตือนตั้งแต่ตอนเริ่มทำงาน
+       * ของจริงห้ามทำแบบนี้ — นี่เป็นหน้าทดสอบเท่านั้น
+       */
+      (function () {
+        var box = document.getElementById('log');
+
+        function print(text) {
+          var line = document.createElement('p');
+          var now = new Date();
+          var stamp =
+            ('0' + now.getHours()).slice(-2) +
+            ':' +
+            ('0' + now.getMinutes()).slice(-2) +
+            ':' +
+            ('0' + now.getSeconds()).slice(-2);
+          line.textContent = stamp + '  ' + text;
+          box.appendChild(line);
+          box.scrollTop = box.scrollHeight;
+        }
+
+        var originalWarn = console.warn;
+        console.warn = function () {
+          var parts = [];
+          for (var i = 0; i < arguments.length; i++) parts.push(String(arguments[i]));
+          print(parts.join(' '));
+          originalWarn.apply(console, arguments);
+        };
+
+        window.demoPrint = print;
+        print('หน้าโหลดแล้ว กำลังรอ kit...');
+      })();
+    </script>
+
+    <!-- สคริปต์จริงที่ทีมอื่นก็อปไปวาง ไม่มีอะไรมากกว่านี้ -->
+    <script src="/kit/v1/aidc-support.js" data-project="DEMO" data-locale="lo" defer></script>
+
+    <script>
+      /*
+       * ทุกปุ่มเรียกได้ทันทีโดยไม่ต้องรอ kit พร้อม — คำสั่งจะถูกเก็บคิวไว้แล้วเล่นทีหลัง
+       * ซึ่งเป็นพฤติกรรมที่เว็บจริงต้องพึ่งพา เพราะเว็บส่วนใหญ่รู้ว่าใครล็อกอินอยู่
+       * เร็วกว่าที่วิดเจ็ตจะโหลดเสร็จมาก
+       */
+      document.addEventListener('DOMContentLoaded', function () {
+        var print = window.demoPrint;
+
+        function support() {
+          if (!window.AIDCSupport) {
+            print('ยังไม่มี window.AIDCSupport — สคริปต์ยังโหลดไม่เสร็จหรือโหลดไม่ได้');
+            return null;
+          }
+          return window.AIDCSupport;
+        }
+
+        document.getElementById('btn-open').addEventListener('click', function () {
+          var kit = support();
+          if (!kit) return;
+          print('เรียก AIDCSupport.open()');
+          kit.open();
+        });
+
+        document.getElementById('btn-identify').addEventListener('click', function () {
+          var kit = support();
+          if (!kit) return;
+          /*
+           * ข้อมูลสมมติล้วน และไม่มี hash โดยตั้งใจ
+           *
+           * hash ต้องคำนวณที่เซิร์ฟเวอร์ของเว็บนั้นด้วยกุญแจ HMAC ของ inbox
+           * หน้าเดโมเป็นไฟล์สถิตจึงคำนวณไม่ได้ และไม่ควรได้ด้วย —
+           * ถ้าหน้าเว็บคำนวณเองได้ แปลว่ากุญแจหลุดอยู่ในหน้าเว็บแล้ว
+           */
+          var fake = {
+            identifier: 'demo-user-001',
+            name: 'ทดสอบ ระบบ (ข้อมูลสมมติ)',
+            email: 'demo-user-001@example.invalid',
+            phone: '+85620000000',
+            company: 'บริษัทตัวอย่าง',
+          };
+          print('เรียก AIDCSupport.identify() ด้วยข้อมูลสมมติ ไม่มี hash: ' + JSON.stringify(fake));
+          kit.identify(fake);
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', function () {
+          var kit = support();
+          if (!kit) return;
+          print('เรียก AIDCSupport.reset() — เหมือนตอนผู้ใช้กดออกจากระบบ');
+          kit.reset();
+        });
+
+        document.getElementById('btn-version').addEventListener('click', function () {
+          var kit = support();
+          if (!kit) return;
+          print('AIDCSupport.version = ' + kit.version);
+        });
+
+        /* onReady บอกว่าวิดเจ็ตพร้อมรับคำสั่งแล้วจริง ไม่ใช่แค่สคริปต์โหลดเสร็จ */
+        if (window.AIDCSupport) {
+          print('พบ window.AIDCSupport เวอร์ชัน ' + window.AIDCSupport.version + ' — รอวิดเจ็ตพร้อม');
+          window.AIDCSupport.onReady(function () {
+            print('วิดเจ็ตพร้อมแล้ว (onReady) — ปุ่มแชทควรอยู่มุมจอ');
+          });
+        } else {
+          print('ไม่พบ window.AIDCSupport หลังหน้าโหลดเสร็จ — ดูข้อความเตือนด้านบน');
+        }
+      });
+    </script>
+  </body>
+</html>

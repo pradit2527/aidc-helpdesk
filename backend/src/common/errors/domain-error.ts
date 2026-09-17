@@ -27,7 +27,9 @@ export type DomainErrorKind =
   /** ทำไม่ได้เพราะสถานะของทรัพยากรเอง เช่น บัญชีถูกล็อก → 423 */
   | 'locked'
   /** เรียกถี่เกินกำหนด → 429 */
-  | 'rate_limited';
+  | 'rate_limited'
+  /** ระบบภายนอกที่จำเป็นยังไม่ได้ตั้งค่า หรือติดต่อไม่ได้ → 503 */
+  | 'unavailable';
 
 const HTTP_STATUS_BY_KIND: Record<DomainErrorKind, number> = {
   validation: 422,
@@ -37,6 +39,7 @@ const HTTP_STATUS_BY_KIND: Record<DomainErrorKind, number> = {
   conflict: 409,
   locked: 423,
   rate_limited: 429,
+  unavailable: 503,
 };
 
 export interface FieldIssue {
@@ -106,6 +109,18 @@ export class ForbiddenError extends DomainError {
 export class ValidationError extends DomainError {
   constructor(code: string, message: string, issues?: FieldIssue[]) {
     super({ code, message, kind: 'validation', ...(issues ? { issues } : {}) });
+  }
+}
+
+/**
+ * ระบบภายนอกที่จำเป็นใช้ไม่ได้ — ยังไม่ได้ตั้งค่า หรือติดต่อไม่ได้ตอนนี้
+ *
+ * ต่างจาก 500 ตรงที่ไม่ใช่บั๊กของเรา และผู้เรียกลองใหม่ทีหลังได้
+ * ข้อความต้องบอกผู้ใช้ตรง ๆ ว่าอะไรใช้ไม่ได้ ไม่ใช่ข้อความกลาง ๆ
+ */
+export class ServiceUnavailableError extends DomainError {
+  constructor(code: string, message: string, debug?: Record<string, unknown>) {
+    super({ code, message, kind: 'unavailable', ...(debug ? { debug } : {}) });
   }
 }
 

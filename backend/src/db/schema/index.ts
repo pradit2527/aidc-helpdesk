@@ -11,4 +11,5 @@ export * from './sla';
 export * from './process';
 export * from './content';
 export * from './support-chat';
+export * from './support-project';
 export * from './support-team';

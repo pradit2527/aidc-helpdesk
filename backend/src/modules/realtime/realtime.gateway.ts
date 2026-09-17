@@ -48,7 +48,8 @@ function parseCookie(header: string | undefined, name: string): string | undefin
 export interface ChatMessageTarget {
   chatId: number;
   companyId: number;
-  requesterId: number;
+  /** null = ห้องจาก widget ที่ไม่มีเจ้าของเป็นพนักงาน — ไม่มีห้องส่วนตัวให้ส่งเข้า */
+  requesterId: number | null;
 }
 
 export type TicketUpdateKind = 'status' | 'assign' | 'priority' | 'comment';
@@ -231,12 +232,16 @@ export class RealtimeGateway {
 
   /** ข้อความใหม่ในห้องแชท — ส่งถึงเจ้าของห้องและทีมไอทีของบริษัทนั้น */
   chatMessage(target: ChatMessageTarget, message: unknown): void {
+    /*
+     * ห้องจาก widget ไม่มีเจ้าของเป็นพนักงาน — ต้องไม่ใส่ห้อง `user:null` เข้าไป
+     * มิฉะนั้นทุกห้องจาก widget จะกลายเป็นชื่อห้องเดียวกัน แล้ว socket ใดก็ตาม
+     * ที่บังเอิญเข้าห้องนั้นจะได้รับข้อความของผู้เข้าชมทุกคนในทุกบริษัท
+     */
+    const rooms = [`chat-inbox:company:${target.companyId}`, 'chat-inbox:all'];
+    if (target.requesterId !== null) rooms.unshift(`user:${target.requesterId}`);
+
     this.server
-      ?.to([
-        `user:${target.requesterId}`,
-        `chat-inbox:company:${target.companyId}`,
-        'chat-inbox:all',
-      ])
+      ?.to(rooms)
       .emit('chat:message', {
         chat_id: target.chatId,
         company_id: target.companyId,

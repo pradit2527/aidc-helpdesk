@@ -300,6 +300,7 @@ export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
   '/admin/users/new': 'page.newUser',
   '/admin/departments': 'nav.departments',
   '/admin/teams': 'nav.teams',
+  '/admin/projects': 'nav.projects',
   '/admin/categories': 'nav.categories',
   '/admin/roles': 'nav.roles',
   '/admin/audit-logs': 'nav.auditLogs',

@@ -4,8 +4,18 @@ import { ArrowLeft, CheckCircle2, Headphones, MessagesSquare } from 'lucide-reac
 import * as React from 'react';
 import { toast } from 'sonner';
 
+import {
+  ProjectChip,
+  VerifiedMark,
+  VisitorContact,
+  WidgetMark,
+  hasRealAccount,
+  isWidgetChat,
+  verifiedState,
+} from '@/components/support-chat/chat-origin';
 import { ChatThread } from '@/components/support-chat/chat-thread';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/field';
 import { Alert, PageHeader } from '@/components/ui/misc';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -20,6 +30,7 @@ import {
   type ChatInboxStatus,
   type SupportChatSummary,
 } from '@/lib/queries/support-chat';
+import { useSupportProjects } from '@/lib/queries/support-projects';
 import { useCan, useSession } from '@/lib/session';
 
 const relative = new Intl.RelativeTimeFormat('lo-LA', { numeric: 'auto' });
@@ -41,8 +52,25 @@ function ago(iso: string): string {
 export default function ChatInboxPage(): React.JSX.Element {
   const isStaff = useCan('ticket.change_status');
   const [status, setStatus] = React.useState<ChatInboxStatus>('open');
+  const [projectId, setProjectId] = React.useState<number | null>(null);
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
-  const inbox = useChatInbox(status, isStaff);
+  const inbox = useChatInbox(status, { projectId }, isStaff);
+
+  /*
+   * รายชื่อโครงการมีไว้ทำตัวกรองเท่านั้น
+   *
+   * องค์กรที่ยังไม่ได้เปิดใช้ Support Hub จะไม่มีโครงการสักอัน และ API รุ่นที่ยัง
+   * ไม่มี endpoint นี้ก็ตอบ 404 — ทั้งสองกรณีต้องได้กล่องแชทหน้าตาเดิมทุกประการ
+   * ไม่ใช่ตัวกรองเปล่า ๆ หรือข้อความผิดพลาดคาหน้าจอ
+   */
+  const projects = useSupportProjects(isStaff);
+  const projectOptions = projects.isError ? [] : (projects.data ?? []);
+
+  // โครงการที่เลือกไว้ถูกปิดหรือถูกลบไประหว่างเปิดหน้าค้างไว้ — กลับไปที่ "ทุกโครงการ"
+  React.useEffect(() => {
+    if (projectId === null) return;
+    if (projects.data && !projects.data.some((p) => p.id === projectId)) setProjectId(null);
+  }, [projects.data, projectId]);
 
   // ลิงก์จากการแจ้งเตือน (/chats?id=12) เปิดห้องนั้นให้เลย — อ่านครั้งเดียวตอนเข้าหน้า
   React.useEffect(() => {
@@ -67,7 +95,7 @@ export default function ChatInboxPage(): React.JSX.Element {
     <div className="flex w-full flex-col gap-4">
       <PageHeader
         title="ກ່ອງແຊັດ"
-        description="ແຊັດຈາກຜູ້ໃຊ້ໃນບໍລິສັດທີ່ທ່ານດູແລ — ຂໍ້ຄວາມໃໝ່ເຂົ້າມາທັນທີ ບໍ່ຕ້ອງໂຫຼດໜ້າໃໝ່"
+        description="ແຊັດຈາກຜູ້ໃຊ້ໃນບໍລິສັດທີ່ທ່ານດູແລ ແລະ ຜູ້ເຂົ້າຊົມເວັບຂອງໂຄງການທີ່ຮັບຊັບພອດ — ຂໍ້ຄວາມໃໝ່ເຂົ້າມາທັນທີ ບໍ່ຕ້ອງໂຫຼດໜ້າໃໝ່"
       />
 
       <div className="grid min-h-[560px] overflow-hidden rounded-lg border border-hair bg-surface shadow-card lg:h-[calc(100dvh-15rem)] lg:grid-cols-[340px_1fr]">
@@ -99,12 +127,40 @@ export default function ChatInboxPage(): React.JSX.Element {
             ))}
           </div>
 
+          {/* ตัวกรองโครงการโผล่เฉพาะองค์กรที่เปิดใช้ Support Hub แล้วจริง ๆ */}
+          {projectOptions.length > 0 && (
+            <div className="flex-none border-b border-hair px-2 py-2">
+              <label htmlFor="chat-project-filter" className="sr-only">
+                ກັ່ນຕອງຕາມໂຄງການ
+              </label>
+              <Select
+                id="chat-project-filter"
+                value={projectId === null ? '' : String(projectId)}
+                onChange={(e) => {
+                  setProjectId(e.target.value === '' ? null : Number(e.target.value));
+                  setSelectedId(null);
+                }}
+              >
+                <option value="">ທຸກໂຄງການ</option>
+                {projectOptions.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.code} — {project.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {inbox.isLoading && <li className="p-4 text-body-sm text-ink-3">ກຳລັງໂຫຼດ...</li>}
             {!inbox.isLoading && chats.length === 0 && (
               <li className="flex flex-col items-center gap-2 p-8 text-center text-body-sm text-ink-3">
                 <MessagesSquare className="h-8 w-8" aria-hidden="true" />
-                {status === 'open' ? 'ຍັງບໍ່ມີແຊັດທີ່ລໍຖ້າຢູ່' : 'ຍັງບໍ່ມີແຊັດທີ່ປິດແລ້ວ'}
+                {projectId !== null
+                  ? 'ຍັງບໍ່ມີແຊັດຂອງໂຄງການນີ້'
+                  : status === 'open'
+                    ? 'ຍັງບໍ່ມີແຊັດທີ່ລໍຖ້າຢູ່'
+                    : 'ຍັງບໍ່ມີແຊັດທີ່ປິດແລ້ວ'}
               </li>
             )}
             {chats.map((chat) => (
@@ -145,6 +201,9 @@ function ChatListItem({
   selected: boolean;
   onSelect: () => void;
 }): React.JSX.Element {
+  /* null = ไม่ใช่ห้องจาก widget หรือยังไม่มีข้อมูลติดต่อ จึงไม่มีอะไรให้ยืนยัน */
+  const verified = verifiedState(chat.contact);
+
   return (
     <li>
       <button
@@ -163,10 +222,20 @@ function ChatListItem({
           <span className="flex-none text-caption tabular text-ink-3">{ago(chat.last_message_at)}</span>
           {chat.unread && <span className="h-2.5 w-2.5 flex-none rounded-full bg-sla-breach-solid" aria-label="ຍັງບໍ່ໄດ້ອ່ານ" />}
         </span>
-        <span className="truncate text-caption text-ink-3">
-          {chat.company.code}
-          {chat.requester.department ? ` · ${chat.requester.department}` : ''}
-          {chat.assignee ? ` · ${chat.assignee.full_name}` : ' · ຍັງບໍ່ມີຄົນຮັບ'}
+        {/*
+          บรรทัดที่บอกว่า "ห้องนี้มาจากไหน"
+          ป้ายโครงการกับป้าย "ຈາກເວັບ" มาก่อนชื่อบริษัท เพราะเป็นสิ่งที่เปลี่ยนวิธี
+          ตอบของเจ้าหน้าที่ ส่วนบริษัทกับผู้รับผิดชอบเป็นข้อมูลประกอบ
+        */}
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-ink-3">
+          {chat.project && <ProjectChip project={chat.project} />}
+          {isWidgetChat(chat) && <WidgetMark />}
+          {isWidgetChat(chat) && verified !== null && <VerifiedMark verified={verified} />}
+          <span className="min-w-0 truncate">
+            {chat.company?.code}
+            {chat.requester.department ? ` · ${chat.requester.department}` : ''}
+            {chat.assignee ? ` · ${chat.assignee.full_name}` : ' · ຍັງບໍ່ມີຄົນຮັບ'}
+          </span>
         </span>
         {chat.last_message && (
           <span className={cn('line-clamp-2 text-caption', chat.unread ? 'text-ink' : 'text-ink-2')}>
@@ -190,6 +259,7 @@ function StaffThread({ chatId, onBack }: { chatId: number; onBack: () => void })
 
   const data = thread.data;
   const unread = data?.unread ?? false;
+  const verified = verifiedState(data?.contact);
 
   // เปิดห้องอยู่แล้วมีข้อความใหม่เข้ามา = อ่านแล้ว
   React.useEffect(() => {
@@ -248,12 +318,28 @@ function StaffThread({ chatId, onBack }: { chatId: number; onBack: () => void })
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-body-sm font-semibold text-ink">{data.requester.full_name}</p>
-          <p className="truncate text-caption text-ink-3">
-            {data.company.code}
-            {data.requester.department ? ` · ${data.requester.department}` : ''}
-            {data.requester.job_title ? ` · ${data.requester.job_title}` : ''}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="min-w-0 truncate text-body-sm font-semibold text-ink">
+              {data.requester.full_name}
+            </span>
+            {data.project && <ProjectChip project={data.project} />}
+            {isWidgetChat(data) && <WidgetMark />}
+            {isWidgetChat(data) && verified !== null && <VerifiedMark verified={verified} full />}
           </p>
+          {/*
+            ผู้เข้าชมที่ยืนยันตัวตนแล้วอาจถูกจับคู่กับพนักงานในระบบได้ กรณีนั้น
+            requester เป็นคนจริงและมีแผนก/ตำแหน่งครบ — แสดงแบบเดียวกับแชทในระบบ
+            กล่องข้อมูลติดต่อมีไว้สำหรับคนที่ไม่มีบัญชีเท่านั้น (requester.id === 0)
+          */}
+          {isWidgetChat(data) && !hasRealAccount(data) ? (
+            <VisitorContact contact={data.contact} className="mt-0.5" />
+          ) : (
+            <p className="truncate text-caption text-ink-3">
+              {data.company?.code}
+              {data.requester.department ? ` · ${data.requester.department}` : ''}
+              {data.requester.job_title ? ` · ${data.requester.job_title}` : ''}
+            </p>
+          )}
         </div>
         {data.status === 'open' ? (
           <Button size="sm" variant="secondary" onClick={() => void onClose()} disabled={close.isPending}>

@@ -43,6 +43,8 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
       '',
       '## ลำดับที่ระบบเราเรียก',
       '',
+      '### ก) แชทที่พนักงานเปิดใน Helpdesk (inbox ชนิด **API**)',
+      '',
       '```',
       '1. GET  /contacts/search?q=<username>         → หา contact เดิม',
       '2. POST /contacts                             → ถ้ายังไม่มี (ได้ source_id มาด้วย)',
@@ -53,6 +55,19 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
       '6. POST /conversations/{id}/toggle_status     → ปิดการสนทนาเมื่อห้องแชทถูกปิด',
       '```',
       '',
+      '### ข) AIDC Support Hub — widget บนเว็บของกลุ่ม (inbox ชนิด **Website**)',
+      '',
+      'บทสนทนาเป็นของ Chatwoot ตั้งแต่ต้น เราแค่เข้าไปร่วมวง',
+      '**ไม่สร้าง contact และไม่เปิดการสนทนาใหม่เลยในเส้นทางนี้**',
+      '',
+      '```',
+      '1. GET  /inboxes                              → หน้าผูก inbox ของผู้ดูแล (อ่านอย่างเดียว)',
+      '2. GET  /conversations?inbox_id=N&status=all  → รอบค้นหาบทสนทนาใหม่ ทุก 10 วินาที',
+      '3. GET  /conversations/{id}/messages?after=N  → ดึงข้อความใหม่ของห้องนั้น',
+      '4. POST /conversations/{id}/messages          → ส่งคำตอบของเจ้าหน้าที่ (outgoing)',
+      '5. POST /conversations/{id}/toggle_status     → เมื่อทีมไอทีปิดห้องฝั่ง Helpdesk',
+      '```',
+      '',
       '## ค่าที่ระบบเราใช้อยู่',
       '',
       '| ตัวแปร | ค่า |',
@@ -60,6 +75,7 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
       '| เซิร์ฟเวอร์ | `http://18.142.116.44` (= `helpdesk.aidclaos.com`) |',
       '| บัญชี | 1 |',
       '| inbox | 2 — "AIDC Helpdesk (ซิงก์)" ชนิด **API** |',
+      '| inbox | 1 — "AIDC Helpdesk & Support" ชนิด **Website** (widget ของ Support Hub) |',
       '',
       'ตั้งจริงที่ `CHATWOOT_*` ใน `backend/.env` — ดู `.env.example`',
       '',
@@ -93,8 +109,153 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
     { name: 'Contacts', description: 'ผู้ติดต่อ — ผูกกับผู้ใช้ใน Helpdesk ด้วย identifier = ชื่อผู้ใช้' },
     { name: 'Conversations', description: 'การสนทนา — หนึ่งห้องแชทใน Helpdesk = หนึ่งการสนทนา' },
     { name: 'Messages', description: 'ข้อความเข้าและออก รวมไฟล์แนบ' },
+    { name: 'Inboxes', description: 'กล่องข้อความ — หนึ่ง inbox ชนิด Website = หนึ่งโครงการใน Support Hub' },
   ],
   paths: {
+    '/inboxes': {
+      get: {
+        tags: ['Inboxes'],
+        summary: 'รายการ inbox ทั้งหมดของบัญชี',
+        description: [
+          'ใช้ในหน้าผูก inbox ของผู้ดูแล (`GET /support-projects/chatwoot-inboxes`)',
+          'และใน CLI ลงทะเบียนโครงการ — **อ่านอย่างเดียวทั้งสองทาง**',
+          '',
+          'ระบบเราคัดเฉพาะ `channel_type = "Channel::WebWidget"` ออกมา',
+          'inbox ชนิด `Channel::Api` (ใบที่ใช้ซิงก์แชทภายใน) ไม่มี widget และไม่มี website token',
+          '',
+          '## ⚠️ payload มี `hmac_token` ของ inbox รวมอยู่ด้วย',
+          '',
+          'ค่านั้น **เป็นความลับ** — ใครถือไปคำนวณ `identifier_hash` ของคนอื่นได้',
+          'แล้วเปิดแชทในนามคนนั้น เห็นบทสนทนาย้อนหลังที่เขาเคยคุยกับทีมไอทีทั้งหมด',
+          '',
+          'โค้ดของเราจึงคัดฟิลด์ทีละตัวออกมา (`id`, `name`, `channel_type`,',
+          '`website_url`, `website_token`) ไม่ใช่ส่ง payload ดิบต่อไปให้ชั้นบน',
+          'ดู `chatwootWebsiteInboxes()` ใน `integrations/chatwoot/chatwoot-api.ts`',
+          '',
+          '`website_token` ตรงข้ามกัน — **เปิดเผยได้** Chatwoot ออกแบบให้อยู่ใน',
+          'สคริปต์ที่ทุกหน้าเว็บโหลด ใครเปิด view-source ก็เห็น',
+        ].join('\n'),
+        responses: {
+          '200': {
+            description: 'สำเร็จ — รายการอยู่ใน `payload`',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    payload: { type: 'array', items: { $ref: '#/components/schemas/Inbox' } },
+                  },
+                },
+              },
+            },
+          },
+          '401': ERROR_RESPONSE,
+        },
+      },
+    },
+
+    '/conversations?inbox_id={inboxId}': {
+      get: {
+        tags: ['Conversations'],
+        summary: 'รายการบทสนทนาของ inbox หนึ่ง',
+        description: [
+          'หัวใจของรอบค้นหาบทสนทนาจาก widget — ทุก `CHATWOOT_WIDGET_POLL_MS`',
+          'ระบบเรายิงคำขอนี้หนึ่งครั้งต่อโครงการที่เปิดใช้งานและผูก inbox แล้ว',
+          '',
+          '## ⚠️ รูปร่างผลลัพธ์ไม่เหมือน endpoint อื่น',
+          '',
+          'endpoint อื่นวางผลไว้ที่ `payload` ตรง ๆ แต่ตัวนี้อยู่ที่ **`data.payload`**',
+          'และ `data.meta` มีตัวนับ (`all_count`, `mine_count`, …)',
+          'วัดจริงกับ 4.17.1 — อ่านผิดชั้นจะได้อาร์เรย์ว่างทุกรอบโดยไม่มี error',
+          '',
+          '## ฟิลด์ที่ระบบเราใช้',
+          '',
+          '| ฟิลด์ | ใช้ทำอะไร |',
+          '|---|---|',
+          '| `id` | เลขบทสนทนา — หนึ่งใบ = หนึ่งห้องแชทฝั่งเรา |',
+          '| `status` | `resolved` แล้วห้องเรายังเปิด → ปิดตามพร้อมข้อความระบบ |',
+          '| `last_activity_at` | unix **วินาที** — ตัดสินว่าขยับตั้งแต่รอบก่อนไหม |',
+          '| `meta.sender` | ชื่อ อีเมล เบอร์ และ identifier ของผู้เข้าชม |',
+          '| `meta.hmac_verified` | ⚠️ ดูด้านล่าง |',
+          '',
+          '## ⚠️ `meta.hmac_verified` คือเส้นแบ่งของความน่าเชื่อถือ',
+          '',
+          '`true` = เว็บต้นทางคำนวณ `identifier_hash` ด้วย hmac_token ของ inbox แล้ว',
+          'Chatwoot ตรวจผ่าน — อีเมลที่มากับบทสนทนานั้นจึงเป็นตัวตนที่ระบบต้นทางรับรอง',
+          '',
+          '`false` = ผู้เข้าชมพิมพ์เองในฟอร์มก่อนแชท ซึ่งพิมพ์อีเมลของใครก็ได้',
+          'ระบบเราจับคู่ผู้เข้าชมกับบัญชีใน Helpdesk **เฉพาะเมื่อเป็น `true`** เท่านั้น',
+          '',
+          '(ฟิลด์นี้อยู่ที่บทสนทนา ไม่ได้อยู่ที่ `contact_inbox` — ผลของ endpoint นี้',
+          'ไม่มี `contact_inbox` มาด้วยเลย)',
+          '',
+          '## ขอบเขตที่ระบบเราตั้งไว้เอง',
+          '',
+          '- หน้าเดียวต่อโครงการต่อรอบ (Chatwoot คืนหน้าละ 25 เรียงกิจกรรมล่าสุดก่อน)',
+          '- เฉพาะบทสนทนาที่ขยับภายใน 30 วัน',
+          '- ข้ามบทสนทนาที่ `last_activity_at` ไม่ขยับตั้งแต่รอบก่อน',
+        ].join('\n'),
+        parameters: [
+          {
+            name: 'inboxId',
+            in: 'path',
+            required: true,
+            schema: { type: 'integer' },
+            example: 1,
+            description: 'ส่งจริงเป็น query `?inbox_id=` — เขียนเป็น path ที่นี่เพราะ OpenAPI แยก path ด้วย query ไม่ได้',
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['open', 'resolved', 'pending', 'snoozed', 'all'] },
+            example: 'all',
+            description: 'ต้องเป็น `all` — ไม่งั้นบทสนทนาที่ปิดไปแล้วหายจากรายการ แล้วห้องฝั่งเราไม่มีวันถูกปิดตาม',
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer' },
+            example: 1,
+          },
+        ],
+        responses: {
+          '200': {
+            description: '⚠️ รายการอยู่ที่ `data.payload` ไม่ใช่ `payload`',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        meta: {
+                          type: 'object',
+                          properties: {
+                            all_count: { type: 'integer' },
+                            mine_count: { type: 'integer' },
+                            assigned_count: { type: 'integer' },
+                            unassigned_count: { type: 'integer' },
+                          },
+                        },
+                        payload: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/ConversationListItem' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': ERROR_RESPONSE,
+        },
+      },
+    },
+
     '/contacts/search': {
       get: {
         tags: ['Contacts'],
@@ -482,13 +643,72 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
       },
       Inbox: {
         type: 'object',
+        description:
+          '⚠️ payload จริงมีอีกราว 40 ฟิลด์ รวม `hmac_token` ซึ่งเป็นความลับ ' +
+          'ที่นี่มีเฉพาะฟิลด์ที่ระบบเราอ่านและส่งต่อได้อย่างปลอดภัย',
         properties: {
           id: { type: 'integer' },
-          name: { type: 'string' },
+          name: { type: 'string', example: 'AIDC Helpdesk & Support' },
           channel_type: {
             type: 'string',
-            description: '`Channel::Api` เท่านั้นที่รับข้อความ incoming ได้',
-            example: 'Channel::Api',
+            enum: ['Channel::Api', 'Channel::WebWidget'],
+            description:
+              '`Channel::Api` เท่านั้นที่รับข้อความ incoming ได้ · ' +
+              '`Channel::WebWidget` คือ widget บนหน้าเว็บ ซึ่งเป็นชนิดที่ Support Hub ใช้',
+            example: 'Channel::WebWidget',
+          },
+          website_url: {
+            type: 'string',
+            nullable: true,
+            description: 'มีเฉพาะ inbox ชนิด Website',
+            example: 'https://aidc-helpdesk.vercel.app',
+          },
+          website_token: {
+            type: 'string',
+            nullable: true,
+            description:
+              '**เปิดเผยได้** — Chatwoot ออกแบบให้ token นี้อยู่ในสคริปต์ที่ทุกหน้าเว็บโหลด ' +
+              'ระบบเราเก็บไว้ที่ `support_project.chatwoot_website_token` แล้วจ่ายต่อทาง ' +
+              '`GET /api/v1/public/support-projects/{code}`',
+          },
+          hmac_token: {
+            type: 'string',
+            description:
+              '🚫 **ความลับ — ระบบเราไม่อ่าน ไม่เก็บ และไม่ส่งต่อค่านี้เด็ดขาด** ' +
+              'ใครถือไปคำนวณ identifier_hash ของคนอื่นได้ แล้วเปิดแชทในนามคนนั้น ' +
+              '(ตัวที่ใช้จริงคือ CHATWOOT_HMAC_TOKEN ใน .env ซึ่งคนตั้งค่าคัดลอกมาเอง)',
+          },
+        },
+      },
+      ConversationListItem: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer', example: 3 },
+          inbox_id: { type: 'integer', example: 1 },
+          status: { type: 'string', enum: ['open', 'resolved', 'pending', 'snoozed'] },
+          last_activity_at: {
+            type: 'integer',
+            description: 'unix timestamp (วินาที) — ระบบเราใช้ตัดสินว่าบทสนทนาขยับตั้งแต่รอบก่อนไหม',
+            example: 1789439715,
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              sender: { $ref: '#/components/schemas/Contact' },
+              hmac_verified: {
+                type: 'boolean',
+                description:
+                  '⚠️ true = Chatwoot ตรวจ identifier_hash ของเว็บต้นทางผ่านแล้ว ' +
+                  'ระบบเราจับคู่ผู้เข้าชมกับบัญชีใน Helpdesk เฉพาะกรณีนี้เท่านั้น ' +
+                  'false = อีเมลมาจากฟอร์มก่อนแชท ซึ่งผู้เข้าชมพิมพ์ของใครก็ได้',
+              },
+              assignee: { type: 'object', additionalProperties: true },
+            },
+          },
+          messages: {
+            type: 'array',
+            description: 'ในรายการนี้มีข้อความล่าสุดใบเดียว — ระบบเราไม่ใช้ ดึงครบจาก /messages แทน',
+            items: { $ref: '#/components/schemas/Message' },
           },
         },
       },

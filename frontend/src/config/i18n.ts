@@ -125,6 +125,8 @@ export const MESSAGES = {
   'nav.problems': { lo: 'Problem ແລະ RCA', th: 'Problem และ RCA' },
   'nav.auditLogs': { lo: 'ບັນທຶກການໃຊ້ງານ', th: 'บันทึกการใช้งาน' },
   'nav.teams': { lo: 'ທີມງານ IT', th: 'ทีมงาน IT' },
+  // เว็บของบริษัทที่ฝังปุ่มแชทของ Helpdesk ไว้ — ไม่ใช่ "โปรเจกต์" ในความหมายบริหารโครงการ
+  'nav.projects': { lo: 'ໂຄງການທີ່ຮັບຊັບພອດ', th: 'โครงการที่รับซัพพอร์ต' },
   'nav.sla': { lo: 'ຕັ້ງຄ່າ SLA', th: 'ตั้งค่า SLA' },
   'nav.businessHours': { lo: 'ເວລາເຮັດວຽກ ແລະ ວັນພັກ', th: 'เวลาทำการและวันหยุด' },
   'nav.escalation': { lo: 'ກົດຍົກລະດັບ', th: 'กฎยกระดับ' },

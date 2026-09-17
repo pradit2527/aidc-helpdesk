@@ -46,6 +46,42 @@ export interface SupportChatMessage {
   created_at: string;
 }
 
+/**
+ * ที่มาของห้องแชท
+ *
+ *   helpdesk = พนักงานที่ล็อกอินกดปุ่มแชทในระบบนี้
+ *   widget   = ผู้เข้าชมเว็บของบริษัทที่ฝัง widget ไว้ (AIDC Support Hub)
+ *
+ * ห้องแบบ widget ไม่มีบัญชีผู้ใช้อยู่เบื้องหลัง — requester ที่ backend ส่งมา
+ * เป็นค่าสมมุติ (id: 0) เพื่อให้รูปร่างข้อมูลเหมือนกันทั้งสองแบบ ห้ามนำ id นั้น
+ * ไปทำลิงก์ไปหน้าโปรไฟล์ผู้ใช้ หรือแสดงบนหน้าจอเด็ดขาด
+ */
+export type ChatOrigin = 'helpdesk' | 'widget';
+
+/** โครงการที่รับซัพพอร์ต — เว็บหนึ่งเว็บ = หนึ่งโครงการ */
+export interface ChatProjectRef {
+  id: number;
+  code: string;
+  name: string;
+}
+
+/** ข้อมูลติดต่อของผู้เข้าชมเว็บ — มีเฉพาะห้องแบบ widget และขาดได้ทุกช่อง */
+export interface ChatVisitorContact {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  /**
+   * เว็บที่ผู้เข้าชมมาจาก เซ็นรับรองตัวตนนี้ด้วย HMAC ที่เซิร์ฟเวอร์ของเขาแล้ว
+   *
+   * ⚠️ ต่างกันมากกับ "ผู้เข้าชมพิมพ์อีเมลมาเอง"
+   *    อีเมลที่พิมพ์เองไม่ได้พิสูจน์อะไรเลย ใครก็พิมพ์อีเมลผู้บริหารได้
+   *    เจ้าหน้าที่ต้องเห็นความต่างนี้ก่อนจะทำอะไรที่ต้องยืนยันตัวตน เช่นรีเซ็ตรหัสผ่าน
+   *
+   * เป็น optional บนสายเพราะเพิ่มมาทีหลัง — ไม่มีค่า = ยังไม่ยืนยัน (ปลอดภัยกว่า)
+   */
+  verified?: boolean;
+}
+
 export interface SupportChatSummary {
   id: number;
   status: 'open' | 'closed';
@@ -53,6 +89,14 @@ export interface SupportChatSummary {
   requester: ChatPerson & { department: string | null; job_title: string | null };
   assignee: ChatPerson | null;
   ticket_id: number | null;
+  /*
+   * สามช่องล่างนี้เป็น optional บนสาย ไม่ใช่เพราะ backend เลือกส่งบ้างไม่ส่งบ้าง
+   * แต่เพราะหน้าจอนี้ถูกปล่อยก่อน API ที่เพิ่มช่องพวกนี้ — ของเก่าที่ไม่มีช่อง
+   * ต้องยังใช้งานได้ตามปกติ ไม่ใช่แสดงหน้าว่างหรือ undefined เต็มจอ
+   */
+  origin?: ChatOrigin;
+  project?: ChatProjectRef | null;
+  contact?: ChatVisitorContact | null;
   last_message_at: string;
   last_message: {
     body: string;
@@ -83,11 +127,33 @@ export interface ChatFileInput {
 
 export type ChatInboxStatus = 'open' | 'closed';
 
+/**
+ * ตัวกรองกล่องแชทนอกเหนือจากสถานะ
+ *
+ * ค่า null = ไม่กรอง ไม่ใช่ "กรองเอาค่าว่าง" — buildUrl ของ lib/api ตัดค่า null
+ * ออกจาก query string ให้อยู่แล้ว จึงส่งลงไปตรง ๆ ได้
+ */
+export interface ChatInboxFilters {
+  projectId?: number | null;
+  origin?: ChatOrigin | null;
+}
+
 export const chatKeys = {
   all: ['support-chat'] as const,
   mine: () => [...chatKeys.all, 'mine'] as const,
   inboxAll: () => [...chatKeys.all, 'inbox'] as const,
-  inbox: (status: ChatInboxStatus) => [...chatKeys.all, 'inbox', status] as const,
+  /*
+   * ตัวกรองเป็นส่วนหนึ่งของคีย์ ไม่ใช่ค่าที่ส่งไปเฉย ๆ
+   * ถ้าไม่ใส่ การสลับตัวกรองจะเขียนทับผลลัพธ์ของอีกตัวกรองหนึ่งใน cache เดียวกัน
+   * แล้วผู้ใช้จะเห็นรายการของโครงการก่อนหน้าค้างอยู่ชั่วครู่ทุกครั้งที่สลับ
+   */
+  inbox: (status: ChatInboxStatus, filters: ChatInboxFilters = {}) =>
+    [
+      ...chatKeys.all,
+      'inbox',
+      status,
+      { projectId: filters.projectId ?? null, origin: filters.origin ?? null },
+    ] as const,
   thread: (id: number) => [...chatKeys.all, 'thread', id] as const,
 };
 
@@ -190,14 +256,28 @@ export function useSendMyChatFile() {
   });
 }
 
-/** กล่องแชทของทีมไอที */
+/**
+ * กล่องแชทของทีมไอที
+ *
+ * project_id / origin เป็นตัวกรองที่เพิ่มมาพร้อม Support Hub — ค่าว่างไม่ถูกส่ง
+ * ไปใน query string เลย API รุ่นที่ยังไม่รู้จักสองตัวนี้จึงตอบเหมือนเดิมทุกประการ
+ */
 export function useChatInbox(
   status: ChatInboxStatus,
+  filters: ChatInboxFilters = {},
   enabled = true,
 ): UseQueryResult<SupportChatSummary[], Error> {
+  const projectId = filters.projectId ?? null;
+  const origin = filters.origin ?? null;
+
   return useQuery({
-    queryKey: chatKeys.inbox(status),
-    queryFn: () => api.get<SupportChatSummary[]>('/support-chat/inbox', { status }),
+    queryKey: chatKeys.inbox(status, { projectId, origin }),
+    queryFn: () =>
+      api.get<SupportChatSummary[]>('/support-chat/inbox', {
+        status,
+        project_id: projectId,
+        origin,
+      }),
     enabled,
     refetchInterval: SAFETY_REFETCH_MS,
     staleTime: 10_000,
@@ -248,9 +328,16 @@ export function useMarkChatRead() {
         item.id === chatId ? { ...item, unread: false } : item;
       qc.setQueryData<SupportChatThread | null>(chatKeys.mine(), (old) => (old ? clear(old) : old));
       qc.setQueryData<SupportChatThread>(chatKeys.thread(chatId), (old) => (old ? clear(old) : old));
-      for (const status of ['open', 'closed'] as const) {
-        qc.setQueryData<SupportChatSummary[]>(chatKeys.inbox(status), (old) => old?.map(clear));
-      }
+      /*
+       * ล้างจุดยังไม่อ่านในกล่องแชท "ทุกชุดตัวกรอง" ไม่ใช่แค่ open/closed
+       *
+       * ตั้งแต่มีตัวกรองโครงการ คีย์ของกล่องแชทมีได้หลายชุดพร้อมกันใน cache
+       * (เช่นชุดไม่กรอง กับชุดกรองเฉพาะ ILP) การเขียนทับเฉพาะคีย์ที่เดาไว้ล่วงหน้า
+       * จะเหลือชุดอื่นค้างจุดแดงไว้ แล้วตัวเลข "ยังไม่ได้อ่าน" บนแท็บก็ไม่ลด
+       */
+      qc.setQueriesData<SupportChatSummary[]>({ queryKey: chatKeys.inboxAll() }, (old) =>
+        old?.map(clear),
+      );
     },
   });
 }

@@ -121,7 +121,19 @@ export class SupportChatController {
   @Get('inbox')
   @ApiOperation({
     summary: 'กล่องแชทของทีมไอที',
-    description: 'ต้องมีสิทธิ์ `ticket.change_status` · เห็นเฉพาะบริษัทในขอบเขต · เรียงตามข้อความล่าสุด',
+    description: [
+      'ต้องมีสิทธิ์ `ticket.change_status` · เห็นเฉพาะบริษัทในขอบเขต · เรียงตามข้อความล่าสุด',
+      '',
+      'รวมสองแหล่งไว้ในกล่องเดียว แยกด้วย `origin`',
+      '- `helpdesk` — พนักงานกดแชทในระบบ · `requester` คือบัญชีจริง · `contact` เป็น null',
+      '- `widget` — ผู้เข้าชมเว็บเปิดจาก widget ของ Chatwoot · `project` บอกว่ามาจากเว็บไหน',
+      '  `requester` ยังไม่เคยเป็น null (ใช้ `id: 0` เมื่อไม่รู้ว่าเป็นใคร)',
+      '',
+      '⚠️ `contact.verified` = Chatwoot ยืนยันตัวตนด้วย HMAC แล้ว',
+      'อีเมลที่ `verified: false` มาจากฟอร์มก่อนแชทซึ่งผู้เข้าชมพิมพ์เองได้ ห้ามถือเป็นตัวตน',
+      '',
+      'กรองเพิ่มได้ด้วย `project_id` และ `origin`',
+    ].join('\n'),
   })
   @ApiResponse({ status: 200, type: [SupportChatSummaryDto] })
   @ApiResponse({ status: 403, type: ErrorResponseDto })
@@ -129,7 +141,10 @@ export class SupportChatController {
     @CurrentScope() scope: AccessScope,
     @Query() query: ChatInboxQueryDto,
   ): Promise<SupportChatSummaryDto[]> {
-    return this.chats.inbox(scope, query.status ?? 'open');
+    return this.chats.inbox(scope, query.status ?? 'open', {
+      ...(query.project_id !== undefined ? { projectId: query.project_id } : {}),
+      ...(query.origin !== undefined ? { origin: query.origin } : {}),
+    });
   }
 
   @Get(':id')

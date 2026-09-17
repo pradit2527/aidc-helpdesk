@@ -24,6 +24,7 @@ import { DbModule } from './db/db.module';
 import { JobsModule } from './jobs/jobs.module';
 import { SlaConfigRepository } from './db/repositories/sla-config.repository';
 import { SupportChatRepository } from './db/repositories/support-chat.repository';
+import { SupportProjectRepository } from './db/repositories/support-project.repository';
 import { SupportTeamRepository } from './db/repositories/support-team.repository';
 import { TicketDetailRepository } from './db/repositories/ticket-detail.repository';
 import { TicketRepository } from './db/repositories/ticket.repository';
@@ -57,6 +58,10 @@ import { RealtimeGateway } from './modules/realtime/realtime.gateway';
 import { SupportChatController } from './modules/support-chat/support-chat.controller';
 import { ChatwootSyncService } from './modules/support-chat/chatwoot-sync.service';
 import { SupportChatService } from './modules/support-chat/support-chat.service';
+import { ChatwootWebhookController } from './modules/support-projects/chatwoot-webhook.controller';
+import { PublicSupportProjectsController } from './modules/support-projects/public-support-projects.controller';
+import { SupportProjectsController } from './modules/support-projects/support-projects.controller';
+import { SupportProjectsService } from './modules/support-projects/support-projects.service';
 import { SupportTeamsController } from './modules/support-teams/support-teams.controller';
 import { SupportTeamsService } from './modules/support-teams/support-teams.service';
 import { SystemController } from './modules/system/system.controller';
@@ -92,6 +97,15 @@ import { UsersService } from './modules/users/users.service';
     ProblemsController,
     ReportsController,
     SupportChatController,
+    SupportProjectsController,
+    /*
+     * สองตัวนี้ไม่มี ScopeGuard โดยตั้งใจ — ไม่ใช้คุกกี้และไม่ตรวจ CSRF
+     *   PublicSupportProjectsController  GET ค่าตั้ง widget ให้สคริปต์ฝังในเว็บของกลุ่ม
+     *   ChatwootWebhookController        รับสัญญาณจากเซิร์ฟเวอร์ Chatwoot (กั้นด้วย token ใน query)
+     * ทั้งคู่จำกัดอยู่แค่สองเส้นทางนี้เท่านั้น ไม่ได้ผ่อนกฎให้ controller อื่นเลย
+     */
+    PublicSupportProjectsController,
+    ChatwootWebhookController,
     SupportTeamsController,
     SystemController,
     TicketsController,
@@ -120,12 +134,15 @@ import { UsersService } from './modules/users/users.service';
     TicketWriteRepository,
     SlaConfigRepository,
     SupportChatRepository,
+    SupportProjectRepository,
     SupportTeamRepository,
     // socket.io ตัวเดียวของทั้งระบบ — คอมเมนต์ ticket และแชทช่วยเหลือ
     RealtimeGateway,
     // ซิงก์แชทสองทางกับ Chatwoot — ไม่ทำอะไรจนกว่าจะตั้งค่าใน .env ครบ
     ChatwootSyncService,
     SupportChatService,
+    // AIDC Support Hub — หนึ่งเว็บของกลุ่ม = หนึ่ง inbox ชนิด Website = หนึ่งโครงการ
+    SupportProjectsService,
     // ทีมสนับสนุน — ข้อมูลที่ตอบว่า "หัวหน้าคนนี้มอบหมายงานให้ใครได้"
     SupportTeamsService,
     TicketsService,

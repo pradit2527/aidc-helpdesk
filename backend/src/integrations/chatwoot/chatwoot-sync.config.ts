@@ -14,7 +14,16 @@
  */
 
 export interface ChatwootSyncConfig {
+  /** ซิงก์แชทที่ผู้ใช้ Helpdesk เปิดเอง (ต้องมี inbox ชนิด API) */
   enabled: boolean;
+  /**
+   * ต่อกับ Application API ของ Chatwoot ได้หรือไม่ — ไม่รวมเงื่อนไข inbox ซิงก์
+   *
+   * แยกจาก enabled เพราะ AIDC Support Hub อ่านบทสนทนาของ inbox ชนิด Website
+   * ซึ่งไม่เกี่ยวกับ CHATWOOT_SYNC_INBOX_ID เลย ระบบที่ตั้งแค่ที่อยู่กับ token
+   * จึงใช้ widget ได้ทันทีโดยไม่ต้องสร้าง inbox ชนิด API ก่อน
+   */
+  apiReady: boolean;
   baseUrl: string;
   accountId: number;
   inboxId: number;
@@ -42,15 +51,16 @@ export function readChatwootSyncConfig(env: NodeJS.ProcessEnv = process.env): Ch
     .map((host) => host.trim())
     .filter(Boolean);
 
+  const apiReady =
+    baseHost !== '' && token !== '' && Number.isInteger(accountId) && accountId > 0;
+
   return {
     enabled:
       env.CHATWOOT_SYNC_ENABLED === 'true' &&
-      baseHost !== '' &&
-      token !== '' &&
+      apiReady &&
       Number.isInteger(inboxId) &&
-      inboxId > 0 &&
-      Number.isInteger(accountId) &&
-      accountId > 0,
+      inboxId > 0,
+    apiReady,
     baseUrl,
     accountId,
     inboxId,

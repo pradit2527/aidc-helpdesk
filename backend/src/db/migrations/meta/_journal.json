@@ -50,6 +50,20 @@
       "when": 1789614924706,
       "tag": "0006_support_team",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789634248515,
+      "tag": "0007_support_project",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789634758313,
+      "tag": "0008_support_chat_contact_verified",
+      "breakpoints": true
     }
   ]
 }

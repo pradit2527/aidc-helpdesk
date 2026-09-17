@@ -4,7 +4,14 @@ import { alias } from 'drizzle-orm/pg-core';
 
 import type { Db } from '../client';
 import { DB } from '../db.module';
-import { appUser, company, department, supportChat, supportChatMessage } from '../schema';
+import {
+  appUser,
+  company,
+  department,
+  supportChat,
+  supportChatMessage,
+  supportProject,
+} from '../schema';
 
 export type ChatSide = 'requester' | 'staff';
 export type ChatAttachmentKind = 'image' | 'audio' | 'file';
@@ -22,8 +29,9 @@ export interface SupportChatRow {
   id: number;
   companyId: number;
   companyCode: string;
-  requesterId: number;
-  requesterName: string;
+  /** null = ห้องจาก widget ที่ยังไม่ได้ผูกกับบัญชีใน Helpdesk */
+  requesterId: number | null;
+  requesterName: string | null;
   requesterDepartment: string | null;
   requesterJobTitle: string | null;
   assigneeId: number | null;
@@ -35,10 +43,23 @@ export interface SupportChatRow {
   requesterReadAt: Date | null;
   staffReadAt: Date | null;
   closedAt: Date | null;
+  /** null ทั้งที่ปิดแล้ว = Chatwoot เป็นฝ่ายปิดมา ไม่ใช่คนใน Helpdesk */
+  closedBy: number | null;
   createdAt: Date;
   chatwootConversationId: number | null;
   chatwootContactId: number | null;
   chatwootCursor: number | null;
+
+  // ── AIDC Support Hub ──
+  origin: string;
+  projectId: number | null;
+  projectCode: string | null;
+  projectName: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  contactIdentifier: string | null;
+  contactVerified: boolean;
 }
 
 export interface SupportChatMessageRow {
@@ -51,6 +72,8 @@ export interface SupportChatMessageRow {
   chatwootMessageId: number | null;
   body: string;
   isSystem: boolean;
+  /** ผู้เข้าชมเว็บเป็นคนพิมพ์ — ไม่ใช่ข้อความระบบ และไม่ใช่คำตอบของเจ้าหน้าที่ */
+  fromContact: boolean;
   createdAt: Date;
   attachment: StoredChatAttachment | null;
 }
@@ -62,6 +85,26 @@ export interface LastMessageRow {
   isSystem: boolean;
   attachmentKind: ChatAttachmentKind | null;
   external: boolean;
+  fromContact: boolean;
+}
+
+/** ตัวตนของผู้เข้าชมเท่าที่ Chatwoot รู้ — ทุกช่องว่างได้ */
+export interface WidgetContact {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  identifier: string | null;
+  /** Chatwoot ยืนยันด้วย HMAC แล้ว — เงื่อนไขเดียวที่ยอมให้จับคู่กับบัญชีใน Helpdesk */
+  verified: boolean;
+}
+
+/** ค่าที่ตัวค้นพบใช้สร้างหรืออัปเดตห้องของบทสนทนาหนึ่ง */
+export interface WidgetChatUpsert {
+  conversationId: number;
+  contactId: number | null;
+  projectId: number;
+  companyId: number;
+  contact: WidgetContact;
 }
 
 const requester = alias(appUser, 'chat_requester');
@@ -105,6 +148,7 @@ const messageColumns = {
   chatwootMessageId: supportChatMessage.chatwootMessageId,
   body: supportChatMessage.body,
   isSystem: supportChatMessage.isSystem,
+  fromContact: supportChatMessage.fromContact,
   createdAt: supportChatMessage.createdAt,
   ...attachmentColumns,
 };
@@ -118,6 +162,7 @@ type MessageSelectRow = {
   chatwootMessageId: number | null;
   body: string;
   isSystem: boolean;
+  fromContact: boolean;
   createdAt: Date;
   attachmentKey: string | null;
   attachmentName: string | null;
@@ -136,6 +181,7 @@ function toMessageRow(row: MessageSelectRow): SupportChatMessageRow {
     chatwootMessageId: row.chatwootMessageId,
     body: row.body,
     isSystem: row.isSystem,
+    fromContact: row.fromContact,
     createdAt: row.createdAt,
     attachment: toAttachment(row),
   };
@@ -170,16 +216,33 @@ export class SupportChatRepository {
         requesterReadAt: supportChat.requesterReadAt,
         staffReadAt: supportChat.staffReadAt,
         closedAt: supportChat.closedAt,
+        closedBy: supportChat.closedBy,
         createdAt: supportChat.createdAt,
         chatwootConversationId: supportChat.chatwootConversationId,
         chatwootContactId: supportChat.chatwootContactId,
         chatwootCursor: supportChat.chatwootCursor,
+        origin: supportChat.origin,
+        projectId: supportChat.projectId,
+        projectCode: supportProject.code,
+        projectName: supportProject.name,
+        contactName: supportChat.contactName,
+        contactEmail: supportChat.contactEmail,
+        contactPhone: supportChat.contactPhone,
+        contactIdentifier: supportChat.contactIdentifier,
+        contactVerified: supportChat.contactVerified,
       })
       .from(supportChat)
       .innerJoin(company, eq(company.id, supportChat.companyId))
-      .innerJoin(requester, eq(requester.id, supportChat.requesterId))
+      /*
+       * ⚠️ ต้องเป็น leftJoin ไม่ใช่ innerJoin
+       *    ห้องจาก widget ไม่มี requester_id — innerJoin จะทำให้มันหายไปจาก
+       *    ทุกคิวรีในไฟล์นี้เงียบ ๆ รวมถึงกล่องแชทและตัวซิงก์ แล้วข้อความของ
+       *    ผู้เข้าชมจะถูกนำเข้าซ้ำทุกรอบเพราะไม่มีใครเลื่อน cursor ให้
+       */
+      .leftJoin(requester, eq(requester.id, supportChat.requesterId))
       .leftJoin(department, eq(department.id, requester.departmentId))
       .leftJoin(assignee, eq(assignee.id, supportChat.assigneeId))
+      .leftJoin(supportProject, eq(supportProject.id, supportChat.projectId))
       .$dynamic();
   }
 
@@ -188,10 +251,17 @@ export class SupportChatRepository {
     return row ?? null;
   }
 
-  /** ห้องที่ผู้ใช้ควรเห็นเมื่อเปิดแชท — ห้องที่เปิดอยู่ ถ้าไม่มีก็ห้องล่าสุดที่ปิดไปแล้ว */
+  /**
+   * ห้องที่ผู้ใช้ควรเห็นเมื่อเปิดแชท — ห้องที่เปิดอยู่ ถ้าไม่มีก็ห้องล่าสุดที่ปิดไปแล้ว
+   *
+   * ⚠️ เฉพาะห้องที่เขาเปิดเองใน Helpdesk (origin = 'helpdesk')
+   *    ห้องจาก widget ที่ถูกจับคู่กับบัญชีเขาไม่ใช่ "แชทของฉัน" — มันคือบทสนทนา
+   *    ที่เขาเริ่มจากเว็บอื่น ซึ่งตอบกลับผ่าน Chatwoot เท่านั้น การเอามาแสดง
+   *    ในกล่องแชทส่วนตัวจะทำให้เขาพิมพ์ตอบในทางที่ระบบส่งออกไปไม่ได้
+   */
   async latestOf(requesterId: number): Promise<SupportChatRow | null> {
     const [row] = await this.selectChat()
-      .where(eq(supportChat.requesterId, requesterId))
+      .where(and(eq(supportChat.requesterId, requesterId), eq(supportChat.origin, 'helpdesk')))
       .orderBy(
         sql`case when ${supportChat.status} = 'open' then 0 else 1 end`,
         desc(supportChat.lastMessageAt),
@@ -218,15 +288,51 @@ export class SupportChatRepository {
     if (created) return created.id;
 
     const again = await this.openIdOf(requesterId);
-    if (again === null) throw new Error('สร้างห้องแชทไม่สำเร็จ');
-    return again;
+    if (again !== null) return again;
+
+    /*
+     * ไม่มีห้อง Helpdesk ที่เปิดอยู่ แต่แถวใหม่ถูกปฏิเสธ = ห้องจาก widget
+     * ที่ถูกจับคู่กับบัญชีคนนี้กำลังถือสิทธิ์ "หนึ่งห้องที่เปิด" อยู่
+     *
+     * ปลดการจับคู่นั้นแล้วสร้างห้องของเขาแทน — การกดแชทใน Helpdesk คือการกระทำ
+     * ที่ผู้ใช้ตั้งใจและยืนยันตัวตนแล้ว ส่วนการจับคู่จากอีเมลเป็นการ "อนุมาน"
+     * ของที่อนุมานต้องยอมให้ของที่ยืนยันแล้วเสมอ และห้ามเอาสองห้องมารวมกัน
+     * (ห้อง widget ยังอยู่ครบพร้อมข้อมูลผู้ติดต่อ แค่ไม่ผูกกับบัญชีอีกต่อไป)
+     */
+    await this.db
+      .update(supportChat)
+      .set({ requesterId: null })
+      .where(
+        and(
+          eq(supportChat.requesterId, requesterId),
+          eq(supportChat.status, 'open'),
+          eq(supportChat.origin, 'widget'),
+        ),
+      );
+
+    const [retried] = await this.db
+      .insert(supportChat)
+      .values({ companyId, requesterId })
+      .onConflictDoNothing()
+      .returning({ id: supportChat.id });
+    if (retried) return retried.id;
+
+    const last = await this.openIdOf(requesterId);
+    if (last === null) throw new Error('สร้างห้องแชทไม่สำเร็จ');
+    return last;
   }
 
   private async openIdOf(requesterId: number): Promise<number | null> {
     const [row] = await this.db
       .select({ id: supportChat.id })
       .from(supportChat)
-      .where(and(eq(supportChat.requesterId, requesterId), eq(supportChat.status, 'open')))
+      .where(
+        and(
+          eq(supportChat.requesterId, requesterId),
+          eq(supportChat.status, 'open'),
+          eq(supportChat.origin, 'helpdesk'),
+        ),
+      )
       .limit(1);
     return row?.id ?? null;
   }
@@ -243,8 +349,11 @@ export class SupportChatRepository {
     /** ข้อความที่นำเข้าจาก Chatwoot */
     externalSenderName?: string;
     chatwootMessageId?: number;
+    /** ผู้เข้าชมเว็บเป็นคนพิมพ์ (ห้องจาก widget เท่านั้น) */
+    fromContact?: boolean;
   }): Promise<SupportChatMessageRow> {
     const isSystem = input.isSystem ?? false;
+    const fromContact = input.fromContact ?? false;
     const file = input.attachment;
 
     return this.db.transaction(async (tx) => {
@@ -255,6 +364,7 @@ export class SupportChatRepository {
           senderId: input.senderId,
           body: input.body,
           isSystem,
+          fromContact,
           ...(file
             ? {
                 attachmentKey: file.key,
@@ -317,10 +427,14 @@ export class SupportChatRepository {
     return row ? toAttachment(row) : null;
   }
 
-  /** @param companyIds null = ทุกบริษัท (super_admin) */
+  /**
+   * @param companyIds null = ทุกบริษัท (super_admin)
+   * @param filter ตัวกรองเพิ่มเติมจากกล่องแชท — ไม่ส่ง = ทุกโครงการและทุกทาง
+   */
   async inbox(
     companyIds: readonly number[] | null,
     status: 'open' | 'closed',
+    filter: { projectId?: number; origin?: string } = {},
     limit = 100,
   ): Promise<SupportChatRow[]> {
     const conditions: SQL[] = [eq(supportChat.status, status)];
@@ -328,6 +442,10 @@ export class SupportChatRepository {
       if (companyIds.length === 0) return [];
       conditions.push(inArray(supportChat.companyId, [...companyIds]));
     }
+    if (filter.projectId !== undefined) {
+      conditions.push(eq(supportChat.projectId, filter.projectId));
+    }
+    if (filter.origin !== undefined) conditions.push(eq(supportChat.origin, filter.origin));
     return this.selectChat()
       .where(and(...conditions))
       .orderBy(desc(supportChat.lastMessageAt))
@@ -342,6 +460,7 @@ export class SupportChatRepository {
         body: supportChatMessage.body,
         senderId: supportChatMessage.senderId,
         isSystem: supportChatMessage.isSystem,
+        fromContact: supportChatMessage.fromContact,
         attachmentKind: supportChatMessage.attachmentKind,
         externalSenderName: supportChatMessage.externalSenderName,
       })
@@ -358,6 +477,7 @@ export class SupportChatRepository {
           isSystem: row.isSystem,
           attachmentKind: row.attachmentKind ? asKind(row.attachmentKind) : null,
           external: row.externalSenderName !== null,
+          fromContact: row.fromContact,
         },
       ]),
     );
@@ -415,6 +535,8 @@ export class SupportChatRepository {
           isNull(supportChatMessage.chatwootMessageId),
           eq(supportChatMessage.isSystem, false),
           isNull(supportChatMessage.externalSenderName),
+          // ข้อความของผู้เข้าชมมาจาก Chatwoot อยู่แล้ว ส่งกลับไปเท่ากับพูดซ้ำให้เขาฟัง
+          eq(supportChatMessage.fromContact, false),
         ),
       )
       .orderBy(supportChatMessage.id)
@@ -456,6 +578,10 @@ export class SupportChatRepository {
   /**
    * ห้องที่ต้องซิงก์ในรอบนี้ — ห้องที่เปิดอยู่และผูกกับ Chatwoot แล้ว
    * หรือยังไม่ผูกแต่มีข้อความค้างส่งภายใน 24 ชั่วโมง (เผื่อ Chatwoot ล่มชั่วคราว)
+   *
+   * ⚠️ เฉพาะห้องที่เปิดจากใน Helpdesk — ห้องจาก widget มีรอบของตัวเอง
+   *    (ตัวค้นพบทุก CHATWOOT_WIDGET_POLL_MS) ถ้าเอามารวมรอบเดียวกัน ห้องจาก widget
+   *    จะถูกยิงถี่กว่าที่ตั้งใจ และเส้นทางของแชทภายในจะเปลี่ยนพฤติกรรมไปด้วย
    */
   async syncTargets(limit = 200): Promise<number[]> {
     const rows = await this.db
@@ -464,6 +590,7 @@ export class SupportChatRepository {
       .where(
         and(
           eq(supportChat.status, 'open'),
+          eq(supportChat.origin, 'helpdesk'),
           or(
             isNotNull(supportChat.chatwootConversationId),
             sql`exists (
@@ -480,5 +607,170 @@ export class SupportChatRepository {
       .orderBy(desc(supportChat.lastMessageAt))
       .limit(limit);
     return rows.map((row) => row.id);
+  }
+
+  // ── AIDC Support Hub: ห้องที่มาจาก widget ────────────────────────────
+
+  async findByConversationId(conversationId: number): Promise<SupportChatRow | null> {
+    const [row] = await this.selectChat()
+      .where(eq(supportChat.chatwootConversationId, conversationId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * สร้างห้องของบทสนทนาหนึ่ง ถ้ายังไม่มี แล้วอัปเดตข้อมูลผู้ติดต่อให้เป็นปัจจุบัน
+   *
+   * ใช้ ON CONFLICT บน uq_support_chat_chatwoot_conversation — สองรอบที่วิ่งชนกัน
+   * (รอบดึงเป็นระยะกับ webhook ที่มาถึงพร้อมกัน) จึงไม่สร้างห้องซ้ำให้คนเดียวกัน
+   *
+   * ⚠️ ไม่แตะ status ของห้องที่มีอยู่แล้วเลย — การเปิดใหม่หรือปิดตาม Chatwoot
+   *    เป็นหน้าที่ของตัวซิงก์ ซึ่งต้องเขียนข้อความระบบกำกับไว้ด้วยเสมอ
+   *
+   * @returns id ของห้อง สถานะปัจจุบัน และบอกว่าเพิ่งถูกสร้างในรอบนี้หรือไม่
+   *          (คืนสถานะมาด้วยเพื่อไม่ต้องอ่านแถวซ้ำอีกรอบ — ทุกคิวรีบนฐานข้อมูล dev ราว 250 ms)
+   */
+  async upsertWidgetChat(
+    input: WidgetChatUpsert,
+  ): Promise<{ id: number; created: boolean; status: string }> {
+    const contactFields = {
+      contactName: input.contact.name,
+      contactEmail: input.contact.email,
+      contactPhone: input.contact.phone,
+      contactIdentifier: input.contact.identifier,
+      contactVerified: input.contact.verified,
+    };
+
+    const [row] = await this.db
+      .insert(supportChat)
+      .values({
+        companyId: input.companyId,
+        requesterId: null,
+        projectId: input.projectId,
+        origin: 'widget',
+        chatwootConversationId: input.conversationId,
+        chatwootContactId: input.contactId,
+        ...contactFields,
+      })
+      .onConflictDoUpdate({
+        target: supportChat.chatwootConversationId,
+        /*
+         * ⚠️ uq_support_chat_chatwoot_conversation เป็นดัชนี unique **บางส่วน**
+         *    Postgres จะจับคู่ ON CONFLICT กับดัชนีแบบนั้นได้ก็ต่อเมื่อเขียนเงื่อนไข
+         *    เดียวกันกำกับไว้ด้วย ไม่งั้นได้ error "there is no unique or exclusion
+         *    constraint matching the ON CONFLICT specification" ทุกครั้งที่ upsert
+         */
+        targetWhere: sql`chatwoot_conversation_id is not null`,
+        set: {
+          ...contactFields,
+          projectId: sql`excluded.project_id`,
+          chatwootContactId: sql`coalesce(excluded.chatwoot_contact_id, ${supportChat.chatwootContactId})`,
+        },
+      })
+      .returning({
+        id: supportChat.id,
+        createdAt: supportChat.createdAt,
+        status: supportChat.status,
+      });
+
+    if (!row) {
+      const existing = await this.findByConversationId(input.conversationId);
+      if (!existing) throw new Error('สร้างห้องแชทจาก widget ไม่สำเร็จ');
+      return { id: existing.id, created: false, status: existing.status };
+    }
+
+    // แถวที่เพิ่งถูกสร้างมี created_at เป็นเวลาปัจจุบัน — ใช้ตัดสินว่าต้องประกาศห้องใหม่ไหม
+    return {
+      id: row.id,
+      created: Date.now() - row.createdAt.getTime() < 5_000,
+      status: row.status,
+    };
+  }
+
+  /** ปิดห้องตามที่ Chatwoot บอก — ไม่มีคนใน Helpdesk เป็นผู้ปิด closed_by จึงเป็น null */
+  async closeFromChatwoot(chatId: number): Promise<boolean> {
+    const closed = await this.db
+      .update(supportChat)
+      .set({ status: 'closed', closedAt: new Date(), closedBy: null })
+      .where(and(eq(supportChat.id, chatId), eq(supportChat.status, 'open')))
+      .returning({ id: supportChat.id });
+    return closed.length > 0;
+  }
+
+  /**
+   * เปิดห้องที่ปิดไปแล้วกลับมา — ผู้เข้าชมพิมพ์มาใหม่ในบทสนทนาเดิม
+   *
+   * ต้องเปิดห้องเดิม ไม่ใช่สร้างห้องใหม่ เพราะหนึ่งบทสนทนาใน Chatwoot ผูกกับ
+   * ห้องเดียวเสมอ (uq_support_chat_chatwoot_conversation) และประวัติที่คุยกันไว้
+   * ต้องอยู่ต่อเนื่องกัน ไม่ใช่ถูกตัดครึ่งทุกครั้งที่ปิดแล้วกลับมาคุยใหม่
+   */
+  async reopen(chatId: number): Promise<boolean> {
+    const reopened = await this.db
+      .update(supportChat)
+      .set({ status: 'open', closedAt: null, closedBy: null })
+      .where(and(eq(supportChat.id, chatId), eq(supportChat.status, 'closed')))
+      .returning({ id: supportChat.id });
+    return reopened.length > 0;
+  }
+
+  /**
+   * หาบัญชีที่ใช้งานอยู่จากอีเมล (ไม่สนตัวพิมพ์เล็กใหญ่)
+   *
+   * ⚠️ ผู้เรียกต้องตรวจมาก่อนแล้วว่า Chatwoot ยืนยันตัวตนด้วย HMAC
+   *    อีเมลที่ผู้เข้าชมพิมพ์เองในฟอร์มก่อนแชท **ห้าม** เข้ามาถึงฟังก์ชันนี้
+   *
+   * @returns null เมื่อไม่เจอ หรือเจอมากกว่าหนึ่งคน (คลุมเครือ = ไม่จับคู่)
+   */
+  async findActiveUserByEmail(
+    email: string,
+  ): Promise<{ id: number; hasOpenChat: boolean } | null> {
+    const rows = await this.db
+      .select({ id: appUser.id })
+      .from(appUser)
+      .where(
+        and(
+          sql`lower(${appUser.email}) = ${email.trim().toLowerCase()}`,
+          eq(appUser.isActive, true),
+          isNull(appUser.deletedAt),
+        ),
+      )
+      .limit(2);
+    if (rows.length !== 1) return null;
+
+    const userId = rows[0]!.id;
+    const [open] = await this.db
+      .select({ id: supportChat.id })
+      .from(supportChat)
+      .where(and(eq(supportChat.requesterId, userId), eq(supportChat.status, 'open')))
+      .limit(1);
+    return { id: userId, hasOpenChat: open !== undefined };
+  }
+
+  /**
+   * ผูกห้องจาก widget เข้ากับบัญชีใน Helpdesk
+   *
+   * เขียนเฉพาะห้องที่ยังไม่มีเจ้าของ และปล่อยให้ดัชนี uq_support_chat_open_requester
+   * เป็นด่านสุดท้าย — ถ้าคนนั้นเพิ่งเปิดห้องอื่นระหว่างที่เราตรวจกับที่เราเขียน
+   * ฐานข้อมูลจะปฏิเสธเอง แล้วเราปล่อยห้องนี้ไว้แบบไม่ผูก ซึ่งถูกต้องกว่าการรวมห้อง
+   *
+   * @returns false เมื่อผูกไม่สำเร็จ (มีห้องอื่นที่เปิดอยู่แล้ว)
+   */
+  async linkRequester(chatId: number, userId: number): Promise<boolean> {
+    try {
+      const linked = await this.db
+        .update(supportChat)
+        .set({ requesterId: userId })
+        .where(
+          and(
+            eq(supportChat.id, chatId),
+            isNull(supportChat.requesterId),
+            eq(supportChat.origin, 'widget'),
+          ),
+        )
+        .returning({ id: supportChat.id });
+      return linked.length > 0;
+    } catch {
+      return false;
+    }
   }
 }

@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+
+import { SUPPORT_CHAT_ORIGIN } from '../../db/schema/support-chat';
 
 export const SUPPORT_CHAT_MAX_BODY = 4000;
 
@@ -25,6 +27,22 @@ export class ChatInboxQueryDto {
   @IsOptional()
   @IsIn(['open', 'closed'])
   status?: 'open' | 'closed';
+
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'เฉพาะแชทของโครงการนี้ (id จาก `GET /support-projects`)',
+  })
+  @IsOptional()
+  @IsInt()
+  project_id?: number;
+
+  @ApiPropertyOptional({
+    enum: SUPPORT_CHAT_ORIGIN,
+    description: '`helpdesk` = พนักงานเปิดในระบบ · `widget` = ผู้เข้าชมเว็บเปิดจาก widget',
+  })
+  @IsOptional()
+  @IsIn([...SUPPORT_CHAT_ORIGIN])
+  origin?: 'helpdesk' | 'widget';
 }
 
 export class ChatPersonDto {
@@ -40,6 +58,32 @@ export class ChatRequesterDto extends ChatPersonDto {
 export class ChatCompanyDto {
   @ApiProperty({ example: 1 }) id!: number;
   @ApiProperty({ example: 'HQ' }) code!: string;
+}
+
+export class ChatProjectDto {
+  @ApiProperty({ example: 1 }) id!: number;
+  @ApiProperty({ example: 'ILP' }) code!: string;
+  @ApiProperty({ example: 'ILP' }) name!: string;
+}
+
+/**
+ * ตัวตนของผู้เข้าชมเว็บ — มีเฉพาะแชทที่มาจาก widget
+ *
+ * ⚠️ `verified` คือสิ่งเดียวที่บอกว่าเชื่อ `email` ได้ไหม
+ *    false = ผู้เข้าชมพิมพ์เองในฟอร์มก่อนแชท ซึ่งพิมพ์อีเมลของใครก็ได้
+ *    true  = ระบบต้นทางเซ็นรับรองมาแล้วด้วย HMAC ของ inbox
+ *    หน้าจอไม่ควรแสดงอีเมลที่ยังไม่ยืนยันในลักษณะที่ทำให้เข้าใจว่าเป็นตัวตนจริง
+ */
+export class ChatContactDto {
+  @ApiProperty({ nullable: true, type: String, example: 'ນາງ ສົມໃຈ' }) name!: string | null;
+  @ApiProperty({ nullable: true, type: String, example: 'somjai@example.com' }) email!: string | null;
+  @ApiProperty({ nullable: true, type: String, example: '+8562055550000' }) phone!: string | null;
+
+  @ApiProperty({
+    example: false,
+    description: 'Chatwoot ยืนยันตัวตนด้วย HMAC แล้ว — เชื่อ `email` ได้เฉพาะเมื่อเป็น true',
+  })
+  verified!: boolean;
 }
 
 export class ChatAttachmentDto {
@@ -74,7 +118,13 @@ export class SupportChatMessageDto {
   @ApiProperty({ description: 'ว่างได้เมื่อข้อความเป็นไฟล์อย่างเดียว' }) body!: string;
   @ApiProperty({ description: 'ข้อความของระบบ เช่น "ทีมไอทีปิดแชทแล้ว"' }) is_system!: boolean;
   @ApiProperty({ description: 'true = ทีมไอทีเป็นคนส่ง' }) from_staff!: boolean;
-  @ApiProperty({ type: ChatPersonDto, nullable: true }) sender!: ChatPersonDto | null;
+
+  @ApiProperty({
+    type: ChatPersonDto,
+    nullable: true,
+    description: 'ข้อความจากผู้เข้าชมเว็บและจากเจ้าหน้าที่ฝั่ง Chatwoot ใช้ `id: 0` (ไม่มีบัญชีใน Helpdesk)',
+  })
+  sender!: ChatPersonDto | null;
   @ApiProperty({ type: ChatAttachmentDto, nullable: true }) attachment!: ChatAttachmentDto | null;
   @ApiProperty({ example: '2026-09-14T08:12:00.000Z' }) created_at!: string;
 }
@@ -82,8 +132,36 @@ export class SupportChatMessageDto {
 export class SupportChatSummaryDto {
   @ApiProperty() id!: number;
   @ApiProperty({ enum: ['open', 'closed'] }) status!: 'open' | 'closed';
+
+  @ApiProperty({
+    enum: SUPPORT_CHAT_ORIGIN,
+    description: '`helpdesk` = พนักงานเปิดในระบบ · `widget` = ผู้เข้าชมเว็บเปิดจาก widget ของ Chatwoot',
+  })
+  origin!: 'helpdesk' | 'widget';
+
+  @ApiProperty({
+    type: ChatProjectDto,
+    nullable: true,
+    description: 'เว็บที่แชทนี้มาจาก · null สำหรับแชทที่เปิดในระบบเอง',
+  })
+  project!: ChatProjectDto | null;
+
+  @ApiProperty({
+    type: ChatContactDto,
+    nullable: true,
+    description: 'ไม่ใช่ null เฉพาะแชทจาก widget',
+  })
+  contact!: ChatContactDto | null;
+
   @ApiProperty({ type: ChatCompanyDto }) company!: ChatCompanyDto;
-  @ApiProperty({ type: ChatRequesterDto }) requester!: ChatRequesterDto;
+
+  @ApiProperty({
+    type: ChatRequesterDto,
+    description:
+      'ไม่เคยเป็น null — แชทจาก widget ที่ยังไม่รู้ว่าเป็นใคร ใช้ `id: 0` กับชื่อจาก `contact.name` ' +
+      'หรือ "ຜູ້ເຂົ້າຊົມເວັບ" · ถ้า Chatwoot ยืนยันตัวตนแล้วและอีเมลตรงกับบัญชีในระบบ จะเป็นบัญชีจริง',
+  })
+  requester!: ChatRequesterDto;
   @ApiProperty({ type: ChatPersonDto, nullable: true }) assignee!: ChatPersonDto | null;
   @ApiProperty({ nullable: true, type: Number }) ticket_id!: number | null;
   @ApiProperty() last_message_at!: string;

@@ -22,6 +22,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { chatFilePath, writeChatFile } from './chat-file-store';
 import { CHAT_MAX_FILE_BYTES, decodeUploadName, detectChatFile } from './chat-file-type';
 import { ChatwootSyncService } from './chatwoot-sync.service';
+import { visitorName } from './chatwoot-widget';
 import {
   SUPPORT_CHAT_MAX_BODY,
   type SendChatMessageDto,
@@ -85,13 +86,22 @@ export class SupportChatService {
   }
 
   /** กล่องแชทของทีมไอที — เฉพาะบริษัทในขอบเขต เรียงตามข้อความล่าสุด */
-  async inbox(scope: AccessScope, status: 'open' | 'closed'): Promise<SupportChatSummaryDto[]> {
+  async inbox(
+    scope: AccessScope,
+    status: 'open' | 'closed',
+    filter: { projectId?: number; origin?: 'helpdesk' | 'widget' } = {},
+  ): Promise<SupportChatSummaryDto[]> {
     if (!scope.has(STAFF_PERMISSION)) {
       throw new ForbiddenError('FORBIDDEN', 'ມີແຕ່ທີມໄອທີທີ່ເປີດກ່ອງແຊັດໄດ້');
     }
+    /*
+     * ตัวกรองโครงการไม่ต้องตรวจขอบเขตแยก — ขอบเขตบริษัทถูกบังคับที่ชั้น query อยู่แล้ว
+     * ผู้เรียกที่ใส่ id ของโครงการนอกขอบเขตจึงได้รายการว่าง ไม่ใช่ข้อมูลของบริษัทอื่น
+     */
     const rows = await this.chats.inbox(
       scope.isSuperAdmin ? null : [...scope.companyIds],
       status,
+      filter,
     );
     const last = await this.chats.lastMessages(rows.map((row) => row.id));
     return rows.map((row) => this.summary(row, 'staff', last.get(row.id) ?? null));
@@ -228,7 +238,18 @@ export class SupportChatService {
     id: number,
   ): Promise<{ row: SupportChatRow; side: ChatSide }> {
     const row = await this.chats.findById(id);
-    if (row && row.requesterId === scope.userId) return { row, side: 'requester' };
+
+    /*
+     * ⚠️ ห้องจาก widget ไม่มีฝั่ง "ผู้ถาม" ใน Helpdesk เลย แม้จะถูกจับคู่กับบัญชีแล้ว
+     *
+     *    บทสนทนานั้นอยู่ใน inbox ชนิด Website ซึ่งรับข้อความ incoming ผ่าน API ไม่ได้
+     *    (ดู /docs-chatwoot ข้อ 1) ถ้าปล่อยให้เจ้าของบัญชีพิมพ์เข้ามาในฐานะผู้ถาม
+     *    ข้อความจะค้างส่งแล้วถูกลองใหม่ทุกรอบตลอดไปโดยไม่มีวันถึงผู้เข้าชม
+     *    การจับคู่มีไว้ให้ทีมไอทีรู้ว่าใครถาม ไม่ใช่เปิดช่องพิมพ์ให้เจ้าตัว
+     */
+    if (row && row.origin !== 'widget' && row.requesterId === scope.userId) {
+      return { row, side: 'requester' };
+    }
     if (row && scope.has(STAFF_PERMISSION) && scope.inScope(row.companyId)) {
       return { row, side: 'staff' };
     }
@@ -283,16 +304,48 @@ export class SupportChatService {
       if (!preview && last.attachmentKind) preview = ATTACHMENT_LABEL[last.attachmentKind];
     }
 
+    const isWidget = row.origin === 'widget';
+
     return {
       id: row.id,
       status: row.status === 'closed' ? 'closed' : 'open',
+      origin: isWidget ? 'widget' : 'helpdesk',
+      project:
+        row.projectId === null
+          ? null
+          : { id: row.projectId, code: row.projectCode ?? '', name: row.projectName ?? '' },
+      /*
+       * ตัวตนของผู้เข้าชมมีเฉพาะห้องจาก widget
+       * ⚠️ ส่ง verified ไปด้วยเสมอ — อีเมลที่ยังไม่ยืนยันคือข้อความที่ใครก็พิมพ์ได้
+       *    หน้าจอต้องแยกสองอย่างนี้ให้ผู้ใช้เห็น ไม่ใช่แสดงเป็นตัวตนเหมือนกัน
+       */
+      contact: isWidget
+        ? {
+            name: row.contactName,
+            email: row.contactEmail,
+            phone: row.contactPhone,
+            verified: row.contactVerified,
+          }
+        : null,
       company: { id: row.companyId, code: row.companyCode },
-      requester: {
-        id: row.requesterId,
-        full_name: row.requesterName,
-        department: row.requesterDepartment,
-        job_title: row.requesterJobTitle,
-      },
+      /*
+       * requester ไม่เคยเป็น null เพื่อไม่ให้หน้าจอต้องแยกสองกรณี
+       * ห้องจาก widget ที่ยังไม่รู้ว่าเป็นใคร ใช้ id 0 ซึ่งไม่มีวันตรงกับบัญชีจริง
+       */
+      requester:
+        row.requesterId === null
+          ? {
+              id: 0,
+              full_name: visitorName(row.contactName),
+              department: null,
+              job_title: null,
+            }
+          : {
+              id: row.requesterId,
+              full_name: row.requesterName ?? '',
+              department: row.requesterDepartment,
+              job_title: row.requesterJobTitle,
+            },
       assignee:
         row.assigneeId !== null ? { id: row.assigneeId, full_name: row.assigneeName ?? '' } : null,
       ticket_id: row.ticketId,
@@ -300,7 +353,10 @@ export class SupportChatService {
       last_message: last
         ? {
             body: preview,
-            from_staff: !last.isSystem && (last.external || last.senderId !== row.requesterId),
+            from_staff:
+              !last.isSystem &&
+              !last.fromContact &&
+              (last.external || last.senderId !== row.requesterId),
             is_system: last.isSystem,
             attachment_kind: last.attachmentKind,
           }
@@ -309,10 +365,17 @@ export class SupportChatService {
        * ฝั่งผู้ใช้: ใครก็ตามที่ไม่ใช่ตัวเขาเองส่งล่าสุด = ยังไม่ได้อ่าน
        * last_message_by เป็น null เมื่อคนตอบล่าสุดมาจาก Chatwoot (ไม่มีบัญชีใน Helpdesk)
        * ห้องที่มีแต่ข้อความระบบไม่มีจริง — ห้องถูกสร้างพร้อมข้อความแรกของผู้ใช้เสมอ
+       *
+       * ⚠️ ห้องจาก widget ใช้เกณฑ์ต่างออกไป — last_message_by เป็น null ทั้งข้อความ
+       *    ของผู้เข้าชมและคำตอบของเจ้าหน้าที่ฝั่ง Chatwoot (ไม่มีใครมีบัญชีในระบบเรา)
+       *    เทียบกับ requester_id ที่เป็น null ด้วย จะได้ "ยังไม่ได้อ่าน" ทุกกรณี
+       *    รวมทั้งตอนที่เจ้าหน้าที่เพิ่งตอบไปเอง จึงต้องดูจากธง from_contact แทน
        */
       unread:
         viewer === 'staff'
-          ? row.lastMessageBy === row.requesterId && unseenSince(row.staffReadAt)
+          ? (isWidget
+              ? (last?.fromContact ?? false)
+              : row.lastMessageBy === row.requesterId) && unseenSince(row.staffReadAt)
           : row.lastMessageBy !== row.requesterId && unseenSince(row.requesterReadAt),
       created_at: row.createdAt.toISOString(),
       closed_at: row.closedAt?.toISOString() ?? null,
@@ -328,6 +391,7 @@ function toLastMessage(chatId: number, message: SupportChatMessageRow): LastMess
     isSystem: message.isSystem,
     attachmentKind: message.attachment?.kind ?? null,
     external: message.externalSenderName !== null,
+    fromContact: message.fromContact,
   };
 }
 

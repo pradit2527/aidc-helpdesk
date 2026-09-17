@@ -96,9 +96,22 @@ function realtimeSource(): string {
 
 export const config = {
   matcher: [
-    // ข้าม static asset เพราะไม่ต้องมี CSP และการรัน middleware ทุกไฟล์เปลืองเปล่า
+    /*
+     * ข้าม static asset เพราะไม่ต้องมี CSP และการรัน middleware ทุกไฟล์เปลืองเปล่า
+     *
+     * /kit/ ถูกยกเว้นด้วยเหตุผลที่หนักกว่านั้น — มันเป็นไฟล์ที่เว็บของทีมอื่นโหลดไปใช้
+     *
+     *   1. ถ้าวันหนึ่งมีการเพิ่มการเด้งไปหน้า /login ใน middleware นี้ (ซึ่งมีแผนไว้
+     *      ในหมายเหตุด้านบน) สคริปต์ที่เว็บอื่นเรียกจะได้หน้า HTML ของหน้าล็อกอิน
+     *      กลับไปแทนไฟล์ JavaScript แล้วเว็บของเขาจะพังโดยที่เราไม่รู้เรื่องเลย
+     *   2. /kit/demo.html มีสคริปต์ inline ที่ไม่มีทางได้ nonce — CSP ของหน้านี้
+     *      จะบล็อกมันทิ้ง หน้าเดโมจึงใช้ทดสอบอะไรไม่ได้เลย
+     *
+     * ไฟล์ใต้ /kit/ ไม่มีข้อมูลผู้ใช้และไม่มีคุกกี้เข้ามาเกี่ยวข้อง การยกเว้น
+     * จึงไม่ได้เปิดช่องอะไรให้ส่วนที่เหลือของแอป
+     */
     {
-      source: '/((?!_next/static|_next/image|favicon.ico).*)',
+      source: '/((?!_next/static|_next/image|favicon.ico|kit/).*)',
       missing: [
         { type: 'header', key: 'next-router-prefetch' },
         { type: 'header', key: 'purpose', value: 'prefetch' },
