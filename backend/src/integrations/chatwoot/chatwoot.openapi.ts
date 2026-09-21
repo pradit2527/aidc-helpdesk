@@ -61,12 +61,22 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
       '**ไม่สร้าง contact และไม่เปิดการสนทนาใหม่เลยในเส้นทางนี้**',
       '',
       '```',
+      '0. POST /inboxes                              → สร้าง inbox ให้โครงการใหม่ ⚠️ เขียนของจริง',
       '1. GET  /inboxes                              → หน้าผูก inbox ของผู้ดูแล (อ่านอย่างเดียว)',
       '2. GET  /conversations?inbox_id=N&status=all  → รอบค้นหาบทสนทนาใหม่ ทุก 10 วินาที',
       '3. GET  /conversations/{id}/messages?after=N  → ดึงข้อความใหม่ของห้องนั้น',
       '4. POST /conversations/{id}/messages          → ส่งคำตอบของเจ้าหน้าที่ (outgoing)',
+      '   POST /conversations/{id}/messages          → ส่งความคืบหน้าของเรื่องแจ้ง (outgoing, ข้อความของระบบ)',
       '5. POST /conversations/{id}/toggle_status     → เมื่อทีมไอทีปิดห้องฝั่ง Helpdesk',
       '```',
+      '',
+      'ข้อ 0 เป็น **การเขียนเพียงอย่างเดียว** ที่ระบบเราทำกับทะเบียน inbox',
+      'เรียกจาก `POST /api/v1/support-projects/{id}/chatwoot-inbox` ซึ่งต้องมีสิทธิ์ `user.assign_role`',
+      'inbox ที่สร้างลบจากฝั่ง Helpdesk ไม่ได้ ต้องเข้าไปลบในแอปของ Chatwoot เอง',
+      '',
+      'ข้อ 4 บรรทัดที่สองคือของใหม่ในเฟส 2 — เมื่อเรื่องที่ยกระดับมาจากห้องแชทเปลี่ยนสถานะ',
+      'ระบบเขียนข้อความของระบบลงห้อง (`sender_id` เป็น null) แล้วส่งออกไปเป็น `outgoing`',
+      'ทางเดียวกับคำตอบของเจ้าหน้าที่ ผู้เข้าชมจึงเห็นความคืบหน้าใน widget โดยไม่ต้องมีบัญชี',
       '',
       '## ค่าที่ระบบเราใช้อยู่',
       '',
@@ -150,6 +160,71 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
             },
           },
           '401': ERROR_RESPONSE,
+        },
+      },
+      post: {
+        tags: ['Inboxes'],
+        summary: 'สร้าง inbox ใหม่ (ชนิด Website)',
+        description: [
+          'เรียกจาก `POST /api/v1/support-projects/{id}/chatwoot-inbox` ของระบบเรา',
+          'ซึ่งสร้าง inbox แล้วบันทึก `id` กับ `website_token` ลงโครงการในคำขอเดียว',
+          '',
+          '## 🚫 สร้างของจริงในระบบที่ทีมใช้งานอยู่',
+          '',
+          'inbox ที่สร้างจะโผล่ในแอปของเจ้าหน้าที่ทันที และ **ลบจากฝั่ง Helpdesk ไม่ได้**',
+          'ต้องเข้าไปลบในแอปของ Chatwoot เอง — อย่ากดปุ่ม Try it out เพื่อลองเล่น',
+          '',
+          '## ⚠️ ชนิดช่องทางตอนสร้าง ไม่ใช่ค่าเดียวกับตอนอ่าน',
+          '',
+          '| ทิศทาง | ค่า |',
+          '|---|---|',
+          '| ส่งตอนสร้าง (`channel.type`) | `web_widget` |',
+          '| อ่านกลับมา (`channel_type`) | `Channel::WebWidget` |',
+          '',
+          'ส่งชื่อคลาสของ Rails (`Channel::WebWidget`) ไปตอนสร้างจะถูกปฏิเสธ',
+          '',
+          '`channel.website_url` เป็นค่า**บังคับ**ของช่องทางนี้ — ระบบเราตรวจก่อนยิง',
+          'แล้วตอบ 422 พร้อมชี้ฟิลด์ `website_url` เอง เพื่อไม่ให้ผู้ใช้เห็นข้อความดิบของ Rails',
+          '',
+          'Chatwoot 4.17 **ไม่มีฟิลด์ภาษาของ inbox** — ภาษาของ widget ตั้งที่สคริปต์ฝัง',
+          '(`window.chatwootSettings.locale`) ซึ่งระบบเราจ่ายให้ทาง',
+          '`GET /api/v1/public/support-projects/{code}` · ภาษาของโครงการจึงมีผลแค่กับ',
+          'ถ้อยคำใน `welcome_tagline` ที่เราส่งไปตอนสร้างเท่านั้น',
+          '',
+          'คำตอบถูกคัดเหลือ `id` กับ `website_token` ที่ `chatwootCreateWebsiteInbox()`',
+          'ก่อนส่งต่อให้ชั้นบน — เหตุผลเดียวกับ `GET /inboxes` (กัน `hmac_token` หลุด)',
+        ].join('\n'),
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/InboxCreate' },
+              example: {
+                name: 'ILP',
+                channel: {
+                  type: 'web_widget',
+                  website_url: 'https://ilp.aidclaos.com',
+                  welcome_title: 'ILP',
+                  welcome_tagline: 'ຕິດຕໍ່ທີມໄອທີ AIDC ໄດ້ທີ່ນີ້',
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description:
+              'สร้างแล้ว — คืน object ของ inbox ตรง ๆ ไม่ห่อด้วย `payload` · ' +
+              'ตัวที่ระบบเราเก็บต่อคือ `id` กับ `website_token` เท่านั้น',
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/Inbox' } },
+            },
+          },
+          '401': ERROR_RESPONSE,
+          '422': {
+            description: 'ปฏิเสธ — ที่เจอบ่อยคือไม่ได้ส่ง `channel.website_url` หรือส่ง `type` ผิดค่า',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+          },
         },
       },
     },
@@ -501,12 +576,29 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
       post: {
         tags: ['Messages'],
         summary: 'ส่งข้อความเข้าการสนทนา',
-        description:
-          'ข้อความของผู้แจ้งส่งเป็น `incoming` (ผู้ส่งคือ contact ของการสนทนา)' +
-          'ส่วนข้อความของทีมไอทีส่งเป็น `outgoing`' +
-          '\n\n⚠️ `outgoing` จะขึ้นในชื่อเจ้าของ token เสมอ ไม่ใช่ชื่อคนที่พิมพ์จริง' +
-          'ระบบเราจึงใส่ชื่อคนตอบไว้หน้าข้อความ เช่น `ສົມສັກ (Helpdesk): …`' +
-          '\n\nไฟล์แนบส่งเป็น `multipart/form-data` ด้วยคีย์ `attachments[]` ได้ไฟล์ละหนึ่งข้อความ',
+        description: [
+          'ข้อความของผู้แจ้งส่งเป็น `incoming` (ผู้ส่งคือ contact ของการสนทนา)',
+          'ส่วนข้อความของทีมไอทีส่งเป็น `outgoing`',
+          '',
+          '⚠️ `outgoing` จะขึ้นในชื่อเจ้าของ token เสมอ ไม่ใช่ชื่อคนที่พิมพ์จริง',
+          'ระบบเราจึงใส่ชื่อคนตอบไว้หน้าข้อความ เช่น `ສົມສັກ (Helpdesk): …`',
+          '**เฉพาะ inbox ชนิด API เท่านั้น** — ห้องจาก widget ส่งข้อความเปล่า ไม่มีชื่อขึ้นต้น',
+          'เพราะผู้เข้าชมเป็นคนนอก เขาควรอ่านคำตอบที่สะอาด',
+          '',
+          'ไฟล์แนบส่งเป็น `multipart/form-data` ด้วยคีย์ `attachments[]` ได้ไฟล์ละหนึ่งข้อความ',
+          '',
+          '## ความคืบหน้าของเรื่องแจ้ง (Support Hub เฟส 2)',
+          '',
+          'ห้องแชทที่ถูกยกระดับเป็นเรื่องแจ้งจะได้ข้อความของระบบหนึ่งข้อความต่อการเปลี่ยนสถานะ',
+          'หนึ่งครั้ง (`ທີມງານຮັບເລື່ອງແລ້ວ` · `ກຳລັງດຳເນີນການແກ້ໄຂ` · `ແກ້ໄຂສຳເລັດແລ້ວ` …)',
+          'ข้อความเหล่านั้นถูกส่งมาที่ endpoint นี้เป็น `outgoing` เหมือนคำตอบของเจ้าหน้าที่ทุกประการ',
+          '— Chatwoot ไม่มีชนิดข้อความ "ของระบบ" ที่ผู้เข้าชมอ่านได้ และ `activity` สร้างผ่าน API ไม่ได้',
+          '',
+          'ฝั่งเราข้อความนั้นมี `sender_id` เป็น null (ไม่ใช่ของใครคนหนึ่ง) ซึ่งเดิมเป็นเงื่อนไข',
+          'ที่กันไม่ให้ถูกส่งออก ตอนนี้เงื่อนไขย้ายไปอยู่ที่ `isPushableToVisitor()`',
+          '(`modules/support-chat/chatwoot-widget.ts`) ซึ่งยังกัน**ข้อความที่ดึงมาจาก Chatwoot**',
+          'ไม่ให้ถูกส่งกลับ และไม่ส่งข้อความของระบบเมื่อห้องปิดไปแล้ว',
+        ].join('\n'),
         parameters: [
           { name: 'conversationId', in: 'path', required: true, schema: { type: 'integer' } },
         ],
@@ -639,6 +731,50 @@ export const CHATWOOT_OPENAPI: OpenAPIObject = {
             description: 'ตัวระบุของผู้ติดต่อในกล่องนี้ — ใช้ตอนเปิดการสนทนา ไม่ใช่ contact id',
           },
           inbox: { $ref: '#/components/schemas/Inbox' },
+        },
+      },
+      InboxCreate: {
+        type: 'object',
+        required: ['name', 'channel'],
+        description:
+          'body ของ `POST /inboxes` เท่าที่ระบบเราส่ง — Chatwoot รับฟิลด์ระดับบนอีกหลายตัว ' +
+          '(`greeting_enabled`, `enable_auto_assignment`, `working_hours_enabled`, `timezone` …) ' +
+          'ซึ่งเราไม่ส่ง เพราะค่าตั้งต้นของ Chatwoot เหมาะกับการใช้งานของเราอยู่แล้ว',
+        properties: {
+          name: { type: 'string', example: 'ILP', description: 'ชื่อ inbox — ระบบเราใช้ชื่อโครงการ' },
+          channel: {
+            type: 'object',
+            required: ['type', 'website_url'],
+            properties: {
+              type: {
+                type: 'string',
+                enum: ['web_widget'],
+                description:
+                  '⚠️ `web_widget` เท่านั้น — ไม่ใช่ `Channel::WebWidget` ซึ่งเป็นค่าที่อ่านกลับมา',
+              },
+              website_url: {
+                type: 'string',
+                example: 'https://ilp.aidclaos.com',
+                description: '**บังคับ** — ที่อยู่เว็บที่ widget จะถูกฝัง',
+              },
+              welcome_title: { type: 'string', description: 'ระบบเราใช้ชื่อโครงการ' },
+              welcome_tagline: {
+                type: 'string',
+                description: 'คำบรรยายใต้หัวข้อ — ระบบเราเลือกตามภาษาของโครงการ (lo / th / en)',
+              },
+              widget_color: { type: 'string', description: 'สีของ widget — ระบบเราไม่ส่ง ใช้ค่าตั้งต้น' },
+              pre_chat_form_enabled: {
+                type: 'boolean',
+                description:
+                  'ฟอร์มก่อนแชท — ระบบเราไม่ส่ง · ถ้าเปิดในแอป อีเมลที่ได้จะยัง `verified: false` ' +
+                  'จนกว่าเว็บต้นทางจะเซ็น identifier_hash ด้วย HMAC',
+              },
+              hmac_mandatory: {
+                type: 'boolean',
+                description: 'บังคับ HMAC ทุกบทสนทนา — ระบบเราไม่ส่ง ตั้งในแอปตอนพร้อมใช้จริง',
+              },
+            },
+          },
         },
       },
       Inbox: {

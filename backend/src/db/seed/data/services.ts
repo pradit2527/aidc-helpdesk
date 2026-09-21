@@ -25,4 +25,20 @@ export const SERVICES: readonly ServiceSeed[] = [
   { code: 'CMS_PLUS', nameTh: 'CMS+', serviceGroup: 'core_business', serviceTier: 'standard' },
   { code: 'MAGIC', nameTh: 'Magic', serviceGroup: 'core_business', serviceTier: 'standard' },
   { code: 'SUPER_WORK', nameTh: 'Super Work', serviceGroup: 'core_business', serviceTier: 'standard' },
+
+  /*
+   * บริการพื้นฐานตาม SLA ข้อ 6.2 — ระดับบริการและ 24×7 ตามตารางในเอกสารโดยตรง
+   *   infrastructure = critical · 24×7   communication / file_storage = high   endpoint = standard
+   */
+  { code: 'LAN', nameTh: 'ເຄືອຂ່າຍສຳນັກງານ (LAN)', serviceGroup: 'infrastructure', serviceTier: 'critical', is24x7: true },
+  { code: 'INTERNET', nameTh: 'ອິນເຕີເນັດອົງກອນ', serviceGroup: 'infrastructure', serviceTier: 'critical', is24x7: true },
+  { code: 'AUTH', nameTh: 'ລະບົບຢືນຢັນຕົວຕົນ (AD / SSO)', serviceGroup: 'infrastructure', serviceTier: 'critical', is24x7: true },
+  { code: 'EMAIL', nameTh: 'ອີເມວອົງກອນ', serviceGroup: 'communication', serviceTier: 'high' },
+  { code: 'MEETING', nameTh: 'ປະຊຸມອອນລາຍ', serviceGroup: 'communication', serviceTier: 'high' },
+  { code: 'CHAT', nameTh: 'ແຊັດອົງກອນ', serviceGroup: 'communication', serviceTier: 'high' },
+  { code: 'WIFI', nameTh: 'Wi-Fi ສຳນັກງານ', serviceGroup: 'communication', serviceTier: 'high' },
+  { code: 'VPN', nameTh: 'VPN', serviceGroup: 'communication', serviceTier: 'high' },
+  { code: 'FILE_SERVER', nameTh: 'File Server / Cloud Storage', serviceGroup: 'file_storage', serviceTier: 'high' },
+  { code: 'ENDPOINT_PC', nameTh: 'ຄອມພິວເຕີ / ໂນດບຸກ', serviceGroup: 'endpoint', serviceTier: 'standard' },
+  { code: 'ENDPOINT_PRINTER', nameTh: 'ເຄື່ອງພິມ ແລະ ອຸປະກອນຕໍ່ພ່ວງ', serviceGroup: 'endpoint', serviceTier: 'standard' },
 ];

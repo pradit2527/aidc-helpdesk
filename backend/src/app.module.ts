@@ -22,13 +22,9 @@ import { ScopeService } from './common/scope.service';
 import { throttleConfig, UserAwareThrottlerGuard } from './common/throttle/throttle.config';
 import { DbModule } from './db/db.module';
 import { JobsModule } from './jobs/jobs.module';
-import { SlaConfigRepository } from './db/repositories/sla-config.repository';
-import { SupportChatRepository } from './db/repositories/support-chat.repository';
-import { SupportProjectRepository } from './db/repositories/support-project.repository';
-import { SupportTeamRepository } from './db/repositories/support-team.repository';
-import { TicketDetailRepository } from './db/repositories/ticket-detail.repository';
+// repository ตัวอื่นย้ายไป DbModule (@Global) แล้ว — ที่นี่เหลือตัวเดียวที่ยังต้องอ้างชื่อ
+// เพื่อผูกเข้ากับ token TICKET_REPOSITORY ให้ชั้น use case
 import { TicketRepository } from './db/repositories/ticket.repository';
-import { TicketWriteRepository } from './db/repositories/ticket-write.repository';
 import { ApprovalsController } from './modules/approvals/approvals.controller';
 import { AttachmentsController } from './modules/attachments/attachments.controller';
 import { AttachmentsService } from './modules/attachments/attachments.service';
@@ -49,6 +45,7 @@ import { MasterDataController } from './modules/master-data/master-data.controll
 import { MasterDataService } from './modules/master-data/master-data.service';
 import { HealthService } from './modules/health/health.service';
 import { NotificationsController } from './modules/notifications/notifications.controller';
+import { NotificationsCoreModule } from './modules/notifications/notifications-core.module';
 import { NotificationsService } from './modules/notifications/notifications.service';
 import { ProblemsController } from './modules/problems/problems.controller';
 import { ProblemsService } from './modules/problems/problems.service';
@@ -58,6 +55,7 @@ import { RealtimeGateway } from './modules/realtime/realtime.gateway';
 import { SupportChatController } from './modules/support-chat/support-chat.controller';
 import { ChatwootSyncService } from './modules/support-chat/chatwoot-sync.service';
 import { SupportChatService } from './modules/support-chat/support-chat.service';
+import { TicketChatNotifier } from './modules/support-chat/ticket-chat-notifier.service';
 import { ChatwootWebhookController } from './modules/support-projects/chatwoot-webhook.controller';
 import { PublicSupportProjectsController } from './modules/support-projects/public-support-projects.controller';
 import { SupportProjectsController } from './modules/support-projects/support-projects.controller';
@@ -79,6 +77,8 @@ import { UsersService } from './modules/users/users.service';
     ThrottlerModule.forRoot(throttleConfig),
     DbModule,
     RedisModule,
+    // ต้องมาก่อน JobsModule — งานกวาด SLA ใช้ IncidentAlertService ยกระดับ
+    NotificationsCoreModule,
     JobsModule,
     SuperworkModule,
   ],
@@ -129,18 +129,26 @@ import { UsersService } from './modules/users/users.service';
     UsersService,
     DashboardService,
     MasterDataService,
-    TicketRepository,
-    TicketDetailRepository,
-    TicketWriteRepository,
-    SlaConfigRepository,
-    SupportChatRepository,
-    SupportProjectRepository,
-    SupportTeamRepository,
+    /*
+     * repository ทั้งหมดย้ายไปอยู่ใน DbModule (@Global) แล้ว
+     *
+     * เพราะ JobsModule ต้องใช้บางตัวด้วย และมันเป็นโมดูลแยกที่หยิบ provider
+     * ของที่นี่ไม่ได้ — การประกาศซ้ำสองที่ทำให้ได้คนละอินสแตนซ์ ซึ่งพังกับ
+     * SlaConfigRepository ที่มีแคชในหน่วยความจำ (ดูคอมเมนต์ใน db.module.ts)
+     */
     // socket.io ตัวเดียวของทั้งระบบ — คอมเมนต์ ticket และแชทช่วยเหลือ
     RealtimeGateway,
     // ซิงก์แชทสองทางกับ Chatwoot — ไม่ทำอะไรจนกว่าจะตั้งค่าใน .env ครบ
     ChatwootSyncService,
     SupportChatService,
+    /*
+     * บอกห้องแชทว่าเรื่องที่ผูกไว้ขยับแล้ว
+     *
+     * อยู่แยกจาก SupportChatService เพราะทางกลับกันมีอยู่แล้ว
+     * (SupportChatService ยกระดับแชทเป็นเรื่องผ่าน TicketsService)
+     * ถ้าให้ TicketsService อ้าง SupportChatService ตรง ๆ จะฉีดไม่ได้ทั้งคู่
+     */
+    TicketChatNotifier,
     // AIDC Support Hub — หนึ่งเว็บของกลุ่ม = หนึ่ง inbox ชนิด Website = หนึ่งโครงการ
     SupportProjectsService,
     // ทีมสนับสนุน — ข้อมูลที่ตอบว่า "หัวหน้าคนนี้มอบหมายงานให้ใครได้"

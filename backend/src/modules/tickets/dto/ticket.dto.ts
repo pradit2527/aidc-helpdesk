@@ -13,7 +13,6 @@ import {
 import {
   CHANNEL,
   IMPACT,
-  PENDING_REASON,
   PRIORITY,
   SLA_EXCLUSION_CODE,
   SLA_STATUS,
@@ -23,7 +22,6 @@ import {
   URGENCY,
   type Channel,
   type Impact,
-  type PendingReason,
   type Priority,
   type SlaStatus,
   type TicketStatus,
@@ -131,6 +129,17 @@ export class CreateTicketDto {
   @IsString()
   asset_tag?: string;
 
+  @ApiPropertyOptional({
+    example: 1,
+    description:
+      'โครงการใน Support Hub ที่เรื่องนี้มาจาก (id จาก `GET /support-projects`) · ' +
+      'ต้องอยู่ในขอบเขตของผู้เรียก หรือเป็นโครงการส่วนกลาง มิฉะนั้น `422` · ' +
+      'ใช้กรองรายงานด้วย `GET /reports/tickets?project_id=`',
+  })
+  @IsOptional()
+  @IsInt()
+  project_id?: number;
+
   @ApiPropertyOptional({ type: [Number], example: [9012, 9013] })
   @IsOptional()
   @IsArray()
@@ -185,8 +194,15 @@ export class TicketSlaDto {
   @ApiPropertyOptional({ example: null, description: 'เวลาที่เข้าสถานะรอผู้แจ้งครั้งล่าสุด' })
   paused_at?: string | null;
 
-  @ApiPropertyOptional({ enum: PENDING_REASON, example: null })
-  pending_reason?: PendingReason | null;
+  @ApiPropertyOptional({
+    example: null,
+    nullable: true,
+    description:
+      'เหตุผลย่อยของการพัก ใช้กับ `pending_user` เท่านั้น · ข้อความอิสระ ไม่บังคับ · ' +
+      'เดิมเป็น enum `user`/`vendor`/`approval` — สองค่าหลังกลายเป็นสถานะจริงแล้ว ' +
+      '(`pending_vendor`, `pending_approval`) ให้อ่านจาก `status` แทน',
+  })
+  pending_reason?: string | null;
 
   @ApiProperty({ example: 0 }) pending_duration_minutes!: number;
 
@@ -195,6 +211,30 @@ export class TicketSlaDto {
 
   @ApiPropertyOptional({ enum: SLA_EXCLUSION_CODE, example: null })
   exclusion_code?: string | null;
+
+  @ApiPropertyOptional({
+    example: 480,
+    description:
+      'งบเวลาของ resolution ในหน่วยเดียวกับ remaining_unit · คำขอบริการอ่านจากรายการ catalog ' +
+      '(ไม่ใช่ตาราง priority) · null = ยังไม่รู้งบ เช่นคำขอที่รออนุมัติ',
+  })
+  budget_minutes?: number | null;
+
+  @ApiPropertyOptional({
+    example: 12,
+    description:
+      'ใช้เวลาไปกี่ % ของงบ (0–100) สำหรับแถบความคืบหน้า · เกินกำหนดแล้วเป็น 100 · ' +
+      'null = นาฬิกายังไม่เริ่มหรือไม่มีงบให้เทียบ',
+  })
+  elapsed_percent?: number | null;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'false = นาฬิกา SLA ยังไม่เริ่มเดิน (คำขอที่รออนุมัติก่อนถึงจะเริ่มนับ) — ' +
+      'clock_started_at ในกรณีนี้เป็นเวลาเปิดเรื่อง ไม่ใช่เวลาเริ่มนับจริง',
+  })
+  clock_started?: boolean;
 }
 
 // ══════════════════════ บล็อก can ══════════════════════
@@ -247,8 +287,8 @@ export class TicketListItemDto {
   @ApiProperty({ enum: TICKET_TYPE, example: 'incident' }) ticket_type!: TicketType;
   @ApiProperty({ example: 'ເຄື່ອງສະແກນບາໂຄດສາງ 2 ອ່ານບໍ່ຕິດ' }) subject!: string;
   @ApiProperty({ enum: TICKET_STATUS, example: 'in_progress' }) status!: TicketStatus;
-  @ApiPropertyOptional({ enum: PENDING_REASON, example: null })
-  pending_reason?: PendingReason | null;
+  @ApiPropertyOptional({ example: null, nullable: true, description: 'ดู TicketSlaDto.pending_reason' })
+  pending_reason?: string | null;
 
   @ApiProperty({
     enum: PRIORITY,
@@ -375,6 +415,30 @@ export class TicketApprovalDto {
   @ApiPropertyOptional({ example: null, nullable: true }) due_at!: string | null;
 }
 
+/**
+ * เรื่องอีกใบที่ผูกไว้ — พอสำหรับชิปบนหน้าจอ ไม่ใช่ทั้งใบ
+ *
+ * ตั้งใจให้เล็ก เพราะถ้าคืนทั้งใบ หน้าจอจะเผลอเอาไปแสดงเป็นรายละเอียดจริง
+ * ทั้งที่กฎการมองเห็น (เหตุความปลอดภัย · คอมเมนต์ภายใน) ไม่ได้ถูกตรวจกับใบนั้น
+ */
+export class RelatedTicketDto {
+  @ApiProperty({ example: 1043 }) id!: number;
+  @ApiProperty({ example: 'AIDC-LOG-202609-0043' }) ticket_no!: string;
+  @ApiProperty({ example: 'ຂໍໂນ໊ດບຸກທົດແທນເຄື່ອງທີ່ເສຍ' }) subject!: string;
+  @ApiProperty({ enum: TICKET_STATUS, example: 'in_progress' }) status!: TicketStatus;
+  @ApiProperty({ enum: TICKET_TYPE, example: 'service_request' }) ticket_type!: TicketType;
+}
+
+export class LinkTicketDto {
+  @ApiProperty({
+    example: 1043,
+    description: 'id ของเรื่องที่จะผูก — ต้องอยู่บริษัทเดียวกัน และไม่ใช่ตัวมันเอง',
+  })
+  @IsInt()
+  @Min(1)
+  related_ticket_id!: number;
+}
+
 export class TicketDetailDto extends TicketListItemDto {
   @ApiProperty({ example: 'ເຄື່ອງສະແກນ 3 ໜ່ວຍທີ່ໂຊນຮັບສິນຄ້າສາງ 2 ອ່ານບໍ່ຕິດ...' })
   description!: string;
@@ -405,6 +469,31 @@ export class TicketDetailDto extends TicketListItemDto {
     description: 'true = ใช้ขอบเขตการมองเห็นที่แคบกว่าบริษัท (SOP-10 ข้อ 2)',
   })
   is_security_incident!: boolean;
+
+  @ApiPropertyOptional({
+    type: RelatedTicketDto,
+    nullable: true,
+    description:
+      'เรื่องอีกใบที่ผูกไว้ · null = ยังไม่ได้ผูก · ตั้งค่าด้วย `POST /tickets/{id}/link` · ' +
+      'เฟส 1 ผูกได้ใบเดียว และการผูกมีผลสองทางเสมอ',
+  })
+  related_ticket!: RelatedTicketDto | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'รายการบริการใน catalog ที่คำขอนี้เปิดจาก — null สำหรับ incident · ' +
+      'ใช้ตั้งชื่อป้ายนโยบาย SLA บนแถบด้านข้าง',
+  })
+  catalog_item!: { id: number; code: string; name_th: string } | null;
+
+  @ApiProperty({
+    type: [RelatedTicketDto],
+    description:
+      'เรื่องอื่นของผู้แจ้งคนเดียวกัน (ไม่รวมใบนี้) ล่าสุดก่อน สูงสุด 5 ใบ · ' +
+      'ผ่านตัวกรองขอบเขตสิทธิ์เดียวกับรายการเรื่อง · ว่างเสมอเมื่อผู้เรียกคือผู้แจ้งเอง',
+  })
+  requester_tickets!: RelatedTicketDto[];
 
   @ApiProperty({
     type: TicketCanDto,
@@ -451,18 +540,21 @@ export class ChangeStatusDto {
   to_status!: TicketStatus;
 
   @ApiPropertyOptional({
-    enum: PENDING_REASON,
-    example: 'vendor',
-    description: 'บังคับเมื่อ to_status = pending_user',
+    example: null,
+    description:
+      'เหตุผลย่อยของการพัก — ไม่บังคับ และมีความหมายเฉพาะกับ `to_status = pending_user` · ' +
+      'การรอผู้ขายและการรออนุมัติใช้สถานะของตัวเองแล้ว (`pending_vendor` / `pending_approval`)',
   })
   @IsOptional()
-  @IsIn(PENDING_REASON)
-  pending_reason?: PendingReason;
+  @IsString()
+  @MaxLength(20)
+  pending_reason?: string;
 
   @ApiPropertyOptional({
     example: 'ລໍຖ້າອາໄຫຼ່ຫົວອ່ານຈາກຜູ້ຈຳໜ່າຍ ກຳນົດສົ່ງ 3 ກັນຍາ',
     description:
-      'เก็บในประวัติ · บังคับเมื่อ pending_user (≥ 10 ตัวอักษร) / cancelled (≥ 5) / เปิดคืน (≥ 10)',
+      'เก็บในประวัติ · บังคับเมื่อพัก (`pending_user` / `pending_vendor` / `pending_approval` ≥ 10 ตัวอักษร) / ' +
+      'cancelled (≥ 5) / rejected (≥ 5) / เปิดคืน (≥ 10)',
   })
   @IsOptional()
   @IsString()

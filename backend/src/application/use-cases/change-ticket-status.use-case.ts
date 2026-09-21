@@ -1,6 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { PENDING_REASON, type Priority, type TicketStatus } from '../../common/constants';
+import {
+  AWAITING_CONFIRMATION_STATUSES,
+  WAITING_STATUSES,
+  type Priority,
+  type TicketStatus,
+  type TicketType,
+} from '../../common/constants';
 import { ConflictError, ForbiddenError, ValidationError } from '../../common/errors/domain-error';
 import type { AccessScope } from '../../common/scope';
 import { addMinutes, minutesPaused } from '../../common/sla/business-time';
@@ -10,9 +16,23 @@ import { TicketRepository } from '../../db/repositories/ticket.repository';
 import {
   actorMayTransition,
   allowedTransitionsFrom,
+  isReopening,
   TicketEntity,
 } from '../../domain/ticket/ticket.entity';
 import { CLOCK, type Clock } from '../ports/clock.port';
+
+/**
+ * สถานะที่ต้องกรอกเหตุผลว่า "ค้างเพราะอะไร"
+ *
+ * ทั้งสามเป็นสถานะที่เรื่องหยุดเดินโดยที่ผู้แจ้งมองไม่เห็นว่าเกิดอะไรขึ้น
+ * ถ้าไม่บังคับกรอก ประวัติจะมีแต่บรรทัด "เปลี่ยนเป็นรอผู้ขาย" ลอย ๆ
+ * ซึ่งอ่านย้อนหลังแล้วตอบผู้ตรวจไม่ได้ว่ารออะไรและรอใคร
+ */
+const PAUSE_STATUSES_NEEDING_REASON: readonly TicketStatus[] = [
+  ...WAITING_STATUSES,
+  // นาฬิกาไม่หยุดตอนรอผู้ขาย แต่ผู้แจ้งก็ยังต้องรู้ว่ารออะไรอยู่ดี
+  'pending_vendor',
+];
 
 export interface ChangeStatusInput {
   toStatus: TicketStatus;
@@ -60,24 +80,38 @@ export class ChangeTicketStatusUseCase {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  async execute(scope: AccessScope, id: number, input: ChangeStatusInput): Promise<void> {
+  /**
+   * @returns สถานะก่อนและหลัง — ผู้เรียกใช้ตัดสินว่าต้องบอกใครบ้างหลังเขียนสำเร็จ
+   *          (ห้องแชทที่ผูกกับเรื่องนี้ได้ข้อความเฉพาะตอนที่สถานะเปลี่ยนจริง)
+   */
+  async execute(
+    scope: AccessScope,
+    id: number,
+    input: ChangeStatusInput,
+  ): Promise<{ from: TicketStatus; to: TicketStatus }> {
     // อ่านก่อนตรวจสิทธิ์โดยตั้งใจ — เรื่องที่อยู่นอกขอบเขตต้องได้ 404
     // ถ้าตรวจสิทธิ์ก่อน ผู้ที่ไม่มีสิทธิ์จะได้ 403 ซึ่งยืนยันว่าเรื่องนั้นมีอยู่จริง
     const row = await this.tickets.findById(scope, id);
 
     const from = row.status as TicketStatus;
     const to = input.toStatus;
+    const ticketType = (row.ticketType ?? 'incident') as TicketType;
     const isOwner = row.requesterId === scope.userId;
-    const reopening = (from === 'resolved' || from === 'closed') && to === 'in_progress';
+    const reopening = isReopening(from, to);
 
-    const permitted = actorMayTransition(from, to, {
-      isOwner,
-      canChangeStatus: scope.has('ticket.change_status'),
-      canCancel: scope.has('ticket.cancel'),
-      canReopen: scope.has('ticket.reopen'),
-    });
+    const permitted = actorMayTransition(
+      from,
+      to,
+      {
+        isOwner,
+        canChangeStatus: scope.has('ticket.change_status'),
+        canCancel: scope.has('ticket.cancel'),
+        canReopen: scope.has('ticket.reopen'),
+      },
+      ticketType,
+    );
     // เส้นที่ตารางไม่อนุญาตเลย ปล่อยให้ entity ตอบ 409 พร้อมรายการที่ไปได้ ซึ่งบอกได้มากกว่า
-    if (!permitted && allowedTransitionsFrom(from).includes(to)) {
+    if (!permitted && allowedTransitionsFrom(from, ticketType).includes(to)) {
       throw new ForbiddenError('FORBIDDEN', 'ທ່ານບໍ່ມີສິດປ່ຽນສະຖານະນີ້', { from, to });
     }
 
@@ -87,17 +121,23 @@ export class ChangeTicketStatusUseCase {
     const score = input.satisfactionScore;
 
     const issues: { field: string; message: string }[] = [];
-    if (to === 'pending_user') {
-      if (!input.pendingReason || !(PENDING_REASON as readonly string[]).includes(input.pendingReason)) {
-        issues.push({ field: 'pending_reason', message: 'ກະລຸນາເລືອກວ່າລໍຖ້າຫຍັງຢູ່' });
-      }
-      if (reason.length < MIN_PENDING_REASON) {
-        issues.push({
-          field: 'reason',
-          message: `ກະລຸນາອະທິບາຍວ່າລໍຖ້າຫຍັງ ຢ່າງໜ້ອຍ ${MIN_PENDING_REASON} ຕົວອັກສອນ`,
-        });
-      }
+    /*
+     * ⚠️ ไม่บังคับ pending_reason อีกต่อไป
+     *    เดิมบังคับให้เลือกจาก enum 3 ค่า เพราะสถานะเดียว (pending_user)
+     *    ต้องแบกความหมายทั้งสามแบบ ตอนนี้สถานะบอกเองแล้วว่ารออะไร
+     *    สิ่งที่ยังบังคับคือ "reason" ซึ่งเป็นคำอธิบายที่ผู้ตรวจอ่านได้จริง
+     */
+    if (PAUSE_STATUSES_NEEDING_REASON.includes(to) && reason.length < MIN_PENDING_REASON) {
+      issues.push({
+        field: 'reason',
+        message: `ກະລຸນາອະທິບາຍວ່າລໍຖ້າຫຍັງ ຢ່າງໜ້ອຍ ${MIN_PENDING_REASON} ຕົວອັກສອນ`,
+      });
     }
+    /*
+     * บันทึกวิธีแก้บังคับเฉพาะ resolved (เหตุขัดข้อง) ตามที่ SA ระบุ
+     * fulfilled (คำขอบริการที่ส่งมอบแล้ว) รับ resolution_note ได้แต่ไม่บังคับ —
+     * รายการส่วนใหญ่มี checklist ตาม SOP คุมอยู่แล้วว่าทำอะไรครบบ้าง
+     */
     if (to === 'resolved' && resolutionNote.length < MIN_RESOLUTION_NOTE) {
       issues.push({
         field: 'resolution_note',
@@ -106,6 +146,15 @@ export class ChangeTicketStatusUseCase {
     }
     if (to === 'cancelled' && reason.length < MIN_CANCEL_REASON) {
       issues.push({ field: 'reason', message: 'ກະລຸນາລະບຸເຫດຜົນທີ່ຍົກເລີກ' });
+    }
+    /*
+     * ปฏิเสธคำขอต้องมีเหตุผลเสมอ — กติกาเดียวกับ ck_approval_reject_needs_comment
+     *
+     * ปกติ rejected มาจาก ApprovalsService ซึ่งบังคับ comment อยู่แล้ว
+     * ข้อนี้กันเส้นทางอื่นที่เรียก use case นี้ตรง ๆ ไม่ให้ปฏิเสธเงียบ ๆ ได้
+     */
+    if (to === 'rejected' && reason.length < MIN_CANCEL_REASON) {
+      issues.push({ field: 'reason', message: 'ກະລຸນາລະບຸເຫດຜົນທີ່ບໍ່ອະນຸມັດ' });
     }
     if (reopening && reason.length < MIN_REOPEN_REASON) {
       issues.push({
@@ -133,8 +182,17 @@ export class ChangeTicketStatusUseCase {
       throw new ValidationError('VALIDATION_ERROR', issues[0]!.message, issues);
     }
 
-    if (to === 'resolved') {
-      // SOP-04/05 ข้อ 6 — ข้อบังคับต้องครบก่อนบอกผู้แจ้งว่าแก้เสร็จ
+    /*
+     * SOP-04/05 ข้อ 6 — ข้อบังคับต้องครบก่อนบอกผู้แจ้งว่างานเสร็จ
+     *
+     * ⚠️ ต้องครอบ fulfilled ด้วย ไม่ใช่แค่ resolved
+     *    checklist ตาม SOP (ONBOARDING / OFFBOARDING) ผูกกับรายการใน
+     *    service catalog ทั้งคู่ ซึ่งแปลว่ามันอยู่บนเรื่องชนิดคำขอบริการเสมอ
+     *    และคำขอบริการไม่เดินผ่าน resolved อีกต่อไป — ถ้าเช็คแค่ resolved
+     *    ด่านนี้จะกลายเป็นด่านที่ไม่มีใครเดินผ่านเลย ปิดงาน onboarding ได้
+     *    โดยไม่ต้องติ๊กอะไรสักข้อ ทั้งที่เป็นข้อบังคับที่ผู้ตรวจ ISO ถามหา
+     */
+    if ((AWAITING_CONFIRMATION_STATUSES as readonly string[]).includes(to)) {
       const missing = await this.writes.pendingRequiredChecklist(id);
       if (missing.length > 0) {
         throw new ConflictError(
@@ -155,6 +213,8 @@ export class ChangeTicketStatusUseCase {
       description: '',
       impact: row.impact as TicketEntity['impact'],
       urgency: row.urgency as TicketEntity['urgency'],
+      // ต้องส่งเข้าไป มิฉะนั้น entity จะใช้ตารางสถานะของ incident กับทุกใบ
+      ticketType,
       status: from,
       priority: row.priority as Priority,
       resolvedAt: row.resolvedAt,
@@ -181,7 +241,14 @@ export class ChangeTicketStatusUseCase {
      */
     let pausedMinutesToAdd = 0;
     let resolutionDueAt: Date | undefined;
-    const pausedSince = entity.willResumeFromPending(to)
+    /*
+     * จุดตั้งต้นของช่วงที่หยุดนับ
+     *
+     * ปกติอ่านจาก pending_started_at ซึ่งถูกตั้งไว้ตอนเข้าสถานะพักทุกแบบ
+     * ยกเว้นการเปิดคืนจาก closed — closed ไม่ใช่สถานะพัก จึงไม่มีค่านั้น
+     * ต้องนับจาก resolved_at (เวลาที่งานเสร็จจริง) ถ้าไม่มีค่อยใช้ closed_at
+     */
+    const pausedSince = entity.willResumeClock(to)
       ? entity.pendingStartedAt
       : reopening
         ? (row.resolvedAt ?? row.closedAt)
@@ -220,9 +287,13 @@ export class ChangeTicketStatusUseCase {
      * พักเพื่อรอผู้แจ้งหรือรอผู้ให้บริการภายนอก ต้องแจ้งผู้แจ้งเสมอ (SLA 5.4)
      * ถ้าเจ้าหน้าที่ไม่ได้พิมพ์ข้อความแยก ใช้เหตุผลที่กรอกเป็นข้อความแจ้ง
      * การเปลี่ยนอื่นแจ้งเฉพาะเมื่อพิมพ์ข้อความมาเอง
+     *
+     * เดิมตัดสินจาก pending_reason เป็น 'user' หรือ 'vendor' — ตอนนี้อ่านจาก
+     * สถานะตรง ๆ ซึ่งเป็นค่าเดียวกันแต่ไม่มีทางกรอกผิด
+     * pending_approval ไม่อยู่ในนี้: ผู้แจ้งเป็นคนยื่นคำขอเอง เขารู้อยู่แล้วว่า
+     * ต้องผ่านการอนุมัติ และคนที่ต้องถูกเตือนคือผู้อนุมัติ ไม่ใช่ผู้แจ้ง
      */
-    const mustInformRequester =
-      to === 'pending_user' && (input.pendingReason === 'user' || input.pendingReason === 'vendor');
+    const mustInformRequester = to === 'pending_user' || to === 'pending_vendor';
     const messageBody = comment || (mustInformRequester ? reason : '');
 
     await this.tickets.saveStatusChange(entity, {
@@ -232,7 +303,10 @@ export class ChangeTicketStatusUseCase {
       at: now,
       ...(reason ? { reason } : {}),
       ...(resolutionDueAt ? { resolutionDueAt } : {}),
-      ...(to === 'resolved' ? { resolutionNote } : {}),
+      // fulfilled บันทึกได้ถ้าส่งมา แต่ไม่บังคับ — เขียนเฉพาะตอนมีข้อความจริง
+      ...(to === 'resolved' || (to === 'fulfilled' && resolutionNote)
+        ? { resolutionNote }
+        : {}),
       ...(score !== undefined ? { satisfactionScore: score } : {}),
       ...(reopening ? { reopened: true } : {}),
       ...(selfAssigned ? { selfAssigned: true } : {}),
@@ -247,12 +321,16 @@ export class ChangeTicketStatusUseCase {
         : {}),
       auditDetail: {
         ...(reason ? { reason } : {}),
-        ...(to === 'pending_user' && input.pendingReason ? { pending_reason: input.pendingReason } : {}),
-        ...(to === 'resolved' ? { resolution_note: resolutionNote } : {}),
+        ...(to === 'pending_user' && input.pendingReason
+          ? { pending_reason: input.pendingReason }
+          : {}),
+        ...(resolutionNote ? { resolution_note: resolutionNote } : {}),
         ...(score !== undefined ? { satisfaction_score: score } : {}),
         ...(resolutionDueAt ? { resolution_due_at: resolutionDueAt.toISOString() } : {}),
         ...(selfAssigned ? { assignee_id: scope.userId } : {}),
       },
     });
+
+    return { from, to };
   }
 }

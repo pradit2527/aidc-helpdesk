@@ -14,6 +14,7 @@ import {
   verifiedState,
 } from '@/components/support-chat/chat-origin';
 import { ChatThread } from '@/components/support-chat/chat-thread';
+import { ChatTicketAction } from '@/components/support-chat/convert-to-ticket';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/field';
 import { Alert, PageHeader } from '@/components/ui/misc';
@@ -250,6 +251,8 @@ function ChatListItem({
 
 function StaffThread({ chatId, onBack }: { chatId: number; onBack: () => void }): React.JSX.Element {
   const { user } = useSession();
+  /* สิทธิ์ชุดเดียวกับที่ใช้เปิดหน้านี้และปุ่มปิดแชท — ไม่ตั้งเกณฑ์ใหม่ให้ต่างจากของเดิม */
+  const canAct = useCan('ticket.change_status');
   const thread = useChatThread(chatId);
   const send = useSendChatMessage(chatId);
   const sendFile = useSendChatFile(chatId);
@@ -308,7 +311,8 @@ function StaffThread({ chatId, onBack }: { chatId: number; onBack: () => void })
 
   return (
     <div className="flex h-full min-h-[520px] flex-col">
-      <header className="flex flex-none items-center gap-3 border-b border-hair px-4 py-3">
+      {/* ปุ่มสองปุ่มกับชื่อผู้แจ้งยาว ๆ ไม่พออยู่บรรทัดเดียวบนมือถือ — ให้ตกบรรทัดแทนการบีบ */}
+      <header className="flex flex-none flex-wrap items-center gap-3 border-b border-hair px-4 py-3">
         <button
           type="button"
           onClick={onBack}
@@ -317,7 +321,12 @@ function StaffThread({ chatId, onBack }: { chatId: number; onBack: () => void })
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
-        <div className="min-w-0 flex-1">
+        {/*
+          basis-40 ไม่ใช่ความกว้างจริง แต่เป็นเกณฑ์ให้เบราว์เซอร์ตัดสินว่าจะขึ้นบรรทัดใหม่เมื่อไร
+          ถ้าปล่อยเป็น flex-1 เฉย ๆ (ฐาน 0) ปุ่มสองปุ่มจะบีบชื่อผู้แจ้งจนเหลือไม่กี่ตัวอักษร
+          บนมือถือ แทนที่จะตกลงไปอยู่บรรทัดถัดไปซึ่งอ่านได้ทั้งคู่
+        */}
+        <div className="min-w-0 grow basis-40">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="min-w-0 truncate text-body-sm font-semibold text-ink">
               {data.requester.full_name}
@@ -341,14 +350,21 @@ function StaffThread({ chatId, onBack }: { chatId: number; onBack: () => void })
             </p>
           )}
         </div>
-        {data.status === 'open' ? (
-          <Button size="sm" variant="secondary" onClick={() => void onClose()} disabled={close.isPending}>
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            ປິດແຊັດ
-          </Button>
-        ) : (
-          <span className="rounded-full bg-subtle px-2.5 py-0.5 text-caption font-semibold text-ink-2">ປິດແລ້ວ</span>
-        )}
+        <div className="flex flex-none items-center gap-2">
+          {/*
+            key ผูกกับห้อง — ปุ่มนี้จำเลขที่ใบที่เพิ่งสร้างไว้ในตัวเอง
+            ถ้าไม่รีเซ็ตตอนสลับห้อง เลขที่ของห้องก่อนหน้าจะค้างอยู่บนห้องใหม่
+          */}
+          <ChatTicketAction key={data.id} chat={data} canConvert={canAct} />
+          {data.status === 'open' ? (
+            <Button size="sm" variant="secondary" onClick={() => void onClose()} disabled={close.isPending}>
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              ປິດແຊັດ
+            </Button>
+          ) : (
+            <span className="rounded-full bg-subtle px-2.5 py-0.5 text-caption font-semibold text-ink-2">ປິດແລ້ວ</span>
+          )}
+        </div>
       </header>
       <div className="min-h-0 flex-1">
         <ChatThread

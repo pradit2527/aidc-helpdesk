@@ -7,8 +7,6 @@ import {
 } from '@nestjs/common';
 import { Queue, Worker, type Job } from 'bullmq';
 
-import { DbModule } from '../db/db.module';
-
 /**
  * เวลารอสูงสุดตอนตั้งคิว
  *
@@ -253,8 +251,11 @@ export class SlaQueueService implements OnModuleInit, OnApplicationShutdown {
   }
 }
 
+/**
+ * ไม่ต้อง imports: [DbModule] เพราะ DbModule เป็น @Global() อยู่แล้ว
+ * exports ของมันมองเห็นได้จากทุกโมดูลโดยไม่ต้องประกาศซ้ำ
+ */
 @Module({
-  imports: [DbModule],
   providers: [SlaScanProcessor, SlaQueueService],
   exports: [SlaScanProcessor, SlaQueueService],
 })

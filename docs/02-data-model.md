@@ -25,7 +25,7 @@
 | 2 | เวลาทำการ จ–ส 08:00–17:00 → **จ–ศ 08:30–17:30** (เสาร์ไม่ใช่วันทำการ) | G-01 |
 | 3 | เพิ่ม `sla_target.clock_mode` — **P1 นับต่อเนื่อง 24×7** ส่วน P2–P4 นับเวลาทำการ | G-05 |
 | 4 | ค่า SLA ใหม่: P1 15/240 · P2 30/480 · **P3 120/1080** · P4 240/2700 | G-03, G-04 |
-| 5 | `pending_user` แยก **`pending_reason`** 3 แบบ (`user` / `vendor` / `approval`) | G-06 |
+| 5 | ~~`pending_user` แยก **`pending_reason`** 3 แบบ~~ → **v3: แยกเป็นสถานะจริง** `pending_user` · `pending_vendor` · `pending_approval` (ดู §6) | G-06 |
 | 6 | เพิ่ม **workaround** — หยุดนับ resolution ของ incident และบังคับเปิด `problem` | G-07 |
 | 7 | เปลี่ยน priority กลางทาง → นับใหม่จาก **`priority_changed_at`** ไม่ใช่ `created_at` | G-08 |
 | 8 | ยกเลิก "`pending_user` 5 วันทำการ → `resolved` อัตโนมัติ" แทนด้วย **ติดตาม 2 ครั้ง แล้วปิดเมื่อครบ 3 วันทำการ** | G-09 |
@@ -132,6 +132,7 @@ erDiagram
         varchar name_th
         varchar default_impact
         varchar default_urgency
+        varchar ticket_type_scope "incident / service_request / both"
         bigint default_assignee_id FK
         boolean is_active
     }
@@ -144,8 +145,9 @@ erDiagram
         varchar impact
         varchar urgency
         varchar priority "P1..P4 — ระบบคำนวณ"
-        varchar status
-        varchar pending_reason "user / vendor / approval"
+        varchar status "11 ค่า แยกตาม ticket_type"
+        varchar pending_reason "ข้อความอิสระ ใช้กับ pending_user"
+        bigint related_ticket_id FK "เรื่องที่เกี่ยวข้อง (ผูกสองทาง)"
         varchar channel "portal / email / phone / walk_in"
         smallint support_tier
         timestamptz sla_clock_started_at
@@ -474,10 +476,11 @@ erDiagram
 
 | field | type | null | default | คำอธิบาย |
 |---|---|---|---|---|
-| `status` | varchar(20) | N | `'new'` | ดูหัวข้อ 6 |
-| **`pending_reason`** | varchar(20) | Y | null | `user` / `vendor` / `approval` — **บังคับเมื่อ `status='pending_user'`** |
-| `pending_started_at` | timestamptz | Y | null | เวลาที่เข้า `pending_user` ครั้งล่าสุด |
-| **`pending_notified_at`** | timestamptz | Y | null | **บังคับสำหรับ `reason='vendor'`** — ต้องแจ้งผู้รับบริการก่อนจึงหยุดนับได้ (SLA 5.4) |
+| `status` | varchar(20) | N | `'new'` | **11 ค่า** แยกตาม `ticket_type` — ดูหัวข้อ 6 |
+| **`pending_reason`** | varchar(20) | Y | null | **ข้อความอิสระ ไม่ใช่ enum แล้ว** (v3) — ใช้กับ `pending_user` เท่านั้น และไม่บังคับ · เดิมเป็น `user`/`vendor`/`approval` ซึ่งสองค่าหลังกลายเป็นสถานะจริงแล้ว · **แถวเก่ายังมีค่าเดิมค้างอยู่ ไม่ได้ล้างทิ้ง** เพื่อให้อ่านประวัติย้อนหลังได้ |
+| `pending_started_at` | timestamptz | Y | null | เวลาที่เข้าสถานะ **พักแบบใดก็ได้** ครั้งล่าสุด (`pending_approval` / `pending_user` / `resolved` / `fulfilled`) — v2 ตั้งให้เฉพาะ `pending_user` |
+| **`pending_notified_at`** | timestamptz | Y | null | ต้องแจ้งผู้รับบริการก่อนเข้า `pending_vendor` (SLA 5.4) — เดิมผูกกับ `reason='vendor'` |
+| **`related_ticket_id`** | bigint | Y | null | FK → `ticket` (ON DELETE SET NULL) · เรื่องอีกใบที่เกี่ยวข้อง เช่น incident เครื่องพัง ↔ service_request ขอเครื่องทดแทน · **ผูกสองทางเสมอ** · เฟส 1 ผูกได้ใบเดียว |
 | `pending_duration_minutes` | int | N | 0 | เวลาสะสมที่หยุดนับ (นาทีทำการ) |
 | **`followup_count`** | int | N | 0 | จำนวนครั้งที่ระบบส่งติดตาม (ต้องครบ 2 ก่อนปิดอัตโนมัติ) |
 | **`last_followup_at`** | timestamptz | Y | null | |
@@ -566,6 +569,7 @@ erDiagram
 | **`is_admin_account`** | boolean N default false | บัญชีผู้ดูแลต้องแยกจากบัญชีใช้งานประจำวัน |
 | **`password_changed_at`** | timestamptz Y | บังคับเปลี่ยนทุก 90 วันสำหรับบัญชี admin |
 | `line_user_id` | คงไว้ | ใช้กับ**การแจ้งเตือนขาออก**เท่านั้น ไม่ใช่ช่องทางรับแจ้ง |
+| **`manager_id`** (v3) | bigint Y · FK → `app_user` | หัวหน้าสายงาน ใช้หาผู้อนุมัติขั้น `line_manager` อัตโนมัติ · **ไม่ใช้หัวหน้าแผนกของ `department_id` แทน** เพราะแผนกเป็นหน่วยจัดกลุ่มเพื่อรายงาน ไม่ใช่สายบังคับบัญชา — มีคนที่สังกัดแผนกหนึ่งแต่รายงานตรงกับคนอีกแผนก |
 
 > **นโยบายรหัสผ่านใหม่:** ≥ **12 ตัวอักษร** ประกอบด้วยพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข อักขระพิเศษ (นโยบาย 3.2) — เดิม `01-srs.md` NFR-10 เขียน ≥ 8 ต้องแก้ตาม
 
@@ -597,6 +601,28 @@ erDiagram
 | field | การเปลี่ยนแปลง |
 |---|---|
 | `default_priority` | **ลบทิ้ง** — แทนด้วย **`default_impact`** varchar(20) และ **`default_urgency`** varchar(20) เพราะระบบคำนวณ priority เอง |
+| **`ticket_type_scope`** (v3) | varchar(20) N default `'both'` · `incident` / `service_request` / `both` · ตอบโจทย์ "ช่องที่ 1 และ 2 ในฟอร์มเปิด ticket ต้องกรองหมวดหมู่" — ผู้แจ้งเลือกชนิดของเรื่องก่อน แล้วรายการหมวดหมู่เหลือเฉพาะที่ใช้ได้จริง |
+
+**กติกาที่ใช้จัดขอบเขต** (ยึดตามที่ SA กำหนด)
+
+- `incident` = สัญญาณว่าของที่ควรใช้ได้ กลับใช้ไม่ได้ — พัง / ขึ้น error / ต่อไม่ติด / ช้า / ล่ม / ไวรัส / เหตุความปลอดภัย
+- `service_request` = ขอให้ไอทีทำ จัดหา หรือเปลี่ยนอะไรบางอย่าง โดยไม่มีอะไรเสีย
+- `both` = กำกวมจริง — ทุกแถวที่เป็น `both` เพราะกำกวม มีคอมเมนต์กำกับไว้ใน seed ให้ SA ทบทวน
+
+> **⚠️ หมวดหลักที่มีลูกทั้งสองชนิดต้องอยู่ที่ `both` เสมอ**
+> หน้าจอกรองที่ระดับ **หมวดย่อย** ไม่ใช่ซ่อนหมวดหลักทิ้ง มิฉะนั้นผู้แจ้งจะหา
+> หมวดย่อยที่มีอยู่จริงไม่เจอ เพราะพ่อของมันหายไปตั้งแต่ช่องแรกของฟอร์ม
+
+**การแยก `EMAIL_PASSWORD`** — กฎเฉพาะจาก SA: *"ลืมรหัสผ่าน = ขอ service, แต่บัญชีถูกล็อกเพราะระบบ error = incident"*
+
+| code | ชื่อ | ขอบเขต |
+|---|---|---|
+| `EMAIL_PASSWORD` *(รหัสเดิม)* | ລືມລະຫັດຜ່ານ | `service_request` |
+| `EMAIL_ACCOUNT_LOCKED` *(ใหม่)* | ບັນຊີຖືກລັອກຍ້ອນລະບົບຜິດພາດ | `incident` |
+
+> ⚠️ `EMAIL_PASSWORD` **คงรหัสเดิม** ไว้กับครึ่ง "ลืมรหัสผ่าน" โดยตั้งใจ —
+> ticket เก่าทุกใบชี้มาที่รหัสนี้ ถ้าย้ายไปให้ครึ่ง incident ประวัติทั้งหมด
+> จะเปลี่ยนความหมายย้อนหลังโดยไม่มีใครสั่ง
 
 ### 4.6 `attachment`
 
@@ -790,12 +816,36 @@ UNIQUE (`company_id`, `code`)
 UNIQUE (`ticket_id`, `seq`) · INDEX (`approver_id`, `status`)
 
 **กฎที่ backend ต้องบังคับ**
-1. สร้าง ticket ที่ `catalog_item.requires_approval = true` → สร้างแถวตาม `approval_chain`
-2. ขณะมีแถว `pending` → ticket อยู่ `pending_user` + `pending_reason='approval'` → **หยุดนับ SLA**
-3. อนุมัติครบทุกขั้น → ตั้ง `ticket.sla_clock_started_at = now()` แล้วคำนวณ due จากจุดนั้น
-4. ขั้นใดเป็น `rejected` → ticket ไป `cancelled` พร้อมเหตุผลจาก `comment`
+1. สร้าง ticket ที่ `catalog_item.requires_approval = true` → สร้างแถวตาม `approval_chain` เรียง `seq` 1..N **ในทรานแซกชันเดียวกับ ticket** (ถ้าแยก จะได้คำขอที่ค้างรออนุมัติโดยไม่มีใบให้ใครกด)
+2. ขณะมีแถว `pending` → ticket อยู่ **`pending_approval`** → **หยุดนับ SLA**
+   *(v2 เคยใช้ `pending_user` + `pending_reason='approval'` — เลิกแล้ว)*
+3. อนุมัติครบทุกขั้น → ticket ไป **`assigned`** และตั้ง `ticket.sla_clock_started_at = now()`
+   แล้วคำนวณ `resolution_due_at` ใหม่จากจุดนั้น ด้วย `service_catalog_item.target_minutes`
+   · **ล้าง `pending_duration_minutes` เป็น 0** มิฉะนั้นกำหนดจะถูกเลื่อนออกสองเท่าของเวลาที่รอจริง
+4. ขั้นใดเป็น `rejected` → ticket ไป **`rejected`** (ไม่ใช่ `cancelled`) พร้อมเหตุผลจาก `comment`
+   *สองคำนี้ต่างกันที่ "ใครเป็นคนหยุดเรื่อง" ซึ่งเป็นคำถามแรกที่ผู้ตรวจถาม —
+   `cancelled` = ผู้แจ้งถอนเอง · `rejected` = มีผู้มีอำนาจพิจารณาแล้วไม่อนุมัติ*
 5. **ห้ามผู้ขออนุมัติคำขอของตนเอง** (`approver_id ≠ ticket.requester_id`)
 6. permission ใหม่: `approval.decide` (มอบให้ผู้ที่เป็น approver ของแถวนั้นเท่านั้น ไม่ผูกกับ role), `approval.read`
+7. **ทุกการเปลี่ยนสถานะจากการอนุมัติต้องยิงสัญญาณเดียวกับ `POST /tickets/{id}/status`**
+   (แจ้งหน้าจอที่เปิดอยู่ + ข้อความเข้าห้องแชทที่ผูกไว้) — การเขียนฐานข้อมูลสำเร็จ
+   โดยไม่บอกใครเลยคือบั๊กที่ไม่มีเทสต์ไหนจับได้ เพราะข้อมูลถูกต้องครบทุกตาราง
+
+**การหาตัวผู้อนุมัติจาก `approver_type`**
+
+| ค่า | ระบบหาเองได้ไหม | หาจากไหน |
+|---|---|---|
+| `line_manager` | ✅ | **`app_user.manager_id`** ของผู้แจ้ง (คอลัมน์ใหม่ v3) · ข้ามถ้าหัวหน้าถูกปิดบัญชีไปแล้ว |
+| `head_of_it` | ✅ | `escalation_contact` ที่ `contact_key='head_of_it'` — ของบริษัทก่อน ถ้าไม่มีใช้ของส่วนกลาง |
+| `system_owner` · `budget_owner` · `tier2_review` · `cab` | ❌ | `approver_id` เป็น **NULL** — `company_admin` ต้องมากำหนดคนเอง |
+
+> ⚠️ การเดาคนให้สี่ชนิดหลังอันตรายกว่าการปล่อยว่าง เพราะมันคือการมอบอำนาจ
+> อนุมัติงบหรืออนุมัติสิทธิ์ให้คนที่องค์กรไม่ได้แต่งตั้ง
+>
+> ⚠️ ค่าใน `approval_chain` ที่ไม่อยู่ใน `APPROVER_TYPE` จะถูก **ตัดทิ้ง** ไม่ใช่ทำให้
+> ทั้งคำขอล้ม (CHECK `ck_approval_approver_type_valid` จะปฏิเสธแถวนั้นอยู่แล้ว
+> และความผิดอยู่ที่ข้อมูลตั้งค่า ไม่ใช่ที่ผู้ใช้) — ถ้าตัดจนไม่เหลือขั้นเลย
+> ระบบเดินหน้าแบบ "ไม่ต้องอนุมัติ" พร้อมเขียน log เตือนผู้ดูแล
 
 ### 5.12–5.15 Checklist (4 ตาราง)
 
@@ -876,47 +926,174 @@ UNIQUE (`ticket_id`, `template_id`)
 
 ---
 
-## 6. State Machine ของ Ticket (เวอร์ชัน 2)
+## 6. State Machine ของ Ticket (เวอร์ชัน 3 — แยกตาม `ticket_type`)
+
+> **เปลี่ยนจากเวอร์ชัน 2 อย่างไร**
+>
+> เวอร์ชัน 2 ใช้เครื่องสถานะ **เดียว** สำหรับทั้งสองชนิด แล้วยัด "รออนุมัติ" กับ
+> "รอผู้ขาย" ลงไปใน `pending_user` + `pending_reason` ผลที่ตามมาสองข้อ
+>
+> 1. คำถามอย่าง *"คำขอบริการกี่ใบค้างรออนุมัติอยู่"* ตอบด้วย `WHERE status=…`
+>    ไม่ได้ ต้องรู้ด้วยว่าต้องอ่านคอลัมน์ที่สองประกอบ
+> 2. ไม่มีอะไรกัน **เหตุขัดข้อง** ไม่ให้ถูกตั้งเป็น "รออนุมัติ" ซึ่งไม่มีความหมาย
+>
+> เวอร์ชัน 3 แยกเป็นสองตาราง และ `pending_approval` / `pending_vendor` /
+> `fulfilled` / `rejected` กลายเป็นสถานะจริง
+>
+> **แหล่งความจริงของโค้ด:** `src/domain/ticket/ticket.entity.ts`
+> (`INCIDENT_TRANSITIONS` และ `SERVICE_REQUEST_TRANSITIONS`) ลอกจากหัวข้อนี้
+> ตรง ๆ ทุกเส้น — แก้ที่นี่แล้วต้องแก้ที่นั่นเสมอ
+
+### 6.1 ค่าสถานะทั้งหมด (11 ค่า)
+
+| สถานะ | ใช้กับ | นาฬิกา SLA |
+|---|---|---|
+| `new` | ทั้งสอง | เดิน |
+| `pending_approval` | **คำขอบริการเท่านั้น** | **หยุด** |
+| `rejected` | **คำขอบริการเท่านั้น** | ปลายทาง |
+| `assigned` | ทั้งสอง | เดิน |
+| `in_progress` | ทั้งสอง | เดิน |
+| `pending_user` | ทั้งสอง | **หยุด** |
+| `pending_vendor` | ทั้งสอง | **เดิน** (ดูหมายเหตุ) |
+| `resolved` | **เหตุขัดข้องเท่านั้น** | **หยุด** |
+| `fulfilled` | **คำขอบริการเท่านั้น** | **หยุด** |
+| `closed` | ทั้งสอง | ปลายทาง |
+| `cancelled` | ทั้งสอง | ปลายทาง |
+
+> **⚠️ `pending_vendor` ไม่หยุดนาฬิกา โดยตั้งใจ**
+>
+> ต่างจาก `pending_user` เพราะการเลือกผู้ขายและการเร่งงานผู้ขายเป็นความรับผิดชอบ
+> ของทีมไอที ส่วนการรอผู้แจ้งตอบเป็นสิ่งที่ทีมทำอะไรไม่ได้เลย
+> เป็นสวิตช์นโยบายที่เปลี่ยนได้ในอนาคต — ถ้าจะเปลี่ยน ให้ย้ายค่าเข้า
+> `PAUSED_STATUSES` ใน `src/common/constants.ts` **ที่เดียว**
+>
+> **⚠️ `resolved` กับ `fulfilled` คู่ขนานกัน** — เป็น "งานเสร็จ" ของคนละสาย
+> ทั้งคู่เขียน `resolved_at` คอลัมน์เดียวกัน เพราะ KPI-1 วัดจากคอลัมน์นั้น
+> ถ้า `fulfilled` ไม่เขียน คำขอบริการทุกใบจะถูกนับว่าไม่ทัน SLA ตลอดกาล
+
+### 6.2 เครื่องสถานะของ **เหตุขัดข้อง** (`ticket_type = 'incident'`)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> new : สร้าง ticket
-    new --> assigned : มอบหมาย / รับงาน
-    new --> pending_user : รออนุมัติ (คำขอที่ต้องอนุมัติ)
-    new --> cancelled : ยกเลิก (ระบุเหตุผล)
+    [*] --> new : แจ้งเรื่อง
+    new --> assigned : Helpdesk รับเรื่อง / มอบหมายอัตโนมัติตามหมวด
+    new --> cancelled : ผู้แจ้งถอนเรื่องก่อนมีคนรับ
     assigned --> in_progress : เริ่มดำเนินการ
-    assigned --> pending_user : ขอข้อมูล / รอ vendor / รออนุมัติ
     assigned --> cancelled : ยกเลิก
-    in_progress --> pending_user : รอข้อมูล / รออะไหล่ / รออนุมัติ
-    in_progress --> resolved : แก้ไขเสร็จ
+    in_progress --> assigned : โอนทีม / เปลี่ยนผู้รับผิดชอบ
+    in_progress --> pending_user : ขอข้อมูลจากผู้แจ้ง
+    in_progress --> pending_vendor : ส่งซ่อม / ส่งผู้ให้บริการภายนอก
+    in_progress --> resolved : แก้ไขเสร็จ (บังคับ resolution_note)
     in_progress --> cancelled : ยกเลิก
-    pending_user --> in_progress : ผู้แจ้งตอบ / vendor ตอบ / อนุมัติครบ
+    pending_user --> in_progress : ผู้แจ้งตอบแล้ว
     pending_user --> closed : ติดตาม 2 ครั้งแล้วไม่ตอบ ครบ 3 วันทำการ
-    pending_user --> cancelled : คำขอถูกปฏิเสธการอนุมัติ
+    pending_vendor --> in_progress : ผู้ให้บริการส่งคืน
     resolved --> closed : ผู้แจ้งยืนยัน หรือครบ 3 วันทำการ
-    resolved --> in_progress : ผู้แจ้งแจ้งว่ายังไม่หาย
-    closed --> in_progress : เปิดซ้ำภายใน 7 วัน
+    resolved --> in_progress : ผู้แจ้งแจ้งว่ายังไม่หาย (reopen_count +1)
+    closed --> in_progress : เปิดซ้ำภายใน 7 วัน (reopen_count +1)
     closed --> [*]
     cancelled --> [*]
 ```
 
-### 6.1 ตารางการเปลี่ยนสถานะ
+> **🟡 รอ SA ยืนยัน — `pending_user → closed`**
+>
+> เส้นนี้ **ไม่มี** ในแผนภาพรอบล่าสุดที่ SA ส่งมา แต่คงไว้โดยตั้งใจ เพราะเป็น
+> กฎควบคุมที่ SLA 5.4 + SOP-01 ข้อ 9 บังคับ (G-09) และมีอยู่ในระบบก่อนการแก้
+> ครั้งนี้ การลบทิ้งเงียบ ๆ = ปิดกลไกควบคุมโดยไม่มีใครสั่ง
 
-| จาก | ไป | ใครทำได้ | เงื่อนไขและผลข้างเคียง |
+### 6.3 เครื่องสถานะของ **คำขอบริการ** (`ticket_type = 'service_request'`)
+
+```mermaid
+stateDiagram-v2
+    [*] --> new : ยื่นคำขอ
+    new --> pending_approval : catalog ตั้ง requires_approval = true
+    new --> assigned : ไม่ต้องอนุมัติ — มอบทีมตาม catalog
+    new --> cancelled : ผู้แจ้งถอนคำขอ
+    pending_approval --> assigned : อนุมัติครบทุกขั้น (เริ่มนาฬิกา fulfillment)
+    pending_approval --> rejected : ขั้นใดขั้นหนึ่งถูกปฏิเสธ (บังคับเหตุผล)
+    pending_approval --> cancelled : ผู้แจ้งถอนคำขอระหว่างรออนุมัติ
+    assigned --> in_progress : เริ่มดำเนินการ
+    assigned --> cancelled : เจ้าหน้าที่ยกเลิก
+    in_progress --> pending_user : ขอข้อมูลจากผู้แจ้ง
+    in_progress --> pending_vendor : รอจัดซื้อ / รอส่งของ
+    in_progress --> fulfilled : ส่งมอบแล้ว
+    in_progress --> cancelled : เจ้าหน้าที่ยกเลิก
+    pending_user --> in_progress : ผู้แจ้งตอบแล้ว
+    pending_vendor --> in_progress : ของมาถึงแล้ว
+    fulfilled --> closed : ผู้แจ้งยืนยัน หรือครบ 3 วันทำการ
+    fulfilled --> in_progress : ผู้แจ้งแจ้งว่าได้ไม่ครบ (reopen_count +1)
+    closed --> in_progress : เปิดซ้ำภายใน 7 วัน (reopen_count +1)
+    closed --> [*]
+    rejected --> [*]
+    cancelled --> [*]
+```
+
+> **✅ ยืนยันโดย SA (2026-09-18) — ยกเลิกคำขอที่มีคนรับแล้วได้**
+>
+> แผนภาพรอบแรกให้ `cancelled` ออกจาก `new` และ `pending_approval` เท่านั้น ทำให้
+> คำขอที่มีคนรับแล้วยกเลิกไม่ได้เลยจนกว่าจะถึง `fulfilled` — SA ยืนยันว่าเป็น
+> ช่องที่แผนภาพตกหล่นจริง จึงเพิ่มเส้น `assigned → cancelled` และ
+> `in_progress → cancelled` ให้เหมือนสายเหตุขัดข้องทุกประการ สิทธิ์ยกเลิกที่จุดนี้
+> ยังเป็นของเจ้าหน้าที่เท่านั้น (`ticket.change_status` + `ticket.cancel`) — ผู้แจ้ง
+> เองยังยกเลิกได้แค่ก่อนมีคนรับ (`new` / `pending_approval`) เหมือนเดิม
+
+### 6.4 ตารางการเปลี่ยนสถานะ
+
+| จาก | ไป | ชนิด | ใครทำได้ | เงื่อนไขและผลข้างเคียง |
+|---|---|---|---|---|
+| — | `new` | ทั้งสอง | end_user, agent+ | คำนวณ `priority` จาก `impact × urgency` · สร้าง `ticket_checklist` ถ้า catalog กำหนด · **ถ้าผู้แจ้งไม่ใช่บัญชีพนักงานในเครือ บังคับ `ticket_type = 'service_request'`** (ดู 6.6) |
+| `new` | `pending_approval` | SR | ระบบ | เมื่อ `service_catalog_item.requires_approval = true` · สร้าง `approval_request` เรียงลำดับ 1..N ตาม `approval_chain` · ตั้ง `pending_started_at` · **นาฬิกา fulfillment ยังไม่เริ่ม** (`sla_clock_started_at` = NULL) เมื่อ `clock_start_event` เป็น `after_approval` / `after_budget_approval` |
+| `new` | `assigned` | ทั้งสอง | agent+ | ตั้ง `assignee_id`, `assignee_change_count` +1 · **ไม่** ตั้ง `first_response_at` (ดู 6.5) |
+| `pending_approval` | `assigned` | SR | ระบบ (หลังอนุมัติครบ) | ตั้ง `sla_clock_started_at = now()` แล้วคำนวณ `resolution_due_at` ใหม่จากจุดนี้ ด้วย `service_catalog_item.target_minutes` · ล้าง `pending_duration_minutes` เป็น 0 |
+| `pending_approval` | `rejected` | SR | ระบบ (เมื่อขั้นใดเป็น `rejected`) | **บังคับเหตุผล** จาก `approval_request.comment` (มี CHECK บังคับที่ระดับ DB) · ปลายทาง |
+| `pending_approval` | `cancelled` | SR | requester, agent+ | ผู้แจ้งถอนคำขอเองระหว่างรออนุมัติ |
+| `assigned` | `in_progress` | ทั้งสอง | assignee, agent+ | |
+| `in_progress` | `assigned` | **INC** | agent+ | โอนทีม / เปลี่ยนผู้รับผิดชอบ — สถานะถอยเพราะคนใหม่ยังไม่เริ่มลงมือ |
+| `in_progress` | `pending_user` | ทั้งสอง | assignee, agent+ | **บังคับ `reason` ≥ 10 ตัวอักษร** · ต้องมีคอมเมนต์สาธารณะระบุสิ่งที่รอ · ตั้ง `pending_started_at` · **หยุดนับ SLA** |
+| `in_progress` | `pending_vendor` | ทั้งสอง | assignee, agent+ | **บังคับ `reason`** · ต้องแจ้งผู้รับบริการ (ตั้ง `pending_notified_at`) · **นาฬิกายังเดิน** |
+| `in_progress` | `resolved` | **INC** | assignee, agent+ | **บังคับ `resolution_note` ≥ 15 ตัวอักษร** · **บล็อกถ้า checklist ข้อ required ยังไม่ครบ** (409) · ตั้ง `resolved_at` |
+| `in_progress` | `fulfilled` | **SR** | assignee, agent+ | **บล็อกถ้า checklist ข้อ required ยังไม่ครบ** (409) · ตั้ง `resolved_at` · `resolution_note` รับได้แต่**ไม่บังคับ** |
+| `pending_user` | `in_progress` | ทั้งสอง | ระบบ / agent+ | บวก `pending_duration_minutes` (นาทีทำการ) · เลื่อน `resolution_due_at` เท่าเวลาที่หยุด |
+| `pending_vendor` | `in_progress` | ทั้งสอง | agent+ | **ไม่** บวกเวลาคืน — นาฬิกาไม่เคยหยุด |
+| `pending_user` | `closed` | **INC** | ระบบ | **ต้องมี `followup_count >= 2`** และครบ 3 วันทำการ (G-09) · บวกเวลาที่รอเข้า `pending_duration_minutes` |
+| `resolved`/`fulfilled` | `closed` | INC / SR | requester / ระบบ (3 วันทำการ) / agent+ | ตั้ง `closed_at`, `closed_by` (**null = ระบบปิดอัตโนมัติ**) · **ไม่** บวกเวลาที่ค้างอยู่เข้า `pending_duration_minutes` (ดู 6.5) |
+| `resolved`/`fulfilled` | `in_progress` | INC / SR | requester, agent+ | `reopen_count` +1 · ล้าง `resolved_at` · บวกเวลาที่ค้างเข้า `pending_duration_minutes` แล้วเลื่อน due ออก (**สูตรเดียวกับ pause** — ปิดประเด็น S-03) |
+| `closed` | `in_progress` | ทั้งสอง | requester, agent+ | ภายใน 7 วันหลัง `closed_at` · `reopen_count` +1 |
+| `new` | `cancelled` | ทั้งสอง | requester, agent+ | ถอนเรื่องก่อนมีคนรับ · บังคับเหตุผล ≥ 5 ตัวอักษร |
+| `assigned`/`in_progress` | `cancelled` | ทั้งสอง | agent+ เท่านั้น | เจ้าหน้าที่ยกเลิกหลังมีคนรับแล้ว (ผู้แจ้งเองทำไม่ได้ที่จุดนี้) · บังคับเหตุผล ≥ 5 ตัวอักษร — ฝั่ง SR เพิ่มเข้ามาเมื่อ 2026-09-18 ตามที่ SA ยืนยันว่าแผนภาพเดิมตกหล่น (§6.3) |
+
+> ทุกการเปลี่ยนสถานะบันทึกลง `ticket_status_history` เสมอ — การเปลี่ยนที่ไม่อยู่ในตารางนี้ต้องตอบ `409 TICKET_INVALID_TRANSITION`
+>
+> CHECK `ck_ticket_status_matches_type` บังคับข้อ "ชนิด" ถึงระดับฐานข้อมูล — สคริปต์นำเข้าข้อมูลและ `UPDATE` จากคอนโซลก็ข้ามไม่ได้
+
+### 6.5 การคืนเวลาที่หยุดนับ — พักสองแบบไม่เหมือนกัน
+
+`pending_duration_minutes` สะสมเวลาที่นาฬิกาหยุด แต่ **กติกาการบวกต่างกันตามเหตุของการพัก**
+
+| กลุ่ม | สถานะ | คืนเวลาเมื่อไร | ทำไม |
 |---|---|---|---|
-| — | `new` | end_user, agent+ | คำนวณ `priority` จาก `impact × urgency` · คำนวณ due จาก `sla_clock_started_at` · สร้าง `approval_request` และ `ticket_checklist` ถ้า catalog กำหนด |
-| `new` | `assigned` | agent+ | ตั้ง `assignee_id`, `assignee_change_count` +1, แจ้งเตือนผู้รับผิดชอบ |
-| `new`/`assigned`/`in_progress` | `pending_user` | assignee, agent+, ระบบ | **บังคับ `pending_reason`** · `user` ต้องมีคอมเมนต์สาธารณะระบุสิ่งที่รอ · `vendor` ต้องมีคอมเมนต์แจ้งผู้แจ้งก่อนจึงตั้ง `pending_notified_at` ได้ · `approval` ระบบตั้งอัตโนมัติเมื่อมี `approval_request` ค้าง · ตั้ง `pending_started_at` · **หยุดนับ SLA** |
-| `pending_user` | `in_progress` | ระบบ / agent+ | บวก `pending_duration_minutes` (นาทีทำการ) · เลื่อน `resolution_due_at` เท่าเวลาที่หยุด · เคลียร์ `pending_reason` · ถ้าเป็น `approval` และ `clock_start_event='after_approval'` → ตั้ง `sla_clock_started_at = now()` แล้วคำนวณ due ใหม่ |
-| `pending_user` | `closed` | ระบบ | **ต้องมี `followup_count >= 2`** และครบ 3 วันทำการหลัง `last_followup_at` · คอมเมนต์ระบบ + อีเมลแจ้ง · ผู้แจ้งเปิดใหม่ได้ (SLA 5.4 / SOP-01 ข้อ 9) |
-| `pending_user` | `cancelled` | ระบบ | เมื่อ `approval_request` ขั้นใดเป็น `rejected` · เหตุผลมาจาก `comment` |
-| `in_progress` | `resolved` | assignee, agent+ | **บังคับ `resolution_note`** · **บล็อกถ้า checklist ข้อ required ยังไม่ครบ** (409) · ตั้ง `resolved_at` · ตรวจ resolution breach · ตั้ง `csat_sent_at` |
-| `resolved` | `closed` | requester / ระบบ (3 วันทำการ) / agent+ | ตั้ง `closed_at`, `closed_by` (null = ระบบ) |
-| `resolved` | `in_progress` | requester, agent+ | บวกเวลาที่อยู่ใน `resolved` เข้า `pending_duration_minutes` แล้วเลื่อน due ออก (**สูตรเดียวกับ pause** — ปิดประเด็น S-03) |
-| `closed` | `in_progress` | requester, agent+ | ภายใน 7 วันหลัง `closed_at` · `reopen_count` +1 |
-| `new`/`assigned`/`in_progress` | `cancelled` | requester (เฉพาะของตนและยังไม่ assign), agent+ | บังคับเหตุผล · ยกเลิกการนับ SLA |
+| **รอคนอื่น** | `pending_approval`, `pending_user` | **ออกทางไหนก็คืน** รวมทั้งไป `closed` | เวลาช่วงนั้นไม่ใช่ของทีมไอทีเลย และ KPI-3 (FCR) ใช้ `pending_duration_minutes = 0` แทนความหมาย *"ไม่เคยต้องรอใคร"* — ถ้าไม่บวกตอนปิด เรื่องที่ปิดเพราะผู้แจ้งเงียบจะถูกนับเป็นแก้จบในครั้งเดียว |
+| **งานเสร็จรอยืนยัน** | `resolved`, `fulfilled` | **เฉพาะตอนถูกเปิดคืน** | ถ้าเรื่องปิดตามปกติ เวลาช่วงนี้ไม่เคยมีความหมาย เพราะตัววัด SLA คือ `resolved_at` ไม่ใช่ `closed_at` — และถ้าบวกตอนปิด ทุกใบที่ปิดจะมีค่า > 0 แล้ว **KPI-3 จะร่วงเป็น 0% ทั้งกระดาน** |
 
-> ทุกการเปลี่ยนสถานะบันทึกลง `ticket_status_history` เสมอ — การเปลี่ยนที่ไม่อยู่ในตารางนี้ต้องตอบ `409 INVALID_STATE_TRANSITION`
+> `first_response_at` ถูกตั้งจาก **คอมเมนต์สาธารณะครั้งแรกของเจ้าหน้าที่เท่านั้น**
+> การมอบหมาย (`new → assigned`) **ไม่** นับเป็นการตอบรับ ตาม SLA 5.1 —
+> เว้นแต่ผู้มอบหมายพิมพ์ข้อความถึงผู้แจ้งมาพร้อมกัน
+
+### 6.6 เหตุขัดข้องเป็นของพนักงานในเครือเท่านั้น
+
+Incident แปลว่า *"บริการที่ AIDC ให้พนักงานของตัวเองใช้อยู่ ใช้ไม่ได้"* ซึ่งวัดกับ SLA
+ภายในและนับเข้า KPI ความพร้อมใช้ของระบบงาน ผู้เข้าชมเว็บภายนอก (AIDC Support Hub)
+ไม่ได้อยู่ในขอบเขตนั้น เรื่องของเขาคือ *"ขอให้ช่วยอะไรบางอย่าง"* = คำขอบริการเสมอ
+
+- บังคับที่ `src/domain/ticket/ticket-type-policy.ts` ซึ่ง **ทั้งสองทางเข้าเรียกตัวเดียวกัน**
+  (`POST /tickets` และ `POST /support-chat/{id}/ticket`)
+- **ดัดค่า ไม่ใช่ปฏิเสธคำขอ** — ผู้เข้าชมไม่ได้เป็นคนเลือกชนิดของเรื่อง
+  เจ้าหน้าที่ที่กดยกระดับแชทเป็นคนเลือก (หรือปล่อยว่างแล้วได้ค่า default ติดมา)
+- ตัดสินจาก `support_chat.requester_id IS NULL` **ไม่ใช่** จาก `ticket.requester_id`
+  เพราะเรื่องจาก widget ที่จับคู่บัญชีไม่ได้จะใส่ *เจ้าหน้าที่ที่กด* เป็นผู้แจ้ง
+  ซึ่งเป็นการลงบัญชี ไม่ใช่ข้อเท็จจริงว่าคนถามเป็นพนักงาน
+- เมื่อดัดแล้วไม่มี `catalog_item_id` ระบบเติมรายการ **`SR-OTHER`** ให้อัตโนมัติ
+  มิฉะนั้น CHECK `ck_ticket_service_request_needs_catalog` (G-14) จะปฏิเสธการบันทึก
 
 ### 6.2 เหตุการณ์ที่ไม่ใช่การเปลี่ยนสถานะแต่กระทบ SLA
 

@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type { Db } from '../client';
-import { DB } from '../db.module';
+import { DB } from '../db.token';
 import {
   appUser,
   approvalRequest,

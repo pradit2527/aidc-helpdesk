@@ -73,6 +73,16 @@ export interface TicketSla {
   workaround_at: string | null;
   is_response_breached: boolean;
   is_resolution_breached: boolean;
+  /** เริ่มนับ SLA เมื่อไร — เป็นเวลาเปิดเรื่องเมื่อ clock_started เป็น false */
+  clock_started_at?: string | null;
+  /** นาทีที่หยุดนับสะสม (พักรอผู้แจ้ง/รออนุมัติที่จบไปแล้ว) */
+  pending_duration_minutes?: number;
+  /** งบเวลาของ resolution — คำขอบริการอ่านจาก catalog ไม่ใช่ตาราง priority */
+  budget_minutes?: number | null;
+  /** ใช้เวลาไปกี่ % ของงบ (0–100) — null = ยังไม่เริ่มนับหรือไม่มีงบให้เทียบ */
+  elapsed_percent?: number | null;
+  /** false = คำขอที่ยังรออนุมัติ นาฬิกายังไม่เริ่ม (optional บนสาย: ไม่มี = ถือว่าเริ่มแล้ว) */
+  clock_started?: boolean;
 }
 
 export interface TicketListItem {
@@ -81,7 +91,17 @@ export interface TicketListItem {
   ticket_type: 'incident' | 'service_request';
   subject: string;
   status: TicketStatus;
-  pending_reason: 'user' | 'vendor' | 'approval' | null;
+  /**
+   * ເຫດຜົນຍ່ອຍຂອງການພັກ — ຂໍ້ຄວາມອິດສະຫຼະ ບໍ່ແມ່ນ enum ອີກຕໍ່ໄປ
+   *
+   * ເດີມເປັນ 'user' | 'vendor' | 'approval' ເພາະສະຖານະດຽວ (pending_user)
+   * ຕ້ອງແບກຄວາມໝາຍທັງສາມ ຕອນນີ້ສອງອັນຫຼັງເປັນສະຖານະຈິງແລ້ວ
+   * (`pending_vendor` · `pending_approval`) ໃຫ້ອ່ານຈາກ `status` ແທນ
+   *
+   * ⚠️ ຂໍ້ມູນເກົ່າຍັງມີຄ່າ 'vendor' / 'approval' ຄ້າງຢູ່ — backend ບໍ່ໄດ້ລ້າງຖິ້ມ
+   *    ເພື່ອໃຫ້ອ່ານປະຫວັດຍ້ອນຫຼັງໄດ້ ຈຶ່ງຫ້າມສົມມຸດວ່າຄ່າຈະເປັນ 'user' ສະເໝີ
+   */
+  pending_reason: string | null;
   priority: Priority;
   support_tier: 1 | 2 | 3;
   company: CompanyRef;
@@ -150,6 +170,8 @@ export interface TicketHistoryEntry {
   to_status: TicketStatus;
   from_priority: Priority | null;
   to_priority: Priority | null;
+  from_assignee?: UserRef | null;
+  to_assignee?: UserRef | null;
   reason: string | null;
   changed_at: string;
   changed_by: UserRef | null;
@@ -162,6 +184,15 @@ export interface ApprovalStep {
   status: 'pending' | 'approved' | 'rejected' | 'skipped';
   comment: string | null;
   decided_at: string | null;
+  /**
+   * true = ผู้เรียกคนนี้กดอนุมัติ/ปฏิเสธขั้นนี้ได้ ณ ตอนนี้
+   *
+   * optional บนสาย — API รุ่นที่ยังไม่ส่งช่องนี้ทำให้หน้าจอถอยไปเทียบ
+   * approver.id กับผู้ใช้ในเซสชันแทน ซึ่งพอสำหรับ "จะโชว์ปุ่มไหม"
+   * แต่ไม่ใช่การตัดสินสิทธิ์ — POST /approvals/{id}/decide เป็นด่านจริงเสมอ
+   * และปฏิเสธคนที่ไม่ใช่ผู้อนุมัติของขั้นนั้นอยู่แล้ว
+   */
+  can_decide?: boolean;
 }
 
 export interface ChecklistEntry {
@@ -172,6 +203,20 @@ export interface ChecklistEntry {
   is_done: boolean;
   done_by: UserRef | null;
   done_at: string | null;
+}
+
+/**
+ * เรื่องอีกใบที่ผูกไว้ — พอสำหรับวาดชิปและลิงก์ไป ไม่ใช่รายละเอียดเต็ม
+ *
+ * ผูกได้ใบเดียวโดยตั้งใจ ไม่ใช่กราฟความสัมพันธ์ ถ้าวันหนึ่งต้องผูกหลายใบ
+ * ให้เพิ่มเป็นตารางความสัมพันธ์ฝั่ง backend ไม่ใช่ยัดหลาย id ลงคอลัมน์เดียว
+ */
+export interface RelatedTicketRef {
+  id: number;
+  ticket_no: string;
+  subject: string;
+  status: TicketStatus;
+  ticket_type: 'incident' | 'service_request';
 }
 
 export interface TicketDetail extends TicketListItem {
@@ -188,8 +233,23 @@ export interface TicketDetail extends TicketListItem {
   is_major_incident: boolean;
   is_security_incident: boolean;
   can: TicketCan;
-  /** สถานะที่ผู้เรียกคนนี้เปลี่ยนไปได้จากสถานะปัจจุบัน — backend ใช้กฎชุดเดียวกับตอนบันทึกจริง */
+  /**
+   * สถานะที่ผู้เรียกคนนี้เปลี่ยนไปได้จากสถานะปัจจุบัน — backend ใช้กฎชุดเดียวกับตอนบันทึกจริง
+   *
+   * ⚠️ รายการนี้ต่างกันตาม ticket_type (incident กับ service_request มีเครื่องสถานะคนละชุด)
+   *    หน้าจอห้ามเดาปลายทางเองไม่ว่ากรณีใด — วาดตัวเลือกจากรายการนี้ตรง ๆ เท่านั้น
+   */
   available_transitions: TicketStatus[];
+  /**
+   * เรื่องที่ผูกไว้ — null/ไม่มี = ยังไม่ได้ผูกกับเรื่องใด
+   *
+   * optional บนสายเพราะเพิ่มมาทีหลัง API รุ่นที่ยังไม่ส่งช่องนี้ต้องได้หน้าเดิม
+   */
+  related_ticket?: RelatedTicketRef | null;
+  /** รายการ catalog ที่คำขอบริการเปิดจาก — null สำหรับ incident */
+  catalog_item?: { id: number; code: string; name_th: string } | null;
+  /** เรื่องอื่นของผู้แจ้งคนเดียวกัน (ไม่รวมใบนี้) สูงสุด 5 ใบ — ว่างเมื่อผู้เรียกคือผู้แจ้งเอง */
+  requester_tickets?: RelatedTicketRef[];
   comments: TicketComment[];
   history: TicketHistoryEntry[];
   approvals: ApprovalStep[];
@@ -292,6 +352,13 @@ export interface SupportTeamCandidate {
   company: { id: number; code: string };
 }
 
+/**
+ * ประเภทเรื่องที่หมวดหมู่หรือรายการบริการหนึ่ง ๆ ใช้ได้
+ *
+ * 'both' = ใช้ได้ทั้งสองประเภท ซึ่งเป็นค่าที่ปลอดภัยที่สุดเมื่อไม่ระบุ
+ */
+export type TicketTypeScope = 'incident' | 'service_request' | 'both';
+
 export interface TicketCategory {
   id: number;
   code: string;
@@ -303,6 +370,14 @@ export interface TicketCategory {
   default_assignee: UserRef | null;
   sort_order: number;
   is_active: boolean;
+  /**
+   * ขอบเขตประเภทเรื่องของหมวดนี้
+   *
+   * optional บนสาย — API รุ่นก่อนหน้าไม่ส่งช่องนี้ และต้องแปลว่า "ใช้ได้ทั้งคู่"
+   * ไม่ใช่ "ใช้ไม่ได้เลย" มิฉะนั้นฟอร์มแจ้งเรื่องจะมีหมวดให้เลือกศูนย์หมวด
+   * ทันทีที่ deploy frontend ก่อน backend (ดู categoryAllowsType ใน tickets/new)
+   */
+  ticket_type_scope?: TicketTypeScope;
 }
 
 export interface SlaTarget {

@@ -14,7 +14,13 @@
 
 import { TZDate } from '@date-fns/tz';
 
-import { BUSINESS_DAY_MINUTES, type ClockMode } from '../constants';
+import {
+  BUSINESS_DAY_MINUTES,
+  isPausedStatus,
+  isTerminalStatus,
+  type ClockMode,
+  type TicketStatus,
+} from '../constants';
 
 export { BUSINESS_DAY_MINUTES };
 
@@ -299,8 +305,18 @@ export function slaStatus(opts: {
 }): 'on_track' | 'at_risk' | 'breached' | 'paused' {
   const { status, resolutionDueAt, now } = opts;
 
-  if (status === 'pending_user') return 'paused';
-  if (['resolved', 'closed', 'cancelled'].includes(status) || !resolutionDueAt) return 'on_track';
+  /*
+   * สถานะพักทุกแบบรายงานว่า "หยุดนับ" — ไม่ใช่แค่ pending_user เหมือนเดิม
+   *
+   * รวม resolved / fulfilled ด้วย ซึ่งเดิมรายงานเป็น on_track ทั้งที่นาฬิกา
+   * ไม่ได้เดินแล้ว ทำให้หน้าจอขึ้น "เหลืออีก 3 ชั่วโมง" ค้างไว้บนเรื่องที่
+   * งานเสร็จไปแล้ว แล้วตัวเลขนั้นก็ไม่เคยเปลี่ยนอีกเลย
+   *
+   * ⚠️ pending_vendor ไม่อยู่ในรายการนี้ ตามนโยบายที่ SA ระบุไว้ชัด —
+   *    การส่งของให้ผู้ขายไม่หยุดนาฬิกา ดู PAUSED_STATUSES ใน constants.ts
+   */
+  if (isPausedStatus(status as TicketStatus)) return 'paused';
+  if (isTerminalStatus(status as TicketStatus) || !resolutionDueAt) return 'on_track';
   // ข้อยกเว้นตาม SLA ข้อ 9 — ไม่ตั้งธง breach และไม่นับเข้า KPI
   if (opts.exclusionCode) return 'on_track';
 

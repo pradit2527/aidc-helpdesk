@@ -43,6 +43,16 @@ import {
 } from '../../db/schema';
 
 /**
+ * อ้างคอลัมน์ของตาราง "นอก" ภายในคิวรีย่อยด้วยชื่อเต็ม (`"role"."id"`)
+ *
+ * select ที่มีตารางเดียว (ไม่มี join) drizzle จะตัดชื่อตารางออกจากทุกคอลัมน์ใน
+ * sql`` ทำให้ `WHERE "role_id" = "id"` ผูก "id" กับตารางในคิวรีย่อย ไม่ใช่ตารางนอก
+ * ผลคือนับได้ 0 (หรือตรงโดยบังเอิญ) โดยไม่มี error — ห่อเป็น sql ซ้อนเพื่อไม่ให้ถูกตัด
+ */
+const outerRef = (table: string, column: string) =>
+  sql`${sql.identifier(table)}.${sql.identifier(column)}`;
+
+/**
  * ข้อมูลหลักที่หน้าผู้ดูแลใช้อ่าน
  *
  * รวมไว้ที่เดียวเพราะทุกตัวเป็นการอ่านตารางอ้างอิงแบบเดียวกัน
@@ -112,11 +122,11 @@ export class MasterDataService {
          */
         user_count: sql<number>`(
           SELECT count(*)::int FROM ${appUser}
-          WHERE ${appUser.companyId} = ${company.id} AND ${appUser.deletedAt} IS NULL
+          WHERE ${appUser.companyId} = ${outerRef('company', 'id')} AND ${appUser.deletedAt} IS NULL
         )`,
         open_ticket_count: sql<number>`(
           SELECT count(*)::int FROM ${ticket}
-          WHERE ${ticket.companyId} = ${company.id}
+          WHERE ${ticket.companyId} = ${outerRef('company', 'id')}
             AND ${ticket.deletedAt} IS NULL
             AND ${ticket.status} IN ('new','assigned','in_progress','pending_user')
         )`,
@@ -182,6 +192,7 @@ export class MasterDataService {
         company_code: company.code,
         default_impact: ticketCategory.defaultImpact,
         default_urgency: ticketCategory.defaultUrgency,
+        ticket_type_scope: ticketCategory.ticketTypeScope,
         assignee_id: ticketCategory.defaultAssigneeId,
         assignee_name: assignee.fullName,
         sort_order: ticketCategory.sortOrder,
@@ -665,7 +676,7 @@ export class MasterDataService {
         // เข้าใจว่ามีคนถือสิทธิ์นั้นมากกว่าความจริง
         user_count: sql<number>`(
           SELECT count(DISTINCT ${userRole.userId})::int FROM ${userRole}
-          WHERE ${userRole.roleId} = ${role.id}
+          WHERE ${userRole.roleId} = ${outerRef('role', 'id')}
             AND (${userRole.expiresAt} IS NULL OR ${userRole.expiresAt} > now())
         )`,
       })

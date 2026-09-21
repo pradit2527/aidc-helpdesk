@@ -22,7 +22,7 @@
 | G-03 | ตัวเลข response | critical 30 / high 60 / medium 240 / low 480 **นาทีทำการ** | **P1 15 นาที (24×7)** / P2 30 / P3 120 / P4 240 **นาทีทำการ** (SLA 5.1) | P1 เข้มขึ้น 2 เท่าและเป็นเวลาปฏิทิน ไม่ใช่เวลาทำการ → เครื่องคำนวณต้องรองรับ 2 โหมดนาฬิกา | `sla_target.response_minutes` seed ใหม่ (หัวข้อ 3.1); เพิ่ม `sla_target.clock_mode` |
 | G-04 | ตัวเลข resolution | critical 240 / high 480 / medium 1,440 / low 2,700 นาทีทำการ | **P1 4 ชม. (นับต่อเนื่อง)** / P2 8 ชม.ทำการ (480) / **P3 2 วันทำการ (1,080)** / P4 5 วันทำการ (2,700) (SLA 5.1) | P3 เดิม 1,440 นาที → จริง **1,080 นาที** (สั้นลง 6 ชม.ทำการ); P1 เปลี่ยนเป็นนาฬิกาปฏิทิน | `sla_target.resolution_minutes` seed ใหม่; `04-rbac-sla.md` §3.2, §3.3 |
 | G-05 | กติกาการนับเวลา | นับ**นาทีทำการ**อย่างเดียวทุก priority | **P1 นับต่อเนื่อง 24×7** (มีทีม On-call) ส่วน **P2–P4 นับเฉพาะเวลาทำการ** (SLA 5.4 / SOP 5.2 หมายเหตุ) | `add_business_minutes()` ใช้กับ P1 ไม่ได้ ต้องแยกเส้นทางคำนวณ; งาน `scan_sla` ต้องประเมิน P1 นอกเวลาทำการด้วย | เพิ่ม `sla_target.clock_mode` `varchar(20)` (`calendar_24x7` / `business_hours`); `11-sla-engine.md` §2 เพิ่มสาขา `if clock_mode=='calendar_24x7': due = start + timedelta(minutes=n)`; §5.2 `scan_sla` เลิกกรองนอกเวลาทำการสำหรับ P1 |
-| G-06 | กฎ pause | หยุดนับเฉพาะสถานะ `pending_user` | หยุดนับเมื่อ **(ก) รอข้อมูล/การยืนยันจากผู้แจ้ง** หรือ **(ข) รออะไหล่/ผู้ให้บริการภายนอกที่แจ้งผู้รับบริการแล้ว** และข้อยกเว้น 9 ยังรวม **(ค) รอการอนุมัติจากฝั่งผู้รับบริการ** (SLA 5.4, 9) | สถานะเดียวไม่พอ ต้องแยกเหตุผลการหยุดเพื่อรายงานและตรวจสอบว่า "แจ้งผู้รับบริการแล้ว" จริง | เพิ่ม `ticket.pending_reason` `varchar(20)` (`user` / `vendor` / `approval`); เพิ่ม `ticket.pending_notified_at` (เงื่อนไขบังคับสำหรับ `vendor`); `02-data-model.md` §3.6, §4.1 (state machine) |
+| G-06 *(ปรับใน v3)* | กฎ pause | หยุดนับเฉพาะสถานะ `pending_user` | หยุดนับเมื่อ **(ก) รอข้อมูล/การยืนยันจากผู้แจ้ง** หรือ **(ข) รออะไหล่/ผู้ให้บริการภายนอกที่แจ้งผู้รับบริการแล้ว** และข้อยกเว้น 9 ยังรวม **(ค) รอการอนุมัติจากฝั่งผู้รับบริการ** (SLA 5.4, 9) | สถานะเดียวไม่พอ ต้องแยกเหตุผลการหยุดเพื่อรายงานและตรวจสอบว่า "แจ้งผู้รับบริการแล้ว" จริง | เพิ่ม `ticket.pending_reason` `varchar(20)` (`user` / `vendor` / `approval`); เพิ่ม `ticket.pending_notified_at` (เงื่อนไขบังคับสำหรับ `vendor`); `02-data-model.md` §3.6, §4.1 (state machine)<br>**🔄 v3 แทนที่วิธีนี้ทั้งหมด:** `vendor` และ `approval` กลายเป็น**สถานะจริง** (`pending_vendor` · `pending_approval`) เหตุผลคือคำถามอย่าง *"คำขอกี่ใบค้างรออนุมัติ"* ตอบด้วย `WHERE status=…` ไม่ได้ และไม่มีอะไรกันเหตุขัดข้องไม่ให้ถูกตั้งเป็น "รออนุมัติ" · `pending_reason` เหลือเป็นข้อความอิสระของ `pending_user` (ถอด CHECK ทั้งสองตัวออกใน migration 0010) |
 | G-07 | กฎ workaround | **ไม่มี** — นับ resolution จนถึงสถานะ `resolved` เท่านั้น | **การแก้ด้วย Workaround ที่ทำให้ผู้ใช้ทำงานต่อได้ ถือว่าหยุดนับเวลาแก้ไขของ Incident** งานแก้ถาวรติดตามต่อในรูปแบบ **Problem** (SLA 5.4) | ระบบวัด SLA ต่ำกว่าความจริง (ticket ที่มี workaround แล้วยังนับเวลาต่อ = breach ทั้งที่ไม่ควร); ต้องมีเอนทิตี Problem | เพิ่ม `ticket.workaround_at` `timestamptz`, `ticket.workaround_note` `text`; ตาราง **`problem`** ใหม่ + `ticket.problem_id`; `sla_status()` ต้องหยุดนาฬิกาที่ `workaround_at`; `11-sla-engine.md` §3, `04-rbac-sla.md` §4.1 |
 | G-08 | เปลี่ยน priority กลางทาง | คำนวณ due ใหม่**จาก `created_at` เดิม**ด้วย target ใหม่ (`11-sla-engine.md` §3.1) | **"ให้นับเวลาตามระดับใหม่ตั้งแต่เวลาที่ปรับ"** พร้อมบันทึกเหตุผลใน Ticket (SLA 5.4) | **ขัดกันโดยตรง** — สูตรเดิมทำให้ ticket ที่ยกระดับเป็น P1 กลายเป็น breach ทันทีทั้งที่เพิ่งยกระดับ ซึ่งไม่ตรงเจตนาเอกสาร | `11-sla-engine.md` §3.1 `change_priority()` → คำนวณจาก `priority_changed_at` (= now) แทน `ticket.created_at`; เพิ่ม `ticket.priority_changed_at` `timestamptz`; `04-rbac-sla.md` §4.2 หมายเหตุ |
 | G-09 | ปิดตั๋วเมื่อผู้แจ้งไม่ตอบ | `pending_user` ครบ **5 วันทำการ** → ระบบตั้งเป็น `resolved` อัตโนมัติ (ไม่มีการติดตาม) | **ไม่ตอบภายใน 3 วันทำการ หลังการติดตาม 2 ครั้ง** จึงปิดได้ พร้อมแจ้งให้ทราบ และเปิดใหม่ได้ (SLA 5.4); SOP-01 ข้อ 9 ปิด Ticket เมื่อผู้แจ้งยืนยัน หรือครบ 3 วันทำการโดยไม่ตอบ | ต้องมีกลไก "ติดตาม 2 ครั้ง" ที่พิสูจน์ได้ ก่อนปิดอัตโนมัติ มิฉะนั้นการปิดขัดเอกสารควบคุม | เพิ่ม `ticket.followup_count` `int`, `ticket.last_followup_at` `timestamptz`; งาน `auto_resolve_pending` → เปลี่ยนเป็น `followup_pending` (ส่งติดตามครั้งที่ 1 และ 2) + `auto_close_unresponsive` (ปิดเมื่อ `followup_count >= 2` และครบ 3 วันทำการ); `11-sla-engine.md` §5.1, §5.4; `02-data-model.md` §4 state machine |
@@ -201,9 +201,9 @@
 |---|---|---|---|
 | C-01 | P1 นับต่อเนื่อง 24×7 | ถ้า `sla_target.clock_mode = 'calendar_24x7'` → `due = start + timedelta(minutes=n)` ไม่เรียก `add_business_minutes()` | `sla_target.clock_mode` |
 | C-02 | P2–P4 นับเฉพาะเวลาทำการ | ใช้ `add_business_minutes()` ตามปฏิทินของ `ticket.company_id` | `business_hours`, `holiday` |
-| C-03 | หยุดนับเมื่อรอผู้แจ้ง | สถานะ `pending_user` + `pending_reason='user'` — บังคับมีคอมเมนต์สาธารณะระบุสิ่งที่รอ | `ticket.pending_reason`, `pending_started_at` |
-| C-04 | หยุดนับเมื่อรออะไหล่/ผู้ให้บริการภายนอก **ที่แจ้งผู้รับบริการแล้ว** | `pending_reason='vendor'` — ระบบ**ไม่ยอมให้เข้าสถานะนี้**จนกว่าจะมีคอมเมนต์สาธารณะแจ้งผู้แจ้ง (ตั้ง `pending_notified_at`) | `ticket.pending_notified_at` **(ใหม่)** |
-| C-05 | หยุดนับระหว่างรออนุมัติ | `pending_reason='approval'` — ตั้งอัตโนมัติเมื่อมี `approval_request` สถานะ `pending` | `approval_request` (ดู `06-sop-workflow-mapping.md`) |
+| C-03 | หยุดนับเมื่อรอผู้แจ้ง | สถานะ **`pending_user`** — บังคับมีคอมเมนต์สาธารณะระบุสิ่งที่รอ | `ticket.pending_started_at` |
+| C-04 | ~~หยุดนับ~~ เมื่อรออะไหล่/ผู้ให้บริการภายนอก **ที่แจ้งผู้รับบริการแล้ว** | สถานะ **`pending_vendor`** (v3) — ระบบ**ไม่ยอมให้เข้าสถานะนี้**จนกว่าจะมีคอมเมนต์สาธารณะแจ้งผู้แจ้ง (ตั้ง `pending_notified_at`)<br>🟡 **เบี่ยงจากเอกสารโดยตั้งใจ** — SA รอบนี้สั่งว่า `pending_vendor` **ไม่หยุดนาฬิกา** เพราะการเลือกและเร่งผู้ขายเป็นความรับผิดชอบของทีมไอที เวลาที่เสียไปกับผู้ขายที่ช้ายังต้องนับเป็นของ AIDC ต่อผู้รับบริการ · เป็นสวิตช์นโยบายที่เปลี่ยนกลับได้ที่ `PAUSED_STATUSES` ที่เดียว · **ต้องให้ SA ยืนยันคู่กับ SLA ข้อ 9 ก่อนขึ้น production** | `ticket.pending_notified_at` |
+| C-05 | หยุดนับระหว่างรออนุมัติ | สถานะ **`pending_approval`** (v3) — ตั้งอัตโนมัติตอนสร้างเรื่องที่ catalog บังคับอนุมัติ · เมื่ออนุมัติครบ ticket ไป `assigned` และ **นาฬิกา fulfillment เริ่มนับที่วินาทีนั้น** (`sla_clock_started_at = now()`) ไม่ใช่ตอนเปิดเรื่อง | `approval_request`, `ticket.sla_clock_started_at`, `app_user.manager_id` **(ใหม่ v3)** |
 | C-06 | **Workaround หยุดนับ resolution ของ Incident** | เมื่อ agent กด "ให้ทางเลี่ยงชั่วคราวแล้ว" → ตั้ง `workaround_at`; `sla_status()` ใช้ `min(now, workaround_at)` ในการวัด resolution; ระบบบังคับให้เปิด `problem` ผูกกับ ticket | `ticket.workaround_at`, `ticket.workaround_note`, `ticket.problem_id` |
 | C-07 | เปลี่ยน priority → **นับตามระดับใหม่ตั้งแต่เวลาที่ปรับ** | `response_due_at`/`resolution_due_at` = `add_business_minutes(priority_changed_at, target_ใหม่)` — **ไม่ใช่จาก `created_at`**; ต้องบันทึกเหตุผลลง `ticket_status_history.reason` (บังคับ) | `ticket.priority_changed_at` **(ใหม่)** |
 | C-08 | ผู้แจ้งไม่ตอบ 3 วันทำการ หลังติดตาม 2 ครั้ง → ปิดได้ | งาน `followup_pending` ส่งติดตามครั้งที่ 1 และ 2 (ห่างกัน 1 วันทำการ) แล้วจึงเริ่มนับ 3 วันทำการ; `auto_close_unresponsive` ปิดพร้อมคอมเมนต์ระบบและอีเมลแจ้ง | `ticket.followup_count`, `ticket.last_followup_at` **(ใหม่)** |
@@ -242,7 +242,7 @@ UNIQUE (`company_id`, `contact_key`, `user_id`)
 | **ES-02** | P1 เกินกำหนด | P1 **เกิน 4 ชั่วโมง (ปฏิทิน)** ยังไม่คืนบริการ (SLA 6.2) | ยกระดับสู่ผู้บริหาร + ตั้งธง `is_resolution_breached` | `ceo` + `head_of_it` |
 | **ES-03** | เหตุการณ์ความปลอดภัย / ข้อมูลรั่วไหล | `ticket.is_security_incident = true` (SLA 6.2 / SOP-10 ข้อ 2) | แจ้ง **ภายใน 30 นาที** ตาม SOP-10; จำกัดการมองเห็น ticket; เริ่มนับนาฬิกา 72 ชม.เพื่อแจ้งหน่วยงานกำกับ | `head_of_it` + `ceo` + `dpo` |
 | **ES-04** | Tier 1 แก้ไม่ได้ | ticket อยู่ที่ `support_tier = 1` เกิน **2 ชั่วโมงทำการ** นับจาก `created_at` และยังไม่ `resolved` (SLA 6.1 / SOP 5.3) | ตั้งธง "ต้องยกระดับ Tier 2" บนหน้ารายการ + แจ้งเตือน (ไม่เปลี่ยน tier อัตโนมัติ — agent ต้องยืนยันพร้อมสรุปสิ่งที่ตรวจสอบแล้ว ตาม SOP-01 ข้อ 5) | `tier2_group` + ผู้รับผิดชอบปัจจุบัน + `company_admin` |
-| **ES-05** | ยกระดับสู่ Tier 3 | Tier 2 แก้ไม่ได้ หรืออยู่ในความรับผิดชอบของ Vendor (SLA 6.1) | ตั้ง `support_tier=3`, บังคับกรอก `vendor_ref` **(ใหม่)**; เปิดทางให้ตั้ง `pending_reason='vendor'` | `tier3_group` + `head_of_it` |
+| **ES-05** | ยกระดับสู่ Tier 3 | Tier 2 แก้ไม่ได้ หรืออยู่ในความรับผิดชอบของ Vendor (SLA 6.1) | ตั้ง `support_tier=3`, บังคับกรอก `vendor_ref` **(ใหม่)**; เปิดทางให้ใช้สถานะ **`pending_vendor`** (v3) | `tier3_group` + `head_of_it` |
 | **ES-06** | เกิน SLA (ทุกระดับ) | "Ticket ใดใช้เวลาเกิน SLA แล้ว" (SLA 6.2) | แจ้งเตือนทันทีเมื่อ `scan_sla` ตั้ง `is_response_breached` หรือ `is_resolution_breached` | `head_of_it` + ผู้รับผิดชอบ + `company_admin` |
 | **ES-07** | ผู้รับบริการขอทบทวนการจัดการ | ผู้แจ้งกดปุ่ม "ขอทบทวนการจัดการ" พร้อมเหตุผล (SLA 6.2, 6 ย่อหน้าท้าย) | สร้าง flag บน ticket + แจ้งเตือน; **ห้ามระบบตีความว่าเป็นการร้องเรียน** — แสดงข้อความตามเอกสาร "เป็นกลไกปกติของการบริหารงานบริการ" | `head_of_it` |
 | **ES-08** | ผู้แจ้งขอทบทวน priority | ผู้แจ้งขอเปลี่ยนระดับพร้อม "เหตุผลทางธุรกิจ" (SLA 4) | สร้างคำขอทบทวน ไม่เปลี่ยน priority ทันที; agent อนุมัติ/ปฏิเสธพร้อมเหตุผล | ผู้รับผิดชอบ + `company_admin` |
@@ -254,7 +254,7 @@ UNIQUE (`company_id`, `contact_key`, `user_id`)
 **กติกากันการรบกวนเกินจำเป็น (ปรับจากของเดิม):**
 - แจ้งครั้งเดียวต่อ ticket ต่อกฎ ยกเว้น **ES-02, ES-09 (P1)** ที่แจ้งซ้ำทุกชั่วโมง และ ES-06 ที่แจ้งซ้ำได้วันละครั้ง
 - **ไม่ส่ง escalation นอกเวลาทำการ ยกเว้น P1 และ ES-03 (เหตุความปลอดภัย)** — สอดคล้องกับ SLA 3.1 ที่ On-call ครอบคลุมเฉพาะ P1
-- ระงับการแจ้งเตือนขณะอยู่สถานะ `pending_user` ทุก `pending_reason`
+- ระงับการแจ้งเตือนขณะอยู่สถานะที่หยุดนับ (`pending_approval` / `pending_user` / `resolved` / `fulfilled`) — **ไม่รวม `pending_vendor`** ซึ่งนาฬิกายังเดิน
 
 **ตารางใหม่ `sla_escalation_rule`** (ทำให้ตั้งค่าได้แทน hard-code — จำเป็นเพราะเอกสาร SLA ทบทวนทุก 12 เดือน)
 
@@ -410,6 +410,50 @@ UNIQUE (`company_id`, `contact_key`, `user_id`)
 | `SR-ADVISORY` | ขอคำปรึกษา / สอบถามการใช้งาน | `duration` | ใช้ค่า P4 = 2700 | 5 วันทำการ | `on_create` | — | false | SLA 2.1, 4 (P4) |
 
 > **กติกาการเลือกเป้าหมาย:** ถ้า `ticket_type='service_request'` และมี `catalog_item_id` → ใช้ `service_catalog_item.target_minutes`; ถ้าไม่มีรายการที่ตรง → fallback ไป `sla_target` ของ priority (P4) — และ **`response_due_at` ยังคงใช้ `sla_target` ตาม priority เสมอ** เพราะ SLA 5.3 กำหนดเฉพาะเวลาดำเนินการ ไม่ได้ยกเว้นเวลาตอบรับ
+
+### 7.3 ต้นไม้หมวดหมู่ของแต่ละชนิดเรื่อง (migration `0013_category_sla_alignment`)
+
+หน้า "แจ้ง Ticket ใหม่" ให้ผู้แจ้งเลือกชนิดเรื่องก่อน แล้วหมวดหลัก/หมวดย่อยถูกกรองตามชนิด (`ticket_category.ticket_type_scope`)
+ต้นไม้ของสองชนิดจัดตามเอกสารควบคุมคนละชุดโดยตั้งใจ:
+
+**เหตุขัดข้อง (`incident`) — จัดตามกลุ่มบริการ SLA 6.2**
+
+| หมวดหลัก | กลุ่ม / tier (SLA 6.2) | หมวดย่อย | ค่าตั้งต้น → priority (ตัวอย่าง SLA 5.2) |
+|---|---|---|---|
+| `NETWORK` โครงสร้างพื้นฐาน | infrastructure · critical · 24×7 | `NETWORK_OUTAGE` · `NETWORK_AUTH` · `NETWORK_SLOW` · `NETWORK_LAN` | เครือข่ายทั้งสำนักงาน/ระบบยืนยันตัวตนล่ม = ทั้งองค์กร × มาก = **P1** |
+| `COMMUNICATION` ระบบสื่อสาร | communication · high | `EMAIL_DEPT_DOWN` · `EMAIL_SEND_RECEIVE` · `EMAIL_MAILBOX_FULL` · `EMAIL_ACCOUNT_LOCKED` · `MEETING_CHAT` · `NETWORK_WIFI` · `NETWORK_VPN` | อีเมลทั้งแผนก = **P2** · อีเมลรายบุคคล = **P3** (Wi-Fi/VPN อยู่กลุ่มนี้ ไม่ใช่ infrastructure ตาม SLA 6.2) |
+| `FILE_STORAGE` พื้นที่เก็บไฟล์ | file_storage · high | `FILE_SERVER_DOWN` · `FILE_OPEN_FAIL` | เข้าไม่ได้ทั้งแผนก = **P2** |
+| `HARDWARE` อุปกรณ์ผู้ใช้ | endpoint · standard | เครื่อง/จอ/อุปกรณ์ต่อพ่วง · `PRINTER_*` · `MOBILE_BROKEN` · `CCTV_NO_SIGNAL` | เครื่องพิมพ์/เครื่องผู้ใช้รายบุคคล = **P3** |
+| `SOFTWARE` ซอฟต์แวร์ | endpoint · standard | `SOFTWARE_ERROR` · `SOFTWARE_OFFICE` · `SOFTWARE_LICENSE` · `AI_TOOLS_PROBLEM` | โปรแกรมสำนักงานผิดพลาด = **P3** |
+| `SECURITY` เหตุความปลอดภัย | SOP-10 · SOP-6-2025 | `SECURITY_MALWARE` · `SECURITY_ATTACK` · `SECURITY_PROBE` · `SECURITY_ACCOUNT` · `SECURITY_DATA_LEAK` · `SECURITY_PHYSICAL` · `SECURITY_DEVICE_LOST` · `SECURITY_POLICY_BREACH` · `SECURITY_PHISHING` | ถูกโจมตี/มัลแวร์/ข้อมูลรั่ว = **P1** (SLA 5.2) |
+
+ชนิดเหตุความปลอดภัยแมปกับ SOP-6-2025: ไวรัส/โปรแกรมอันตราย → `MALWARE` · Denial of service → `ATTACK` · สแกนระบบโดยไม่ได้รับอนุญาต → `PROBE` ·
+พยายามเข้าถึงระบบโดยไม่ได้รับอนุญาต → `ACCOUNT` · เข้าถึง/แก้ไข/ส่งออก/ทำลายข้อมูล → `DATA_LEAK` · เข้าพื้นที่โดยไม่ได้รับอนุญาต (Physical) → `PHYSICAL` ·
+ลักทรัพย์สิน/อุปกรณ์สูญหาย (นโยบาย 3.7 แจ้งภายใน 24 ชม.) → `DEVICE_LOST` · ละเมิดนโยบาย (Procedural) → `POLICY_BREACH`
+
+> ระดับความรุนแรง 0–3 ของ SOP-6 (อิงมูลค่าความเสียหายเป็นกีบและชั่วโมงที่บริการล่ม) เป็นคนละสเกลกับ P1–P4 — ระบบยังใช้ P1–P4 ตัวเดียว
+> ส่วนการรายงานผู้บริหารภายใน 30 นาทีของระดับ 2–3 ยังไม่ได้ผูกกับระบบ **[ต้องยืนยันกับ PM ว่าจะให้ map ระดับ SOP-6 เข้ากับ P1/P2 อย่างไร]**
+
+**คำขอบริการ (`service_request`) — จัดตามแค็ตตาล็อก SLA 5.3 และ SOP-03…07**
+
+| หมวดหลัก | หมวดย่อย → รายการใน catalog | อ้างอิง |
+|---|---|---|
+| `ACCESS` บัญชีและสิทธิ์ | `EMAIL_PASSWORD` → `SR-PASSWORD-RESET` · `ACCESS_UNLOCK` → `SR-UNLOCK-ACCOUNT` · `ACCESS_NEW` → `SR-ACCESS` · `EMAIL_NEW_ACCOUNT` → `SR-EMAIL-ACCOUNT` · `ACCESS_VPN` → `SR-VPN` · `ACCESS_CHANGE` · `ACCESS_SHARED_FOLDER` · `ACCESS_REVOKE` | SOP-03 · นโยบาย 3.2/3.3 |
+| `LIFECYCLE` เข้า–ออก | `LIFECYCLE_ONBOARD` → `SR-ONBOARDING` · `LIFECYCLE_OFFBOARD` → `SR-OFFBOARDING` | SOP-04 · SOP-05 |
+| `SR_SOFTWARE` ซอฟต์แวร์ | `SOFTWARE_INSTALL` → `SR-SOFTWARE-INSTALL` · `SOFTWARE_NONSTD` → `SR-SW-NONSTD` · `AI_TOOLS_*` | SOP-06 · นโยบาย 3.5 |
+| `SR_EQUIPMENT` อุปกรณ์ | `HARDWARE_REQUEST` → `SR-EQUIPMENT` · เครื่องพิมพ์/มือถือ/CCTV ที่เป็นการขอ | SLA 5.3 · นโยบาย 3.9 |
+| `SR_DATA` ข้อมูลและนโยบาย | `DATA_RESTORE` → `SR-RESTORE` · `POLICY_EXCEPTION` → `SR-POLICY-EXC` | SOP-07 · นโยบาย 3.10 |
+| `SR_ADVISORY` คำปรึกษา | `ADVISORY_HOWTO` → `SR-CONSULT` | SLA 2.1 / 4 |
+
+**สิ่งที่ปรับในข้อมูลเดิมพร้อมกัน**
+- สายอนุมัติของรายการใน catalog เดิมเป็น `department_head` ซึ่งไม่ใช่ `approver_type` ที่ระบบรู้จัก → แก้เป็น `line_manager` (มิฉะนั้นคำขอที่ต้องอนุมัติสร้างขั้นอนุมัติไม่ได้)
+- `SR-SOFTWARE-INSTALL`: เดิมต้องอนุมัติและนับหลังอนุมัติ → ตาม SLA 5.3/SOP-06 คือ 2 วันทำการนับตั้งแต่รับคำขอ ไม่ต้องอนุมัติ (นอกบัญชีมาตรฐานใช้ `SR-SW-NONSTD`)
+- `SR-CONSULT`: 540 → 2,700 นาที (P4 = 5 วันทำการ ตาม SLA 2.1/4)
+- เพิ่มรายการที่เอกสารกำหนดแต่ระบบยังไม่มี: `SR-SW-NONSTD` · `SR-RESTORE` · `SR-POLICY-EXC` (เป้าหมายเวลาเอกสารไม่ระบุ ใช้ P4 = 2,700 นาที **[ต้องยืนยันกับ PM]**)
+- เพิ่มทะเบียนบริการตาม SLA 6.2 (LAN · Internet · AUTH · Email · Meeting · Chat · Wi-Fi · VPN · File Server · PC · Printer)
+- ไม่ลบแถวใด: หมวดหลักเดิมที่ว่างแล้ว (`EMAIL` `PRINTER` `CCTV` `MOBILE` `AI_TOOLS`) ปิดใช้งาน ระบบงานของกลุ่ม (`SUPER_WORK` `ILP` `APS` ฯลฯ) ไม่ถูกแตะ
+
+**ที่ยังไม่ตรงเอกสาร (งานต่อ):** `SR-ONBOARDING` / `SR-OFFBOARDING` ตาม SLA 5.3 เป็นเป้าหมายเชิงวันที่ (`before_date` / `by_date` พร้อมเวลาแจ้งล่วงหน้าขั้นต่ำ) แต่ระบบยังคำนวณเป็นระยะเวลา (นาทีทำการ) เพราะเครื่องคำนวณยังไม่รองรับ `target_date`
 
 ---
 

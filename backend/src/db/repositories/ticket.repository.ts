@@ -4,17 +4,25 @@ import { alias } from 'drizzle-orm/pg-core';
 
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../client';
-import { DB } from '../db.module';
+import { DB } from '../db.token';
 import type {
   AssignmentRecord,
   ITicketRepository,
   PublicCommentRecord,
   StatusChangeRecord,
 } from '../../application/ports/ticket-repository.port';
-import type { TicketEntity } from '../../domain/ticket/ticket.entity';
+import { TicketEntity } from '../../domain/ticket/ticket.entity';
+import type {
+  Impact,
+  Priority,
+  TicketStatus,
+  TicketType,
+  Urgency,
+} from '../../common/constants';
 import { NotFoundError } from '../../common/errors/domain-error';
 import {
   appUser,
+  approvalRequest,
   auditLog,
   company,
   department,
@@ -29,6 +37,7 @@ import {
   userRole,
   userRoleScope,
 } from '../schema';
+import type { PlannedApprovalStep } from './service-catalog.repository';
 
 /**
  * ตาราง app_user ถูก join สองครั้งในคิวรีเดียว (ผู้แจ้ง กับ ผู้รับผิดชอบ)
@@ -65,6 +74,8 @@ const TICKET_COLUMNS = {
   departmentName: department.name,
   categoryId: ticket.categoryId,
   categoryName: ticketCategory.nameTh,
+  catalogItemId: ticket.catalogItemId,
+  relatedTicketId: ticket.relatedTicketId,
   requesterId: ticket.requesterId,
   requesterName: requester.fullName,
   assigneeId: ticket.assigneeId,
@@ -200,6 +211,13 @@ export class TicketRepository implements Partial<ITicketRepository> {
       ticketType?: string | undefined;
       assigneeId?: number | undefined;
       requesterId?: number | undefined;
+      /**
+       * เฉพาะเรื่องของโครงการใน Support Hub นี้
+       *
+       * ⚠️ ทำให้แคบลงเท่านั้น ไม่เคยทำให้กว้างขึ้น — baseWhere ยังบังคับขอบเขต
+       *    บริษัทอยู่ก่อนเสมอ ผู้เรียกที่ใส่ id ของโครงการนอกขอบเขตจึงได้รายการว่าง
+       */
+      projectId?: number | undefined;
       unassigned?: boolean;
       q?: string | undefined;
       sort?: 'updated' | 'created' | 'assigned' | undefined;
@@ -214,6 +232,7 @@ export class TicketRepository implements Partial<ITicketRepository> {
     if (filters.ticketType) parts.push(eq(ticket.ticketType, filters.ticketType) as SQL);
     if (filters.assigneeId) parts.push(eq(ticket.assigneeId, filters.assigneeId) as SQL);
     if (filters.requesterId) parts.push(eq(ticket.requesterId, filters.requesterId) as SQL);
+    if (filters.projectId) parts.push(eq(ticket.supportProjectId, filters.projectId) as SQL);
     if (filters.unassigned) parts.push(isNull(ticket.assigneeId) as SQL);
     if (filters.q) {
       // ILIKE '%…%' ใช้ดัชนี trigram ที่สร้างไว้ใน migration 0001
@@ -504,11 +523,18 @@ export class TicketRepository implements Partial<ITicketRepository> {
     entity: TicketEntity,
     sla: {
       policyId: number | null;
-      clockStartedAt: Date;
+      /** null = ยังไม่เริ่มจับเวลา (คำขอที่รออนุมัติอยู่) */
+      clockStartedAt: Date | null;
       responseDueAt: Date | null;
       resolutionDueAt: Date | null;
     },
     actorId: number,
+    extras: {
+      /** ขั้นอนุมัติที่ต้องเกิดพร้อมเรื่อง — ต้องอยู่ทรานแซกชันเดียวกัน */
+      approvals?: readonly PlannedApprovalStep[];
+      /** สถานะตั้งต้นก่อนถูกดันเข้าขั้นอนุมัติ — ใช้เขียนประวัติให้ครบเส้น */
+      initialStatus?: string;
+    } = {},
   ): Promise<number> {
     const props = entity.toPersistence();
 
@@ -524,13 +550,13 @@ export class TicketRepository implements Partial<ITicketRepository> {
       });
     }
 
+    const approvals = extras.approvals ?? [];
+    const initialStatus = extras.initialStatus ?? props.status;
+    // เลขที่เรื่องอิงเดือนที่แจ้ง — คำขอที่รออนุมัติไม่มีเวลาเริ่มนาฬิกา ใช้เวลาจริง
+    const numberedAt = sla.clockStartedAt ?? new Date();
+
     return this.db.transaction(async (tx) => {
-      const ticketNo = await this.nextTicketNo(
-        tx,
-        props.companyId,
-        companyRow.code,
-        sla.clockStartedAt,
-      );
+      const ticketNo = await this.nextTicketNo(tx, props.companyId, companyRow.code, numberedAt);
 
       const [row] = await tx
         .insert(ticket)
@@ -542,6 +568,7 @@ export class TicketRepository implements Partial<ITicketRepository> {
           categoryId: props.categoryId,
           catalogItemId: props.catalogItemId ?? null,
           serviceId: props.serviceId ?? null,
+          supportProjectId: props.supportProjectId ?? null,
           requesterId: props.requesterId,
           createdBy: props.createdBy,
           subject: props.subject,
@@ -554,6 +581,8 @@ export class TicketRepository implements Partial<ITicketRepository> {
           priority: props.priority,
           isMajorIncident: props.isMajorIncident ?? false,
           status: props.status,
+          // เรื่องที่เกิดมาในสถานะพักแล้ว ต้องมีจุดตั้งต้นของการพักตั้งแต่แรก
+          pendingStartedAt: props.pendingStartedAt ?? null,
           slaPolicyId: sla.policyId,
           slaClockStartedAt: sla.clockStartedAt,
           responseDueAt: sla.responseDueAt,
@@ -563,13 +592,41 @@ export class TicketRepository implements Partial<ITicketRepository> {
 
       const ticketId = row!.id;
 
-      // แถวแรกของประวัติ ทำให้ไทม์ไลน์เริ่มที่ "ใครแจ้ง" เสมอ ไม่ใช่เริ่มกลางเรื่อง
+      /*
+       * ประวัติต้องเริ่มที่ "ใครแจ้ง" เสมอ ไม่ใช่เริ่มกลางเรื่อง
+       *
+       * คำขอที่ต้องอนุมัติเกิดมาพร้อมสถานะ pending_approval แล้ว ถ้าเขียนแถวเดียว
+       * ไทม์ไลน์จะขึ้นต้นด้วย "รออนุมัติ" เฉย ๆ โดยไม่มีบรรทัดที่บอกว่าเรื่องถูกเปิดเมื่อไร
+       * — เขียนสองแถวแทน ให้เห็นทั้งการเปิดเรื่องและการเข้าคิวอนุมัติ
+       */
       await tx.insert(ticketStatusHistory).values({
         ticketId,
         fromStatus: null,
-        toStatus: props.status,
+        toStatus: initialStatus,
         changedBy: actorId,
       });
+
+      if (props.status !== initialStatus) {
+        await tx.insert(ticketStatusHistory).values({
+          ticketId,
+          fromStatus: initialStatus,
+          toStatus: props.status,
+          changedBy: actorId,
+          reason: `ລໍຖ້າອະນຸມັດ ${approvals.length} ຂັ້ນ`,
+        });
+      }
+
+      if (approvals.length > 0) {
+        await tx.insert(approvalRequest).values(
+          approvals.map((step) => ({
+            ticketId,
+            seq: step.seq,
+            approverType: step.approverType,
+            approverId: step.approverId,
+            status: 'pending' as const,
+          })),
+        );
+      }
 
       return ticketId;
     });
@@ -697,6 +754,196 @@ export class TicketRepository implements Partial<ITicketRepository> {
     });
   }
 
+  /**
+   * เริ่มจับเวลา fulfillment ให้คำขอที่เพิ่งอนุมัติครบ
+   *
+   * ข้อกำหนดจาก SA: "SLA fulfillment เริ่มนับหลังอนุมัติ ไม่ใช่ตอนเปิดเรื่อง —
+   * ป้องกันไอทีโดนนับเวลาทั้งที่ยังรอหัวหน้าอนุมัติ"
+   *
+   * ⚠️ ต้องเขียน pending_duration_minutes = 0 ทับด้วย
+   *    ช่วงที่ค้างรออนุมัติถูกสะสมไว้ในคอลัมน์นั้นตอนออกจาก pending_approval
+   *    แต่พอเราตั้งจุดเริ่มนาฬิกาใหม่เป็น "ตอนนี้" เวลาที่หยุดไปก่อนหน้านั้น
+   *    ถูกตัดออกจากสมการไปแล้วโดยปริยาย ถ้าไม่ล้าง กำหนดแก้เสร็จจะถูกเลื่อนออก
+   *    สองเท่าของเวลาที่รออนุมัติจริง แล้วคำขอทุกใบจะดู "ทัน SLA" เกินจริง
+   *
+   * ⚠️ WHERE มีเงื่อนไข sla_clock_started_at IS NULL กันการเริ่มนาฬิกาซ้ำ
+   *    ถ้าผู้อนุมัติสองคนกดพร้อมกัน คนที่สองต้องไม่เลื่อนกำหนดออกไปอีกรอบ
+   */
+  async startFulfillmentClock(input: {
+    ticketId: number;
+    clockStartedAt: Date;
+    responseDueAt: Date | null;
+    resolutionDueAt: Date | null;
+  }): Promise<boolean> {
+    const rows = await this.db
+      .update(ticket)
+      .set({
+        slaClockStartedAt: input.clockStartedAt,
+        resolutionDueAt: input.resolutionDueAt,
+        pendingDurationMinutes: 0,
+        ...(input.responseDueAt ? { responseDueAt: input.responseDueAt } : {}),
+        updatedAt: input.clockStartedAt,
+      })
+      .where(and(eq(ticket.id, input.ticketId), isNull(ticket.slaClockStartedAt)))
+      .returning({ id: ticket.id });
+
+    return rows.length > 0;
+  }
+
+  /**
+   * ผูกเรื่องสองใบเข้าด้วยกัน (POST /tickets/{id}/link)
+   *
+   * ⚠️ ผูกสองทางโดยตั้งใจ
+   *    ถ้าเขียนทางเดียว หน้าของเรื่องปลายทางจะไม่รู้เลยว่ามีใครอ้างถึงมันอยู่
+   *    แล้วเจ้าหน้าที่ที่เปิดใบนั้นจะมองไม่เห็นบริบทครึ่งหนึ่งของเรื่อง
+   *    ซึ่งเป็นเหตุผลทั้งหมดที่ต้องมีการผูก
+   *
+   * เฟส 1 ผูกได้ใบเดียวต่อเรื่อง การผูกใหม่จึงทับของเดิมเงียบ ๆ
+   * (ผู้เรียกเป็นผู้เตือนผู้ใช้ว่าจะทับ — repository ไม่ตัดสินเรื่อง UX)
+   */
+  async linkTickets(input: {
+    ticketId: number;
+    relatedTicketId: number;
+    actorId: number;
+    companyId: number;
+    at: Date;
+  }): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(ticket)
+        .set({ relatedTicketId: input.relatedTicketId, updatedAt: input.at })
+        .where(eq(ticket.id, input.ticketId));
+
+      await tx
+        .update(ticket)
+        .set({ relatedTicketId: input.ticketId, updatedAt: input.at })
+        .where(eq(ticket.id, input.relatedTicketId));
+
+      await tx.insert(auditLog).values({
+        actorId: input.actorId,
+        companyId: input.companyId,
+        action: 'ticket.linked',
+        entityType: 'ticket',
+        entityId: input.ticketId,
+        oldValue: {},
+        newValue: { related_ticket_id: input.relatedTicketId },
+      });
+    });
+  }
+
+  /**
+   * ปิดเรื่องอัตโนมัติเมื่อผู้แจ้งไม่ยืนยันครบกำหนด (งานกวาด SLA เป็นผู้เรียก)
+   *
+   * ⚠️ ต้องผ่าน TicketEntity ไม่ใช่ UPDATE ตรง
+   *    docstring ของ entity ยกกรณีนี้มาเป็นตัวอย่างตั้งแต่บรรทัดแรก — กฎอย่าง
+   *    "ปิดเรื่องที่ยังไม่ได้แก้ไม่ได้" ต้องเป็นจริงไม่ว่าคำสั่งจะมาจาก REST
+   *    หรือจากงานเบื้องหลัง ถ้าเขียน UPDATE เอง งานกลางคืนจะเป็นทางเดียว
+   *    ในระบบที่ข้ามตารางสถานะไปได้เงียบ ๆ
+   *
+   * ⚠️ ไม่มี AccessScope และไม่ต้องมี
+   *    นี่ไม่ใช่การกระทำของผู้ใช้คนใดคนหนึ่ง จึงไม่มีขอบเขตสิทธิ์ให้ตรวจ —
+   *    ผู้เรียกคือ scheduler ที่เลือกแถวมาเองจากเงื่อนไขเวลา ไม่ได้รับ id
+   *    มาจากเบราว์เซอร์ จึงไม่มีทางถูกหลอกให้แตะเรื่องนอกขอบเขต
+   *
+   * @returns false เมื่อเรื่องขยับไปแล้วระหว่างที่งานกวาดกำลังทำงาน
+   *          (ผู้แจ้งเพิ่งกดยืนยันเอง หรือเพิ่งเปิดคืน) — ไม่ใช่ข้อผิดพลาด
+   */
+  async autoClose(input: { ticketId: number; at: Date; reason: string }): Promise<boolean> {
+    const [row] = await this.db
+      .select({
+        id: ticket.id,
+        companyId: ticket.companyId,
+        categoryId: ticket.categoryId,
+        requesterId: ticket.requesterId,
+        subject: ticket.subject,
+        ticketType: ticket.ticketType,
+        impact: ticket.impact,
+        urgency: ticket.urgency,
+        status: ticket.status,
+        priority: ticket.priority,
+        resolvedAt: ticket.resolvedAt,
+        closedAt: ticket.closedAt,
+        pendingReason: ticket.pendingReason,
+        pendingStartedAt: ticket.pendingStartedAt,
+        pendingDurationMinutes: ticket.pendingDurationMinutes,
+        assigneeId: ticket.assigneeId,
+      })
+      .from(ticket)
+      .where(and(eq(ticket.id, input.ticketId), isNull(ticket.deletedAt)))
+      .limit(1);
+
+    if (!row) return false;
+
+    const entity = TicketEntity.rehydrate({
+      id: row.id,
+      companyId: row.companyId,
+      categoryId: row.categoryId,
+      requesterId: row.requesterId,
+      createdBy: row.requesterId,
+      subject: row.subject,
+      description: '',
+      impact: row.impact as Impact,
+      urgency: row.urgency as Urgency,
+      // ต้องส่งเข้าไป มิฉะนั้น entity จะใช้ตารางสถานะของ incident กับคำขอบริการด้วย
+      // แล้ว fulfilled → closed จะถูกปฏิเสธทั้งที่เป็นเส้นที่ถูกต้อง
+      ticketType: row.ticketType as TicketType,
+      status: row.status as TicketStatus,
+      priority: row.priority as Priority,
+      resolvedAt: row.resolvedAt,
+      closedAt: row.closedAt,
+      pendingReason: row.pendingReason,
+      pendingStartedAt: row.pendingStartedAt,
+      pendingDurationMinutes: row.pendingDurationMinutes,
+      assigneeId: row.assigneeId,
+    });
+
+    try {
+      // ไม่ส่ง actorId — closed_by ต้องเป็น NULL เพื่อให้รายงานแยกออกว่า
+      // ใบไหนผู้แจ้งยืนยันเอง และใบไหนหมดเวลาไปเฉย ๆ (ดู schema ของ closed_by)
+      entity.changeStatus('closed', input.at, {});
+    } catch {
+      // สถานะขยับไปแล้วระหว่างรอบกวาด — ไม่ใช่ข้อผิดพลาด ข้ามไปใบถัดไป
+      return false;
+    }
+
+    await this.saveStatusChange(entity, {
+      from: row.status,
+      to: 'closed',
+      // ระบบเป็นผู้กระทำ — ทั้งประวัติและ audit รับ null ได้ทั้งคู่
+      actorId: null,
+      at: input.at,
+      reason: input.reason,
+      auditDetail: { auto_closed: true, reason: input.reason },
+    });
+
+    return true;
+  }
+
+  /** ข้อมูลย่อของเรื่องที่ผูกไว้ — พอสำหรับชิปบนหน้าจอ ไม่ต้องอ่านทั้งใบ */
+  async relatedSummary(
+    id: number,
+  ): Promise<{
+    id: number;
+    ticketNo: string;
+    subject: string;
+    status: string;
+    ticketType: string;
+  } | null> {
+    const [row] = await this.db
+      .select({
+        id: ticket.id,
+        ticketNo: ticket.ticketNo,
+        subject: ticket.subject,
+        status: ticket.status,
+        ticketType: ticket.ticketType,
+      })
+      .from(ticket)
+      .where(and(eq(ticket.id, id), isNull(ticket.deletedAt)))
+      .limit(1);
+
+    return row ?? null;
+  }
+
   /** บันทึกการทบทวนระดับความสำคัญพร้อมประวัติและกำหนดเวลาใหม่ ในทรานแซกชันเดียว */
   async savePriorityChange(
     entity: TicketEntity,
@@ -755,7 +1002,8 @@ export class TicketRepository implements Partial<ITicketRepository> {
   private static async insertPublicComment(
     tx: DbTransaction,
     ticketId: number,
-    authorId: number,
+    /** null = ระบบเป็นผู้เขียน — คอมเมนต์จะถูกตั้งธง is_system ให้เอง */
+    authorId: number | null,
     comment: PublicCommentRecord,
     at: Date,
   ): Promise<void> {
@@ -764,7 +1012,9 @@ export class TicketRepository implements Partial<ITicketRepository> {
       authorId,
       body: comment.body,
       isInternal: false,
-      isSystem: false,
+      // ไม่มีผู้เขียน = ข้อความของระบบ ต้องตั้งธงให้ตรงกัน มิฉะนั้นหน้าจอจะ
+      // แสดงเป็นคอมเมนต์ของคนที่ไม่มีชื่อ ซึ่งอ่านแล้วเหมือนข้อมูลเสีย
+      isSystem: authorId === null,
     });
 
     if (comment.countsAsFirstResponse) {

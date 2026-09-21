@@ -162,11 +162,19 @@ export const MESSAGES = {
   'role.teamLead': { lo: 'ຫົວໜ້າທີມ', th: 'หัวหน้าทีม' },
 
   // ── สถานะเรื่อง ──
+  // ทั้ง 11 ค่าใช้ enum เดียวกันทั้งสองประเภท แต่ละประเภทใช้เพียงบางส่วน
   'status.new': { lo: 'ໃໝ່', th: 'ใหม่' },
+  'status.pending_approval': { lo: 'ລໍຖ້າອະນຸມັດ', th: 'รอการอนุมัติ' },
+  'status.rejected': { lo: 'ບໍ່ອະນຸມັດ', th: 'ไม่อนุมัติ' },
   'status.assigned': { lo: 'ມອບໝາຍແລ້ວ', th: 'มอบหมายแล้ว' },
   'status.in_progress': { lo: 'ກຳລັງດຳເນີນການ', th: 'กำลังดำเนินการ' },
   'status.pending_user': { lo: 'ລໍຖ້າຜູ້ແຈ້ງ', th: 'รอผู้แจ้ง' },
+  'status.pending_vendor': {
+    lo: 'ລໍຖ້າຜູ້ໃຫ້ບໍລິການພາຍນອກ',
+    th: 'รอผู้ให้บริการภายนอก',
+  },
   'status.resolved': { lo: 'ແກ້ໄຂສຳເລັດ', th: 'แก้ไขสำเร็จ' },
+  'status.fulfilled': { lo: 'ສົ່ງມອບແລ້ວ', th: 'ส่งมอบแล้ว' },
   'status.closed': { lo: 'ປິດແລ້ວ', th: 'ปิดแล้ว' },
   'status.cancelled': { lo: 'ຍົກເລີກ', th: 'ยกเลิก' },
 

@@ -23,6 +23,10 @@ export type TicketReportParams = {
   status?: string | undefined;
   assignee_id?: number | undefined;
   requester_id?: number | undefined;
+  /** โครงการที่รับซัพพอร์ต (AIDC Support Hub) — ว่าง = ทุกโครงการ รวมเรื่องที่ไม่ได้มาจากโครงการใด */
+  project_id?: number | undefined;
+  /** 'incident' | 'service_request' · ว่าง = ทั้งสองประเภท */
+  ticket_type?: string | undefined;
   /** ISO 8601 · ค่าเริ่มต้นฝั่ง backend = ต้นเดือนปัจจุบัน */
   from?: string | undefined;
   /** ISO 8601 · ค่าเริ่มต้นฝั่ง backend = ตอนนี้ */
@@ -85,13 +89,26 @@ export interface TicketReportItem {
   ticket_type: 'incident' | 'service_request';
   subject: string;
   status: TicketStatus;
-  pending_reason: 'user' | 'vendor' | 'approval' | null;
+  /**
+   * เหตุผลย่อยของการพัก — ข้อความอิสระ ไม่ใช่ enum อีกต่อไป
+   *
+   * เดิมเป็น 'user' | 'vendor' | 'approval' เพราะสถานะเดียวต้องแบกความหมายทั้งสาม
+   * ตอนนี้สถานะบอกเองแล้ว backend จึงถอด CHECK ออกและปล่อยเป็นข้อความอิสระ
+   */
+  pending_reason: string | null;
   priority: Priority;
   company: CompanyRef;
   department: { id: number; name: string } | null;
   category: { id: number; name_th: string };
   requester: UserRef;
   assignee: UserRef | null;
+  /**
+   * โครงการที่เรื่องนี้ถูกยกมาจากแชท — null = แจ้งผ่านช่องทางปกติ ไม่ได้มาจากโครงการใด
+   *
+   * optional บนสายเพราะเพิ่มมาพร้อม Support Hub — API รุ่นที่ยังไม่ส่งช่องนี้
+   * ต้องได้รายงานหน้าตาเดิม ไม่ใช่คอลัมน์ที่ว่างทั้งแถว
+   */
+  support_project?: { id: number; code: string; name: string } | null;
   created_at: string;
   resolution_due_at: string | null;
   resolved_at: string | null;
@@ -103,6 +120,52 @@ export interface TicketReportItem {
   updated_at: string;
 }
 
+/**
+ * ตัวชี้วัดเฉพาะของเหตุขัดข้อง — บล็อก `incident_metrics` ของ GET /reports/tickets
+ *
+ * ⚠️ คำนวณจากใบที่ ticket_type = incident เสมอ ไม่ว่าจะส่งตัวกรอง ticket_type มาหรือไม่
+ *    ตัวเลขชุดนี้จึงไม่เคยปนกับคำขอบริการ แม้ผู้ใช้จะไม่ได้กรองประเภทเลยก็ตาม
+ */
+export interface IncidentMetrics {
+  total: number;
+  /** MTTR — เวลาเฉลี่ยถึง resolved หน่วยนาทีทำการ (หักเวลาที่หยุดนับแล้ว) · null = ยังไม่มีใบที่แก้เสร็จ */
+  mttr_business_minutes: number | null;
+  /** ตัวหารของ MTTR */
+  resolved_count: number;
+  /** ในกลุ่มที่จบแล้ว: ไม่เกินกำหนด ÷ จบแล้ว × 100 · null = ตัวหารเป็นศูนย์ */
+  sla_met_percent: number | null;
+  /** ผลรวม reopen_count ของทุกใบ — จำนวน "ครั้ง" */
+  reopen_total: number;
+  /** จำนวน "ใบ" ที่เคยถูกเปิดคืนอย่างน้อยหนึ่งครั้ง */
+  reopened_tickets: number;
+}
+
+export interface TopCatalogItem {
+  id: number;
+  code: string;
+  name_th: string;
+  count: number;
+}
+
+/** ตัวชี้วัดเฉพาะของคำขอบริการ — บล็อก `service_request_metrics` */
+export interface ServiceRequestMetrics {
+  total: number;
+  /**
+   * เวลาเฉลี่ยถึง fulfilled หน่วยนาทีทำการ · null = ยังไม่มีใบที่ส่งมอบ
+   *
+   * จุดเริ่มคือเวลาที่อนุมัติครบ ไม่ใช่เวลาที่เปิดเรื่อง — เวลาที่รอหัวหน้าอนุมัติ
+   * จึงไม่ถูกนับเป็นเวลาของไอที ซึ่งต้องเขียนกำกับไว้บนหน้าจอด้วย
+   */
+  avg_fulfillment_business_minutes: number | null;
+  /** ตัวหารของเวลาเฉลี่ย */
+  fulfilled_count: number;
+  /** ใบที่ค้างใน pending_approval ณ ตอนนี้ — คอขวดที่ไอทีแก้เองไม่ได้ */
+  pending_approval_count: number;
+  rejected_count: number;
+  /** สูงสุด 10 รายการ เรียงมากไปน้อย */
+  top_catalog_items: TopCatalogItem[];
+}
+
 export interface TicketReport {
   period: { from: string; to: string; label: string };
   filters: {
@@ -111,9 +174,18 @@ export interface TicketReport {
     status: TicketStatus[];
     assignee_id: number | null;
     requester_id: number | null;
+    ticket_type?: 'incident' | 'service_request' | null;
   };
   totals: TicketReportTotals;
-  /** ครบทั้ง 7 สถานะเสมอ */
+  /**
+   * ตัวชี้วัดแยกตามประเภท — backend ส่งมา**ทั้งสองบล็อกเสมอ**
+   *
+   * optional บนสายไว้เผื่อ API รุ่นก่อนหน้าที่ยังไม่มีบล็อกนี้เท่านั้น
+   * หน้าจอจึงต้องทนทั้งกรณีที่ไม่มี และกรณีที่มีแต่ total เป็นศูนย์
+   */
+  incident_metrics?: IncidentMetrics | null;
+  service_request_metrics?: ServiceRequestMetrics | null;
+  /** ครบทุกสถานะที่ประเภทในขอบเขตใช้เสมอ */
   by_status: { status: TicketStatus; count: number }[];
   /** ครบ P1–P4 เสมอ */
   by_priority: { priority: Priority; count: number }[];

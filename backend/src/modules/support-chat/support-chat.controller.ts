@@ -31,6 +31,8 @@ import { THROTTLE } from '../../common/throttle/throttle.config';
 import { CHAT_MAX_FILE_BYTES } from './chat-file-type';
 import {
   ChatInboxQueryDto,
+  ConvertChatToTicketDto,
+  ConvertChatToTicketResponseDto,
   SendChatFileDto,
   SendChatMessageDto,
   SendChatMessageResponseDto,
@@ -244,6 +246,50 @@ export class SupportChatController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<void> {
     await this.chats.markRead(scope, id);
+  }
+
+  @Post(':id/ticket')
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'ยกระดับแชทเป็นเรื่องแจ้ง',
+    description: [
+      'ทีมไอทีเท่านั้น (สิทธิ์ `ticket.change_status` และห้องต้องอยู่ในขอบเขตบริษัทของผู้เรียก) —',
+      'ด่านเดียวกับ `POST /support-chat/{id}/close`',
+      '',
+      'สร้างเรื่องจากบทสนทนาในห้องนี้ แล้วผูกกันสองทาง',
+      '`chat.ticket_id` ชี้มาที่เรื่อง และเรื่องจำโครงการของห้องไว้ในตัวเอง',
+      '(ใช้กรองรายงานด้วย `GET /reports/tickets?project_id=`)',
+      '',
+      '**ค่าตั้งต้นเมื่อไม่ส่งมา**',
+      '- `category_id` — `default_category` ของโครงการที่ห้องนี้สังกัด · ไม่มีทั้งคู่ → `422`',
+      '- `description` — บทสนทนาที่ถอดให้เอง มีเวลากำกับ ติดป้าย `ທີມໄອທີ` / `ຜູ້ເຂົ້າຊົມ` / `ຜູ້ແຈ້ງ`',
+      '  ตัดข้อความระบบออก ยาวไม่เกิน 4000 ตัวอักษร แล้วบอกว่าที่เหลืออ่านได้ที่ห้องแชท',
+      '- `impact` / `urgency` — `individual` / `medium` (ระบบคำนวณ `priority` เอง ส่งมาตรง ๆ ไม่ได้)',
+      '',
+      '**ผู้แจ้งของเรื่องที่ได้**',
+      '- ห้องของพนักงาน หรือห้องจาก widget ที่ Chatwoot ยืนยันตัวตนแล้วและจับคู่บัญชีได้ → บัญชีนั้น',
+      '- ห้องจาก widget ที่ยังไม่รู้ว่าเป็นใคร → **เจ้าหน้าที่ที่กด** เป็นทั้งผู้แจ้งและผู้สร้าง',
+      '  ระบบไม่สร้างบัญชีให้ผู้เข้าชม และไม่ยืมบัญชีใครมาเป็นผู้แจ้ง',
+      '  ตัวตนเท่าที่รู้อยู่ใน `contact_snapshot` ของคำตอบ (ไม่ได้ถูกเขียนลงแถวของ ticket)',
+      '',
+      'ไม่มีการมอบหมายผู้รับผิดชอบอัตโนมัติ — เรื่องเข้าคิวที่ยังไม่มีคนรับ แล้วมอบหมายตามปกติ',
+      '',
+      'หลังจากนี้ ทุกครั้งที่เรื่องเปลี่ยนสถานะ ห้องนี้จะได้ข้อความของระบบภาษาลาวหนึ่งข้อความ',
+      'และถ้าห้องมาจาก widget ที่ยังซิงก์อยู่ ข้อความนั้นถูกส่งถึงผู้เข้าชมผ่าน Chatwoot ด้วย',
+    ].join('\n'),
+  })
+  @ApiBody({ type: ConvertChatToTicketDto })
+  @ApiResponse({ status: 201, type: ConvertChatToTicketResponseDto })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'FORBIDDEN' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'ห้องที่เข้าไม่ได้ตอบ 404 ไม่ใช่ 403' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'CHAT_ALREADY_LINKED' })
+  @ApiResponse({ status: 422, type: ErrorResponseDto, description: 'VALIDATION_ERROR' })
+  convertToTicket(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ConvertChatToTicketDto,
+  ): Promise<ConvertChatToTicketResponseDto> {
+    return this.chats.convertToTicket(scope, id, dto);
   }
 
   @Post(':id/close')

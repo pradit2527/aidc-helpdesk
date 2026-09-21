@@ -19,7 +19,7 @@ import {
 import { Card, CardBody, CardHeader, CardTitle, StatCard } from '@/components/ui/card';
 import { Alert, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
-import { PRIORITY, TICKET_STATUS } from '@/config/enums';
+import { PRIORITY, statusLabel } from '@/config/enums';
 import { formatNumber, formatPercent } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { useDashboardSummary } from '@/lib/queries/master-data';
@@ -219,7 +219,7 @@ function DashboardContent({
                 return (
                   <li key={entry.status}>
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-body-sm">{TICKET_STATUS[entry.status].label}</span>
+                      <span className="text-body-sm">{statusLabel(entry.status)}</span>
                       <span className="tabular text-body-sm font-semibold">
                         {entry.count}
                         <span className="ml-1 text-caption font-normal text-ink-3">
@@ -230,7 +230,7 @@ function DashboardContent({
                     <div
                       className="mt-1 h-2 overflow-hidden rounded-full bg-subtle"
                       role="img"
-                      aria-label={`${TICKET_STATUS[entry.status].label} ${entry.count} ເລື່ອງ`}
+                      aria-label={`${statusLabel(entry.status)} ${entry.count} ເລື່ອງ`}
                     >
                       <div
                         className="h-full rounded-full bg-primary"

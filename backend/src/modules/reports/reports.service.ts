@@ -3,23 +3,52 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL
 import { alias } from 'drizzle-orm/pg-core';
 
 import {
+  CLOCK_RUNNING_STATUSES,
   PRIORITY,
   TICKET_STATUS,
-  type PendingReason,
+  WAITING_STATUSES,
   type Priority,
   type TicketStatus,
   type TicketType,
 } from '../../common/constants';
 import type { AccessScope } from '../../common/scope';
+import { minutesBetween } from '../../common/sla/business-time';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
-import { appUser, company, department, ticket, ticketCategory } from '../../db/schema';
+import {
+  appUser,
+  company,
+  department,
+  serviceCatalogItem,
+  supportProject,
+  ticket,
+  ticketCategory,
+} from '../../db/schema';
+import { SlaConfigRepository } from '../../db/repositories/sla-config.repository';
 import type {
+  IncidentMetricsDto,
+  ServiceRequestMetricsDto,
   TicketReportDto,
   TicketReportFilters,
   TicketReportItemDto,
+  TicketReportProjectRowDto,
   TicketReportRollupDto,
+  TopCatalogItemDto,
 } from './dto/ticket-report.dto';
+
+/**
+ * เพดานจำนวนใบที่ดึงมาคำนวณเวลาเฉลี่ยแบบนาทีทำการ
+ *
+ * ทำไมต้องดึงแถวมาคำนวณใน JS แทนที่จะ avg() ใน SQL
+ *   "นาทีทำการ" ต้องรู้ปฏิทินเวลาทำการและวันหยุดของบริษัทนั้น ซึ่งอยู่คนละตาราง
+ *   และมีกติกาทับซ้อนระหว่างระดับกลุ่มกับระดับบริษัท เขียนเป็น SQL ก้อนเดียว
+ *   ได้ก็จริงแต่จะกลายเป็นเครื่องคำนวณ SLA ชุดที่สอง ซึ่งวันหนึ่งจะให้คำตอบ
+ *   ไม่ตรงกับชุดแรกโดยไม่มีอะไรฟ้อง — ใช้ business-time.ts ตัวเดียวทั้งระบบดีกว่า
+ *
+ * ดึงแค่ 5 คอลัมน์ต่อแถว ไม่ใช่ทั้งใบ เดือนหนึ่งของทั้ง 7 บริษัทอยู่ในหลักพัน
+ * ถ้าเกินเพดาน ค่าเฉลี่ยจะคิดจากใบที่เสร็จล่าสุดเท่านั้น และ DTO บอกตัวหารไว้ให้เห็น
+ */
+const DURATION_SAMPLE_CAP = 5000;
 
 /**
  * ตาราง app_user ถูก join สองครั้งในคิวรีรายการ (ผู้แจ้ง กับ ผู้รับผิดชอบ)
@@ -28,14 +57,35 @@ import type {
 const requester = alias(appUser, 'requester');
 const assignee = alias(appUser, 'assignee');
 
-/** สถานะที่ถือว่า "ยังเปิดอยู่" — ชุดเดียวกับ KPI-5 และแดชบอร์ด */
-const OPEN_STATUSES: readonly TicketStatus[] = ['new', 'assigned', 'in_progress', 'pending_user'];
+/**
+ * สถานะที่ถือว่า "ยังเปิดอยู่" — ชุดเดียวกับ KPI-5 และแดชบอร์ด
+ *
+ * รวมสถานะพักที่ยังรอคนอื่นอยู่ด้วย (pending_approval / pending_user) เพราะ
+ * เรื่องยังไม่จบและยังต้องมีคนตามต่อ — ต่างจาก resolved / fulfilled ซึ่งงาน
+ * ของทีมจบแล้ว เหลือแค่รอผู้แจ้งยืนยัน
+ */
+const OPEN_STATUSES: readonly TicketStatus[] = [
+  ...CLOCK_RUNNING_STATUSES,
+  ...WAITING_STATUSES,
+];
 
-/** ยังเปิดอยู่และนาฬิกา SLA ยังเดิน — pending_user หยุดนับ จึงยังไม่ถือว่าเกินกำหนด */
-const RUNNING_STATUSES: readonly TicketStatus[] = ['new', 'assigned', 'in_progress'];
+/**
+ * ยังเปิดอยู่และนาฬิกา SLA ยังเดิน — ใช้ตัดสิน "เกินกำหนดแล้วตอนนี้"
+ *
+ * pending_vendor อยู่ในชุดนี้ด้วย เพราะการส่งของให้ผู้ขายไม่หยุดนาฬิกา
+ * (ดู PAUSED_STATUSES ใน common/constants.ts) — เรื่องที่ค้างอยู่กับผู้ขาย
+ * นานเกินกำหนดต้องถูกตั้งธงเกินกำหนดจริง ๆ ไม่ใช่ซ่อนไว้
+ */
+const RUNNING_STATUSES: readonly TicketStatus[] = CLOCK_RUNNING_STATUSES;
 
-/** resolved + closed — ตัวหารของ "% ทัน SLA" */
-const DONE_STATUSES: readonly TicketStatus[] = ['resolved', 'closed'];
+/**
+ * งานของทีมจบแล้ว — ตัวหารของ "% ทัน SLA"
+ *
+ * fulfilled อยู่คู่กับ resolved เสมอ: สองสายนี้คือ "เสร็จ" ของคนละชนิด
+ * ถ้าใส่แค่ resolved คำขอบริการทุกใบจะหายไปจากตัวหาร แล้ว % ทัน SLA
+ * จะกลายเป็นตัวเลขของเฉพาะเหตุขัดข้องโดยที่หัวข้อไม่ได้บอกไว้
+ */
+const DONE_STATUSES: readonly TicketStatus[] = ['resolved', 'fulfilled', 'closed'];
 
 /**
  * เงื่อนไข "เกินกำหนดแก้ไข" ที่ใช้ทั้งในยอดรวม ทุกมิติ และคอลัมน์ในรายการ
@@ -135,7 +185,10 @@ export interface KpiResult {
  */
 @Injectable()
 export class ReportsService {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    private readonly slaConfig: SlaConfigRepository,
+  ) {}
 
   /**
    * เงื่อนไขขอบเขตในรูป SQL ดิบ
@@ -400,7 +453,7 @@ export class ReportsService {
           ) * 100.0 / count(*), 1) END
         FROM ticket t
         WHERE t.deleted_at IS NULL
-          AND t.status IN ('new','assigned','in_progress','pending_user') AND ${scoped}
+          AND t.status IN ${OPEN_STATUSES} AND ${scoped}
       `),
 
       // KPI-6 · Uptime ระบบ Critical
@@ -476,7 +529,7 @@ export class ReportsService {
     const openCount = await denominator(sql`
       SELECT count(*)::int FROM ticket t
       WHERE t.deleted_at IS NULL
-        AND t.status IN ('new','assigned','in_progress','pending_user') AND ${scoped}
+        AND t.status IN ${OPEN_STATUSES} AND ${scoped}
     `);
 
     const kpi1 = this.round1(compliance);
@@ -665,12 +718,29 @@ export class ReportsService {
     if (filters.status.length > 0) parts.push(inArray(ticket.status, [...filters.status]) as SQL);
     if (filters.assigneeId) parts.push(eq(ticket.assigneeId, filters.assigneeId) as SQL);
     if (filters.requesterId) parts.push(eq(ticket.requesterId, filters.requesterId) as SQL);
+    /*
+     * ตัวกรองโครงการทำให้แคบลงภายในขอบเขตเดิมเท่านั้น ไม่มีทางทำให้กว้างขึ้น
+     * เพราะมันเป็นเงื่อนไข AND ที่ต่อท้าย ticketScopeWhere ซึ่งบังคับบริษัทไปแล้ว
+     * ผู้เรียกที่ใส่ id ของโครงการนอกขอบเขตจึงได้รายงานเปล่า ไม่ใช่ข้อมูลของบริษัทอื่น
+     */
+    if (filters.projectId) parts.push(eq(ticket.supportProjectId, filters.projectId) as SQL);
+    if (filters.ticketType) parts.push(eq(ticket.ticketType, filters.ticketType) as SQL);
     const where = and(...parts) as SQL;
 
     const offset = (filters.page - 1) * filters.pageSize;
 
-    const [[totals], byStatus, byPriority, byAssignee, byCompany, byDepartment, rows] =
-      await Promise.all([
+    const [
+      [totals],
+      byStatus,
+      byPriority,
+      byAssignee,
+      byCompany,
+      byDepartment,
+      byProject,
+      incidentMetrics,
+      serviceRequestMetrics,
+      rows,
+    ] = await Promise.all([
         this.db
           .select({
             total: sql<number>`count(*)::int`,
@@ -731,6 +801,26 @@ export class ReportsService {
           .groupBy(company.id, company.code, ticket.departmentId, department.name)
           .orderBy(asc(company.code), desc(sql`count(*)`)),
 
+        /*
+         * แถวที่ support_project_id เป็น null คือเรื่องที่แจ้งในระบบตามปกติ — ต้องคงไว้
+         * ให้ผลรวมทุกแถวเท่ากับยอดรวม กติกาเดียวกับแถว "ยังไม่มีผู้รับผิดชอบ" ของ by_assignee
+         */
+        this.db
+          .select({
+            id: ticket.supportProjectId,
+            code: supportProject.code,
+            name: supportProject.name,
+            ...ROLLUP_COLUMNS,
+          })
+          .from(ticket)
+          .leftJoin(supportProject, eq(supportProject.id, ticket.supportProjectId))
+          .where(where)
+          .groupBy(ticket.supportProjectId, supportProject.code, supportProject.name)
+          .orderBy(desc(sql`count(*)`), asc(supportProject.code)),
+
+        this.incidentMetrics(where),
+        this.serviceRequestMetrics(where),
+
         this.db
           .select({
             id: ticket.id,
@@ -746,6 +836,9 @@ export class ReportsService {
             departmentName: department.name,
             categoryId: ticket.categoryId,
             categoryName: ticketCategory.nameTh,
+            projectId: ticket.supportProjectId,
+            projectCode: supportProject.code,
+            projectName: supportProject.name,
             requesterId: ticket.requesterId,
             requesterName: requester.fullName,
             assigneeId: ticket.assigneeId,
@@ -766,6 +859,8 @@ export class ReportsService {
           .innerJoin(requester, eq(requester.id, ticket.requesterId))
           .leftJoin(department, eq(department.id, ticket.departmentId))
           .leftJoin(assignee, eq(assignee.id, ticket.assigneeId))
+          // leftJoin เสมอ — เรื่องส่วนใหญ่ไม่ได้มาจากโครงการ innerJoin จะทำให้หายทั้งรายงาน
+          .leftJoin(supportProject, eq(supportProject.id, ticket.supportProjectId))
           .where(where)
           .orderBy(desc(ticket.createdAt), desc(ticket.id))
           .limit(filters.pageSize)
@@ -783,11 +878,15 @@ export class ReportsService {
       ticket_type: r.ticketType as TicketType,
       subject: r.subject,
       status: r.status as TicketStatus,
-      pending_reason: r.pendingReason as PendingReason | null,
+      pending_reason: r.pendingReason,
       priority: r.priority as Priority,
       company: { id: r.companyId, code: r.companyCode },
       department: r.departmentId ? { id: r.departmentId, name: r.departmentName ?? '' } : null,
       category: { id: r.categoryId, name_th: r.categoryName },
+      support_project:
+        r.projectId === null
+          ? null
+          : { id: r.projectId, code: r.projectCode ?? '', name: r.projectName ?? '' },
       requester: { id: r.requesterId, full_name: r.requesterName },
       assignee: r.assigneeId ? { id: r.assigneeId, full_name: r.assigneeName ?? '' } : null,
       created_at: r.createdAt.toISOString(),
@@ -809,6 +908,8 @@ export class ReportsService {
         status: filters.status,
         assignee_id: filters.assigneeId ?? null,
         requester_id: filters.requesterId ?? null,
+        project_id: filters.projectId ?? null,
+        ticket_type: filters.ticketType ?? null,
       },
       totals: {
         total,
@@ -843,6 +944,15 @@ export class ReportsService {
         department: r.departmentId ? { id: r.departmentId, name: r.departmentName ?? '' } : null,
         ...this.rollup(r),
       })),
+      by_project: byProject.map(
+        (r): TicketReportProjectRowDto => ({
+          project:
+            r.id === null ? null : { id: r.id, code: r.code ?? '', name: r.name ?? '' },
+          ...this.rollup(r),
+        }),
+      ),
+      incident_metrics: incidentMetrics,
+      service_request_metrics: serviceRequestMetrics,
       tickets: {
         items,
         page: filters.page,
@@ -851,6 +961,174 @@ export class ReportsService {
         total,
         total_pages: Math.max(1, Math.ceil(total / filters.pageSize)),
       },
+    };
+  }
+
+  // ── ตัวชี้วัดแยกตามชนิดของเรื่อง ────────────────────────────────────
+
+  /**
+   * เวลาเฉลี่ยแบบนาทีทำการ ระหว่างจุดเริ่มนาฬิกากับเวลาที่งานเสร็จ
+   *
+   * ใช้ร่วมกันทั้ง MTTR ของเหตุขัดข้อง และเวลาส่งมอบของคำขอบริการ เพราะสองอย่างนี้
+   * ต่างกันแค่ "นับถึงสถานะอะไร" ส่วนวิธีนับเวลาเหมือนกันทุกข้อ
+   *
+   * ⚠️ หักเวลาที่หยุดนับออกด้วย (pending_duration_minutes)
+   *    ไม่งั้นเรื่องที่รอผู้แจ้งตอบสองวันจะถูกนับเป็นความช้าของทีม ซึ่งเป็นสิ่งที่
+   *    กฎการหยุดนาฬิกาทั้งหมดมีไว้เพื่อป้องกันตั้งแต่แรก
+   *
+   * ⚠️ หน่วยเวลาต่างกันตามระดับความสำคัญ — P1 นับ 24×7 ที่เหลือนับเฉพาะนาทีทำการ
+   *    จึงต้องถาม targetFor() ทีละใบ (ค่าถูกแคชไว้แล้ว ไม่ยิงฐานข้อมูลซ้ำ)
+   */
+  private async averageWorkMinutes(
+    rows: readonly {
+      companyId: number;
+      priority: string;
+      clockStart: Date | null;
+      completedAt: Date | null;
+      pausedMinutes: number;
+    }[],
+  ): Promise<number | null> {
+    const usable = rows.filter((r) => r.clockStart !== null && r.completedAt !== null);
+    if (usable.length === 0) return null;
+
+    let sum = 0;
+    for (const row of usable) {
+      const [cal, target] = await Promise.all([
+        this.slaConfig.calendarFor(row.companyId),
+        this.slaConfig.targetFor(row.companyId, row.priority as Priority),
+      ]);
+      /*
+       * new Date(...) เสมอ ไม่ใช่แค่ cast — บาง caller (เช่น incidentMetrics)
+       * ส่ง clockStart มาจากนิพจน์ sql<Date>`coalesce(...)` ซึ่ง postgres.js
+       * คืนเป็นสตริง ไม่ใช่ Date เหมือนคอลัมน์ปกติ การ cast ระดับ TypeScript
+       * ไม่ได้แปลงค่าจริงตอนรัน .getTime() จึงพังเฉพาะตอนมีข้อมูลจริงให้คำนวณ
+       */
+      const gross = minutesBetween(
+        new Date(row.clockStart!),
+        new Date(row.completedAt!),
+        cal,
+        target.clockMode,
+      );
+      sum += Math.max(0, gross - Math.max(0, row.pausedMinutes));
+    }
+
+    return Math.round((sum / usable.length) * 10) / 10;
+  }
+
+  /**
+   * ตัวชี้วัดของเหตุขัดข้อง — MTTR · % ทัน SLA · จำนวนการเปิดคืน
+   *
+   * ⚠️ บังคับ ticket_type = 'incident' เสมอ ไม่ว่าผู้เรียกจะกรองชนิดมาหรือไม่
+   *    ถ้าปล่อยให้ตัวกรองภายนอกเป็นตัวตัดสิน ผู้เรียกที่กรอง service_request
+   *    จะได้ก้อนนี้เป็นตัวเลขของคำขอบริการ แต่ชื่อฟิลด์ยังบอกว่าเป็นของเหตุขัดข้อง
+   */
+  private async incidentMetrics(where: SQL): Promise<IncidentMetricsDto> {
+    const scoped = and(where, eq(ticket.ticketType, 'incident')) as SQL;
+
+    const [[agg], durationRows] = await Promise.all([
+      this.db
+        .select({
+          total: sql<number>`count(*)::int`,
+          resolvedCount: countWhere(sql`${ticket.resolvedAt} IS NOT NULL`),
+          done: countWhere(IS_DONE),
+          met: countWhere(sql`${IS_DONE} AND NOT ${RESOLUTION_BREACHED}`),
+          // sum() ของตารางเปล่าคืน NULL ไม่ใช่ 0 — coalesce ที่นี่ ไม่ใช่ใน JS
+          reopenTotal: sql<number>`coalesce(sum(${ticket.reopenCount}), 0)::int`,
+          reopenedTickets: countWhere(sql`${ticket.reopenCount} > 0`),
+        })
+        .from(ticket)
+        .where(scoped),
+
+      this.db
+        .select({
+          companyId: ticket.companyId,
+          priority: ticket.priority,
+          clockStart: sql<Date | null>`coalesce(${ticket.slaClockStartedAt}, ${ticket.createdAt})`,
+          completedAt: ticket.resolvedAt,
+          pausedMinutes: ticket.pendingDurationMinutes,
+        })
+        .from(ticket)
+        .where(and(scoped, sql`${ticket.resolvedAt} IS NOT NULL`) as SQL)
+        .orderBy(desc(ticket.resolvedAt))
+        .limit(DURATION_SAMPLE_CAP),
+    ]);
+
+    return {
+      total: agg?.total ?? 0,
+      mttr_business_minutes: await this.averageWorkMinutes(durationRows),
+      resolved_count: agg?.resolvedCount ?? 0,
+      sla_met_percent: this.percent(agg?.met ?? 0, agg?.done ?? 0),
+      reopen_total: agg?.reopenTotal ?? 0,
+      reopened_tickets: agg?.reopenedTickets ?? 0,
+    };
+  }
+
+  /**
+   * ตัวชี้วัดของคำขอบริการ — เวลาส่งมอบเฉลี่ย · จำนวนที่ค้างรออนุมัติ · รายการยอดฮิต
+   *
+   * เวลาส่งมอบนับจาก `sla_clock_started_at` ซึ่งสำหรับคำขอที่ต้องอนุมัติคือ
+   * "เวลาที่อนุมัติครบ" ไม่ใช่เวลาที่เปิดเรื่อง (ApprovalsService เป็นผู้เขียนค่านั้น)
+   * จึงตอบข้อกำหนดของ SA ได้ตรง ๆ โดยไม่ต้องคำนวณย้อนจากประวัติ
+   */
+  private async serviceRequestMetrics(where: SQL): Promise<ServiceRequestMetricsDto> {
+    const scoped = and(where, eq(ticket.ticketType, 'service_request')) as SQL;
+
+    const [[agg], durationRows, topItems] = await Promise.all([
+      this.db
+        .select({
+          total: sql<number>`count(*)::int`,
+          fulfilledCount: countWhere(sql`${ticket.resolvedAt} IS NOT NULL`),
+          pendingApproval: countWhere(sql`${ticket.status} = 'pending_approval'`),
+          rejected: countWhere(sql`${ticket.status} = 'rejected'`),
+        })
+        .from(ticket)
+        .where(scoped),
+
+      this.db
+        .select({
+          companyId: ticket.companyId,
+          priority: ticket.priority,
+          /*
+           * ไม่ coalesce เป็น created_at ที่นี่ ต่างจากฝั่งเหตุขัดข้อง
+           *
+           * คำขอที่ยังไม่เริ่มนาฬิกามี sla_clock_started_at เป็น null ซึ่งแปลว่า
+           * "ยังไม่เริ่มจับเวลา" การถอยไปใช้ created_at จะนับเวลารออนุมัติเข้าไปด้วย
+           * ซึ่งเป็นสิ่งเดียวที่ข้อกำหนดข้อนี้สั่งห้ามไว้ชัดเจนที่สุด
+           * ใบที่เป็น null จึงถูก averageWorkMinutes ตัดทิ้งไปเอง
+           */
+          clockStart: ticket.slaClockStartedAt,
+          completedAt: ticket.resolvedAt,
+          pausedMinutes: ticket.pendingDurationMinutes,
+        })
+        .from(ticket)
+        .where(and(scoped, sql`${ticket.resolvedAt} IS NOT NULL`) as SQL)
+        .orderBy(desc(ticket.resolvedAt))
+        .limit(DURATION_SAMPLE_CAP),
+
+      this.db
+        .select({
+          id: serviceCatalogItem.id,
+          code: serviceCatalogItem.code,
+          nameTh: serviceCatalogItem.nameTh,
+          n: sql<number>`count(*)::int`,
+        })
+        .from(ticket)
+        .innerJoin(serviceCatalogItem, eq(serviceCatalogItem.id, ticket.catalogItemId))
+        .where(scoped)
+        .groupBy(serviceCatalogItem.id, serviceCatalogItem.code, serviceCatalogItem.nameTh)
+        .orderBy(desc(sql`count(*)`), asc(serviceCatalogItem.code))
+        .limit(10),
+    ]);
+
+    return {
+      total: agg?.total ?? 0,
+      avg_fulfillment_business_minutes: await this.averageWorkMinutes(durationRows),
+      fulfilled_count: agg?.fulfilledCount ?? 0,
+      pending_approval_count: agg?.pendingApproval ?? 0,
+      rejected_count: agg?.rejected ?? 0,
+      top_catalog_items: topItems.map(
+        (r): TopCatalogItemDto => ({ id: r.id, code: r.code, name_th: r.nameTh, count: r.n }),
+      ),
     };
   }
 

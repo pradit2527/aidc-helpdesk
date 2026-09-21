@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from 'dr
 import { alias } from 'drizzle-orm/pg-core';
 
 import type { Db } from '../client';
-import { DB } from '../db.module';
+import { DB } from '../db.token';
 import {
   appUser,
   company,
@@ -499,6 +499,39 @@ export class SupportChatRepository {
       .where(and(eq(supportChat.id, chatId), isNull(supportChat.assigneeId)));
   }
 
+  /**
+   * ผูกห้องเข้ากับเรื่องที่เพิ่งสร้างจากห้องนี้
+   *
+   * เขียนเฉพาะห้องที่ยังไม่มีเรื่องผูกอยู่ (`ticket_id IS NULL`) — สองแท็บที่กด
+   * "สร้างเรื่อง" พร้อมกันจะมีคนเดียวที่ผูกสำเร็จ อีกคนได้ false แล้วผู้เรียก
+   * ตอบ 409 CHAT_ALREADY_LINKED ให้ ไม่ใช่เขียนทับจนเรื่องแรกกลายเป็นเรื่องกำพร้า
+   *
+   * @returns false เมื่อห้องนี้ถูกผูกกับเรื่องอื่นไปก่อนแล้ว
+   */
+  async linkTicket(chatId: number, ticketId: number): Promise<boolean> {
+    const linked = await this.db
+      .update(supportChat)
+      .set({ ticketId })
+      .where(and(eq(supportChat.id, chatId), isNull(supportChat.ticketId)))
+      .returning({ id: supportChat.id });
+    return linked.length > 0;
+  }
+
+  /**
+   * ห้องที่ผูกกับเรื่องนี้ — ใช้ตอนเรื่องเปลี่ยนสถานะแล้วต้องบอกผู้ถามในแชท
+   *
+   * หนึ่งเรื่องผูกกับห้องได้มากกว่าหนึ่งห้องในทางทฤษฎี (ไม่มี unique index บน ticket_id)
+   * แต่เส้นทางเดียวที่เขียนค่านี้คือ linkTicket ซึ่งผูกห้องละครั้ง
+   * เลือกห้องล่าสุดไว้ก่อนเพื่อให้พฤติกรรมแน่นอน ไม่ขึ้นกับลำดับที่ฐานข้อมูลคืนมา
+   */
+  async findByTicketId(ticketId: number): Promise<SupportChatRow | null> {
+    const [row] = await this.selectChat()
+      .where(eq(supportChat.ticketId, ticketId))
+      .orderBy(desc(supportChat.id))
+      .limit(1);
+    return row ?? null;
+  }
+
   /** @returns false ถ้าห้องถูกปิดไปก่อนแล้ว */
   async close(chatId: number, closedBy: number): Promise<boolean> {
     const closed = await this.db
@@ -523,8 +556,18 @@ export class SupportChatRepository {
     return row ?? null;
   }
 
-  /** ข้อความของคนใน Helpdesk ที่ยังไม่ถูกส่งไป Chatwoot — เรียงตามลำดับที่เกิด */
-  async pendingOutbound(chatId: number, limit = 50): Promise<SupportChatMessageRow[]> {
+  /**
+   * ข้อความของคนใน Helpdesk ที่ยังไม่ถูกส่งไป Chatwoot — เรียงตามลำดับที่เกิด
+   *
+   * @param options.includeSystem เอาข้อความของระบบมาด้วย (ห้องจาก widget ที่ยังเปิดอยู่)
+   *        ค่าเริ่มต้นเป็น false เพื่อให้เส้นทางของแชทภายใน (inbox ชนิด API)
+   *        ได้ชุดข้อความเท่าเดิมทุกประการ — ผู้เรียกฝั่ง widget เป็นคนเปิดเอง
+   *        แล้วให้ isPushableToVisitor ตัดสินรายข้อความอีกชั้น
+   */
+  async pendingOutbound(
+    chatId: number,
+    options: { includeSystem?: boolean; limit?: number } = {},
+  ): Promise<SupportChatMessageRow[]> {
     const rows = await this.db
       .select(messageColumns)
       .from(supportChatMessage)
@@ -533,14 +576,14 @@ export class SupportChatRepository {
         and(
           eq(supportChatMessage.chatId, chatId),
           isNull(supportChatMessage.chatwootMessageId),
-          eq(supportChatMessage.isSystem, false),
+          ...(options.includeSystem ? [] : [eq(supportChatMessage.isSystem, false)]),
           isNull(supportChatMessage.externalSenderName),
           // ข้อความของผู้เข้าชมมาจาก Chatwoot อยู่แล้ว ส่งกลับไปเท่ากับพูดซ้ำให้เขาฟัง
           eq(supportChatMessage.fromContact, false),
         ),
       )
       .orderBy(supportChatMessage.id)
-      .limit(limit);
+      .limit(options.limit ?? 50);
     return rows.map(toMessageRow);
   }
 

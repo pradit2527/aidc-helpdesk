@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { useT } from '@/components/layout/preference-controls';
+import { isDoneStatus } from '@/config/enums';
 import { formatDateTime } from '@/lib/format';
 import { useTickets } from '@/lib/queries/tickets';
 import type { TicketListItem } from '@/lib/types';
@@ -48,7 +49,8 @@ function withinReopenWindow(closedAt: string | null): boolean {
  *   cancelled ไม่ได้เลย — ต้องแจ้งเป็นเรื่องใหม่
  */
 function reopenState(row: TicketListItem): 'yes' | 'expired' | 'no' {
-  if (row.status === 'resolved') return 'yes';
+  // resolved (เหตุขัดข้อง) กับ fulfilled (คำขอบริการ) คือสถานะเดียวกันในสายตาผู้แจ้ง
+  if (isDoneStatus(row.status)) return 'yes';
   if (row.status === 'closed') return withinReopenWindow(row.closed_at) ? 'yes' : 'expired';
   return 'no';
 }
@@ -112,14 +114,16 @@ export default function TicketHistoryPage(): React.JSX.Element {
   const t = useT();
   const query = useTickets({
     requester_id: 'me',
-    status: 'resolved,closed,cancelled',
+    // fulfilled กับ rejected เพิ่มมาพร้อมเครื่องสถานะของคำขอบริการ — ถ้าไม่ขอมาด้วย
+    // คำขอที่ส่งมอบแล้วจะไม่โผล่ในประวัติของผู้ขอเลย ทั้งที่เป็นใบที่รอเขายืนยันปิดอยู่
+    status: 'resolved,fulfilled,closed,cancelled,rejected',
     page_size: 100,
   });
   const all = query.data?.items ?? [];
 
   // เรื่องที่รอผู้แจ้งยืนยันขึ้นก่อนเสมอ — มันคืองานที่ต้องทำ ไม่ใช่ประวัติ
-  const awaiting = all.filter((r) => r.status === 'resolved');
-  const finished = all.filter((r) => r.status !== 'resolved');
+  const awaiting = all.filter((r) => isDoneStatus(r.status));
+  const finished = all.filter((r) => !isDoneStatus(r.status));
   const rows = [...awaiting, ...finished];
 
   const rated = finished.filter((r) => r.satisfaction_score !== null);
@@ -267,7 +271,7 @@ function RowActions({
 }): React.JSX.Element {
   const t = useT();
   const reopen = reopenState(row);
-  const awaiting = row.status === 'resolved';
+  const awaiting = isDoneStatus(row.status);
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -337,7 +341,7 @@ function OwnerPanel({
 /** ช่อง "วันที่ปิด" — เรื่องที่ยังรอผู้แจ้งยืนยันไม่มีวันปิด แสดงว่ารออะไรแทนขีดเปล่า */
 function ClosedAtCell({ row }: { row: TicketListItem }): React.JSX.Element {
   const t = useT();
-  if (row.status === 'resolved') {
+  if (isDoneStatus(row.status)) {
     return <span className="font-semibold text-primary">{t('history.awaitingCell')}</span>;
   }
   return <>{row.closed_at ? formatDateTime(row.closed_at) : '—'}</>;

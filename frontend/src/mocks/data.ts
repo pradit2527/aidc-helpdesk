@@ -147,8 +147,9 @@ export const TICKETS: TicketListItem[] = [
     ticket_no: 'AIDC-LOG-202608-0031',
     ticket_type: 'service_request',
     subject: 'ຂໍສິດເຂົ້າເຖິງໂຟນເດີງົບປະມານ 2570',
-    status: 'pending_user',
-    pending_reason: 'approval',
+    // ຄຳຂໍບໍລິການທີ່ລໍຖ້າອະນຸມັດ — ເປັນສະຖານະຂອງຕົນເອງແລ້ວ ບໍ່ແມ່ນ pending_user + ເຫດຜົນ
+    status: 'pending_approval',
+    pending_reason: null,
     priority: 'P4',
     support_tier: 1,
     company: { id: 7, code: 'AIDC-LOG' },
@@ -169,8 +170,9 @@ export const TICKETS: TicketListItem[] = [
     ticket_no: 'AIDC-LOG-202608-0027',
     ticket_type: 'incident',
     subject: 'GPS ລົດທະບຽນ 82-4471 ບໍ່ສົ່ງພິກັດ ລໍຖ້າອາໄຫຼ່ຈາກຜູ້ໃຫ້ບໍລິການ',
-    status: 'pending_user',
-    pending_reason: 'vendor',
+    // ສົ່ງໃຫ້ຜູ້ໃຫ້ບໍລິການພາຍນອກ — ໂມງ SLA **ບໍ່ຢຸດ** (ຕ່າງຈາກ pending_user)
+    status: 'pending_vendor',
+    pending_reason: null,
     priority: 'P2',
     support_tier: 3,
     company: { id: 7, code: 'AIDC-LOG' },
@@ -178,7 +180,14 @@ export const TICKETS: TicketListItem[] = [
     category: { id: 82, name_th: 'ໂທລະສັບ ແລະ ອຸປະກອນເຄື່ອນທີ່' },
     requester: { id: 220, full_name: 'ບຸນມີ ແກ້ວມະນີ' },
     assignee: { id: 88, full_name: 'ພູວົງ ສີສຸກ' },
-    sla: { response_due_at: at(-30), workaround_at: null, is_response_breached: false, first_response_at: null, status: 'paused', remaining_minutes: null, remaining_unit: 'business_minutes', resolution_due_at: at(3 * DAY), is_resolution_breached: false },
+    /*
+     * ⚠️ ບໍ່ແມ່ນ 'paused' — ໂມງ SLA ຍັງເດີນຢູ່ຕອນລໍຖ້າຜູ້ໃຫ້ບໍລິການພາຍນອກ
+     *
+     * ເປັນນະໂຍບາຍທີ່ SA ລະບຸໄວ້ຊັດ: ການເລືອກ ແລະ ການເລັ່ງຜູ້ຂາຍເປັນຄວາມ
+     * ຮັບຜິດຊອບຂອງທີມໄອທີ ຕ່າງຈາກການລໍຖ້າຜູ້ແຈ້ງຕອບ ຊຶ່ງທີມເຮັດຫຍັງບໍ່ໄດ້ເລີຍ
+     * ຖ້າ mock ບອກວ່າຢຸດ ຄົນທີ່ພັດທະນາໜ້າຈໍຈະສ້າງ UI ຕາມຄວາມເຂົ້າໃຈຜິດນັ້ນ
+     */
+    sla: { response_due_at: at(-30), workaround_at: null, is_response_breached: false, first_response_at: at(-2 * DAY), status: 'at_risk', remaining_minutes: 95, remaining_unit: 'business_minutes', resolution_due_at: at(3 * DAY), is_resolution_breached: false },
     reopen_count: 0,
     comment_count: 6,
     attachment_count: 2,
@@ -725,17 +734,21 @@ export const SLA_COMPLIANCE: SlaComplianceRow[] = [
   { company: { id: 2, code: 'AIDC-CON' }, priority: 'P4', total: 45, met: 44, excluded: 1, compliance_percent: 97.8 },
 ];
 
-/** เรื่องที่ผู้ใช้ปัจจุบันต้องอนุมัติ — ผูกกับ ticket ที่ pending_reason = approval */
 /**
- * ขั้นอนุมัติที่ยังรออยู่ ผูกกับ ticket ที่ pending_reason = approval
+ * ขั้นอนุมัติที่ยังรออยู่ ผูกกับ ticket ที่อยู่ในสถานะ pending_approval
  *
  * กรอง pending ออกมาก่อนแล้วค่อยจับคู่ ไม่ใช่หยิบ APPROVALS[1] ตรง ๆ
  * เพราะการอ้างดัชนีคงที่จะพังทันทีที่ลำดับขั้นในข้อมูลเปลี่ยน
+ *
+ * ⚠️ ตัดสินจาก `status` ไม่ใช่ `pending_reason === 'approval'` อีกต่อไป
+ *    การรออนุมัติเป็นสถานะจริงแล้ว ส่วน pending_reason กลายเป็นข้อความอิสระ
+ *    ที่ใช้เฉพาะกับ pending_user — ถ้ายังกรองด้วยค่าเดิม รายการนี้จะว่างเปล่า
+ *    ตลอดไปโดยไม่มีอะไรฟ้อง เพราะไม่มี ticket ใหม่ใบไหนได้ค่านั้นอีกแล้ว
  */
 const PENDING_STEP = APPROVALS.find((s) => s.status === 'pending');
 
 export const MY_APPROVALS: { ticket: TicketListItem; step: ApprovalStep }[] = PENDING_STEP
-  ? TICKETS.filter((t) => t.pending_reason === 'approval').map((t) => ({
+  ? TICKETS.filter((t) => t.status === 'pending_approval').map((t) => ({
       ticket: t,
       step: PENDING_STEP,
     }))

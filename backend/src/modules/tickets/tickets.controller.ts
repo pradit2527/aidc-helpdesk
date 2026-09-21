@@ -33,6 +33,7 @@ import {
   ChangePriorityDto,
   ChangeStatusDto,
   CreateTicketDto,
+  LinkTicketDto,
   TicketAssigneeDto,
   TicketDetailDto,
   TicketListItemDto,
@@ -80,6 +81,14 @@ export class TicketsController {
   @ApiQuery({ name: 'channel', required: false, enum: CHANNEL })
   @ApiQuery({ name: 'company_id', required: false, type: Number })
   @ApiQuery({ name: 'assignee_id', required: false, type: Number })
+  @ApiQuery({
+    name: 'project_id',
+    required: false,
+    type: Number,
+    description:
+      'เฉพาะเรื่องของโครงการใน Support Hub นี้ (id จาก `GET /support-projects`) · ' +
+      'ทำให้แคบลงภายในขอบเขตเดิมเท่านั้น ไม่เคยทำให้กว้างขึ้น · id นอกขอบเขตได้รายการว่าง',
+  })
   @ApiQuery({ name: 'q', required: false, description: 'ค้นจากเลขที่ หัวข้อ หรือรายละเอียด' })
   @ApiQuery({
     name: 'sort',
@@ -264,6 +273,37 @@ export class TicketsController {
     @Body() dto: AssignTicketDto,
   ): Promise<TicketDetailDto> {
     return this.tickets.assign(scope, id, dto);
+  }
+
+  @Post(':id/link')
+  @ApiOperation({
+    summary: 'ผูกเรื่องนี้กับอีกใบหนึ่ง',
+    description: [
+      'ใช้กับคู่เรื่องที่เกิดจากเหตุเดียวกันแต่ต้องเดินคนละ SLA — ตัวอย่างของ SA คือ',
+      'โน้ตบุ๊กพัง (`incident`) แล้วเปิดคำขอเบิกเครื่องทดแทน (`service_request`)',
+      '',
+      '- **ผูกสองทางเสมอ** — เปิดใบไหนก็เห็นอีกใบใน `related_ticket`',
+      '- เฟส 1 ผูกได้ **ใบเดียวต่อเรื่อง** เรียกซ้ำด้วย id ใหม่จะทับของเดิม',
+      '- ทั้งสองใบต้องอยู่ **บริษัทเดียวกัน** และอยู่ในขอบเขตของผู้เรียกทั้งคู่',
+      '  ใบที่อยู่นอกขอบเขตตอบ `404` เหมือนตอนเปิดดูมันตรง ๆ',
+      '- ต้องมีสิทธิ์ `ticket.change_status` (เจ้าหน้าที่เท่านั้น — ผู้แจ้งผูกเองไม่ได้)',
+    ].join('\n'),
+  })
+  @ApiParam({ name: 'id', example: 1042 })
+  @ApiBody({ type: LinkTicketDto })
+  @ApiEnvelope(TicketDetailDto)
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'NOT_FOUND — ใบใดใบหนึ่งอยู่นอกขอบเขต' })
+  @ApiResponse({
+    status: 422,
+    type: ErrorResponseDto,
+    description: 'VALIDATION_ERROR — ผูกกับตัวเอง หรือคนละบริษัท',
+  })
+  link(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LinkTicketDto,
+  ): Promise<TicketDetailDto> {
+    return this.tickets.link(scope, id, dto);
   }
 
   @Post(':id/priority')

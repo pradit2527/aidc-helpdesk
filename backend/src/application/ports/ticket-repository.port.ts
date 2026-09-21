@@ -78,7 +78,15 @@ export interface PublicCommentRecord {
 export interface StatusChangeRecord {
   from: string;
   to: string;
-  actorId: number;
+  /**
+   * ผู้สั่ง — `null` = ระบบเป็นผู้กระทำ (งานปิดอัตโนมัติ)
+   *
+   * ทั้ง ticket_status_history.changed_by และ audit_log.actor_id รับ NULL ได้
+   * และ schema ระบุไว้ชัดว่า closed_by เป็น NULL คู่กับ closed_at ที่ไม่ NULL
+   * คือเครื่องหมายของการปิดอัตโนมัติ — เป็นวิธีเดียวที่รายงานแยกออกว่า
+   * ใบไหนผู้แจ้งยืนยันเอง และใบไหนหมดเวลาไปเฉย ๆ
+   */
+  actorId: number | null;
   /** เวลาที่เกิดการเปลี่ยน — ใช้เป็น updated_at เวลาในประวัติ และเวลาตอบรับครั้งแรก */
   at: Date;
   /** เหตุผลที่เก็บในประวัติ — บังคับกรณีพัก ยกเลิก และเปิดคืน */
@@ -95,6 +103,20 @@ export interface StatusChangeRecord {
   publicComment?: PublicCommentRecord;
   /** รายละเอียดเพิ่มที่เก็บใน audit_log.new_value */
   auditDetail?: Record<string, unknown>;
+}
+
+/**
+ * หนึ่งขั้นในสายอนุมัติที่ต้องเกิดพร้อมกับเรื่อง
+ *
+ * ประกาศซ้ำที่นี่แทนการ import จาก repository โดยตั้งใจ — ชั้น use case
+ * ต้องไม่รู้จักไฟล์ที่ต่อฐานข้อมูล มิฉะนั้นทิศทางของ dependency จะกลับด้าน
+ * และเทสต์กฎธุรกิจจะลาก Drizzle เข้ามาทั้งก้อน
+ */
+export interface ApprovalStepRecord {
+  seq: number;
+  approverType: string;
+  /** null = ยังหาผู้อนุมัติไม่ได้ ต้องแจ้ง company_admin ให้กำหนดคน */
+  approverId: number | null;
 }
 
 /** ทุกอย่างที่ต้องบันทึกพร้อมกันเมื่อมอบหมายผู้รับผิดชอบหนึ่งครั้ง */
@@ -125,16 +147,27 @@ export interface ITicketRepository {
    */
   findById(scope: AccessScope, id: number): Promise<unknown>;
 
-  /** บันทึกเรื่องใหม่พร้อมออกเลขที่และเขียนประวัติแถวแรก ในทรานแซกชันเดียว */
+  /**
+   * บันทึกเรื่องใหม่พร้อมออกเลขที่ เขียนประวัติ และแตกขั้นอนุมัติ ในทรานแซกชันเดียว
+   *
+   * ขั้นอนุมัติต้องอยู่ทรานแซกชันเดียวกับเรื่องเสมอ — ถ้าเรื่องถูกบันทึกแล้ว
+   * แต่ใบอนุมัติเขียนไม่สำเร็จ จะได้คำขอที่ค้างอยู่ใน `pending_approval`
+   * โดยไม่มีใบให้ใครกดอนุมัติ และไม่มีทางกู้กลับมาได้นอกจากแก้มือในฐานข้อมูล
+   */
   create(
     entity: TicketEntity,
     sla: {
       policyId: number | null;
-      clockStartedAt: Date;
+      /** null = ยังไม่เริ่มจับเวลา (คำขอที่รออนุมัติอยู่ — SLA 5.3) */
+      clockStartedAt: Date | null;
       responseDueAt: Date | null;
       resolutionDueAt: Date | null;
     },
     actorId: number,
+    extras?: {
+      approvals?: readonly ApprovalStepRecord[];
+      initialStatus?: string;
+    },
   ): Promise<number>;
 
   /** บันทึกการเปลี่ยนสถานะพร้อมประวัติ ข้อความถึงผู้แจ้ง และ audit ในทรานแซกชันเดียว */

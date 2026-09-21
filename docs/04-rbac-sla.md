@@ -78,8 +78,10 @@
 **กฎบังคับของ approval**
 - ขั้น `n+1` เปิดใช้ได้เมื่อขั้น `n` เป็น `approved`
 - **ห้ามผู้ขออนุมัติคำขอของตนเอง** (`approver_id ≠ ticket.requester_id`) → `422 SELF_APPROVAL_FORBIDDEN`
-- ปฏิเสธขั้นใด → ticket ไป `cancelled` พร้อมเหตุผลจาก `comment` (บังคับ)
-- ขณะมีขั้น `pending` → ticket อยู่ `pending_user` + `pending_reason='approval'` → **หยุดนับ SLA**
+- ปฏิเสธขั้นใด → ticket ไป **`rejected`** (ไม่ใช่ `cancelled`) พร้อมเหตุผลจาก `comment` (บังคับ)
+- ขณะมีขั้น `pending` → ticket อยู่ **`pending_approval`** → **หยุดนับ SLA**
+- อนุมัติครบทุกขั้น → ticket ไป `assigned` และ **นาฬิกา fulfillment เริ่มนับที่วินาทีนั้น**
+- ขั้น `line_manager` หาคนเองจาก `app_user.manager_id` · `head_of_it` หาจาก `escalation_contact` · ชนิดอื่นเป็น NULL ให้ `company_admin` กำหนด
 
 ### 2.3 ผู้ใช้และองค์กร (9 permission)
 
@@ -216,10 +218,12 @@
 
 | กฎ | รายละเอียด |
 |---|---|
-| สถานะที่หยุดนับ | `pending_user` โดยแยก **`pending_reason`** 3 แบบ: `user` (รอข้อมูล/การยืนยันจากผู้แจ้ง) · `vendor` (รออะไหล่/ผู้ให้บริการภายนอก **ที่แจ้งผู้รับบริการแล้ว**) · `approval` (รอการอนุมัติ) |
-| สถานะที่ยังนับต่อ | `new`, `assigned`, `in_progress` |
+| สถานะที่หยุดนับ | **`pending_approval`** · **`pending_user`** · **`resolved`** · **`fulfilled`** — เป็นสถานะจริงทั้งหมดแล้ว (v3) ไม่ใช่ `pending_user` + `pending_reason` อีกต่อไป |
+| สถานะที่ยังนับต่อ | `new` · `assigned` · `in_progress` · **`pending_vendor`** |
+| **⚠️ `pending_vendor` ไม่หยุดนับ** | ตั้งใจให้ต่างจาก `pending_user` — การเลือกผู้ขายและการเร่งงานผู้ขายเป็นความรับผิดชอบของทีมไอที ส่วนการรอผู้แจ้งตอบเป็นสิ่งที่ทีมทำอะไรไม่ได้เลย · เป็น**สวิตช์นโยบาย**ที่เปลี่ยนได้ในอนาคต ถ้าจะเปลี่ยนให้ย้ายค่าเข้า `PAUSED_STATUSES` ใน `src/common/constants.ts` **ที่เดียว** |
+| **การคืนเวลาต่างกันสองแบบ** | **รอคนอื่น** (`pending_approval` / `pending_user`) คืนเวลาไม่ว่าจะออกทางไหน รวมทั้งไป `closed` · **งานเสร็จรอยืนยัน** (`resolved` / `fulfilled`) คืนเฉพาะตอนถูกเปิดคืน — ถ้าคืนตอนปิดด้วย ทุกใบที่ปิดจะมี `pending_duration_minutes > 0` แล้ว **KPI-3 จะร่วงเป็น 0% ทั้งกระดาน** (ดู `02-data-model.md` §6.5) |
 | **Workaround** | `workaround_at` → **หยุดนับ resolution ของ Incident ทันที** และ**บังคับเปิด `problem`** มิฉะนั้น `409 WORKAROUND_REQUIRES_PROBLEM` |
-| เงื่อนไขการเข้า `pending_user` | `user` ต้องมีคอมเมนต์สาธารณะระบุสิ่งที่รอ · **`vendor` ต้องมีคอมเมนต์สาธารณะแจ้งผู้รับบริการก่อน จึงตั้ง `pending_notified_at` ได้** · `approval` ระบบตั้งอัตโนมัติเมื่อมี `approval_request` ค้าง |
+| เงื่อนไขการเข้าสถานะพัก | `pending_user` ต้องมีคอมเมนต์สาธารณะระบุสิ่งที่รอ · **`pending_vendor` ต้องมีคอมเมนต์สาธารณะแจ้งผู้รับบริการก่อน จึงตั้ง `pending_notified_at` ได้** · `pending_approval` ระบบตั้งอัตโนมัติตอนสร้างเรื่องที่ catalog บังคับอนุมัติ · ทุกแบบบังคับ `reason` ≥ 10 ตัวอักษรลงประวัติ |
 | การกลับมานับต่อ | อัตโนมัติเมื่อผู้แจ้งคอมเมนต์ / อนุมัติครบ / agent เปลี่ยนสถานะเอง |
 | การบันทึก | บวกเวลาที่หยุด (นาทีทำการ) เข้า `pending_duration_minutes` และเลื่อน `resolution_due_at` ออกไปเท่ากัน |
 | **response SLA** | **ไม่หยุด** — วัดถึงการตอบครั้งแรกเท่านั้น |
@@ -237,8 +241,11 @@
 |---|---|
 | `first_response_at IS NULL` และ `now() > response_due_at` | `is_response_breached = true` + แจ้ง `sla_breached` |
 | `now() > resolution_due_at` และยังไม่ `resolved` | `is_resolution_breached = true` + แจ้ง `sla_breached` |
-| ใช้เวลาไป ≥ 75% และยังไม่เคยแจ้ง | แจ้ง `sla_warning` + ตั้ง `escalation_notified_at` (ครั้งเดียวต่อ ticket) |
-| สถานะ `pending_user` (ทุก reason) | **ข้าม** ไม่ประเมิน ไม่แจ้งเตือน |
+| ใช้เวลาไป ≥ **80%** (`sla_target.escalation_percent`) และยังไม่เสร็จ | เขียนแถว `notification` ชนิด **`sla_at_risk`** ถึงหัวหน้าไอที + ผู้จัดการเหตุการณ์ + ผู้ดูแลบริษัท + **ผู้รับผิดชอบปัจจุบัน** · ตั้ง `escalation_notified_at` ครั้งแรกครั้งเดียว |
+| เลย `resolution_due_at` แล้ว (**100%**) | เขียนแถว `notification` ชนิด **`sla_breached`** ถึงผู้รับชุดเดียวกัน |
+| กันแจ้งซ้ำ | UNIQUE `uq_notification_dedup` (`user_id`, `ticket_id`, `event_type`, `channel`, วันตามเวลาเวียงจันทน์) — **หนึ่งคนได้หนึ่งข้อความต่อหนึ่งเรื่องต่อหนึ่งเกณฑ์ต่อวัน** ต่อให้งานกวาดรันทุก 5 นาที |
+| สถานะที่หยุดนับ (`pending_approval` / `pending_user` / `resolved` / `fulfilled`) | **ข้าม** ไม่ประเมิน ไม่แจ้งเตือน |
+| สถานะ `pending_vendor` | **ประเมินตามปกติ** — นาฬิกาไม่ได้หยุด เรื่องที่ค้างอยู่กับผู้ขายนานเกินกำหนดต้องถูกตั้งธงจริง ไม่ใช่ซ่อนไว้ |
 | มี `workaround_at` แล้ว (Incident) | **ข้ามการประเมิน resolution** — นาฬิกาหยุดที่ `workaround_at` |
 | มี `sla_exclusion_code` | **ข้าม** ไม่ตั้งธง breach และไม่นับเข้า KPI |
 | **priority = `P1`** | **ประเมินทุก 5 นาทีตลอด 24 ชม.** รวมนอกเวลาทำการและวันหยุด |
@@ -250,7 +257,7 @@
 | `on_track` | เหลือเวลา > 20% |
 | `at_risk` | เหลือเวลา ≤ 20% |
 | `breached` | เกิน `resolution_due_at` |
-| `paused` | สถานะ `pending_user` |
+| `paused` | สถานะ `pending_approval` · `pending_user` · `resolved` · `fulfilled`<br>⚠️ **ไม่รวม `pending_vendor`** · v2 เคยให้ `resolved` เป็น `on_track` ซึ่งทำให้หน้าจอขึ้น "เหลืออีก 3 ชั่วโมง" ค้างไว้บนเรื่องที่งานเสร็จไปแล้ว |
 
 > **การเปลี่ยน priority ระหว่างทาง (SLA 5.4):** *"การปรับลด/เพิ่มระดับความสำคัญระหว่างทาง ให้นับเวลาตามระดับใหม่**ตั้งแต่เวลาที่ปรับ**"* → คำนวณ due ใหม่จาก **`priority_changed_at`** ไม่ใช่จาก `created_at` และต้องบันทึกเหตุผลใน `ticket_status_history` (บังคับ)
 
@@ -262,7 +269,7 @@
 |---|---|---|---|
 | Tier 1 | เจ้าหน้าที่ Service Desk | รับงานทั้งหมดเป็นด่านแรก | `support_tier = 1` เป็นค่าเริ่มต้น |
 | Tier 2 | System / Network Admin | **Tier 1 แก้ไม่ได้ภายใน 2 ชั่วโมงทำการ** | ครบ 2 ชม.ทำการ → **ตั้งธง + แจ้งเตือน** (agent ต้องยืนยันพร้อมสรุปสิ่งที่ตรวจแล้ว ตาม SOP-01 ข้อ 5 — **ระบบไม่เปลี่ยน tier ให้เอง**) |
-| Tier 3 | ผู้เชี่ยวชาญ / Vendor | Tier 2 แก้ไม่ได้ หรืออยู่ในความรับผิดชอบของผู้ผลิต | `support_tier = 3` + **บังคับกรอก `vendor_ref`** + เปิดให้ใช้ `pending_reason='vendor'` |
+| Tier 3 | ผู้เชี่ยวชาญ / Vendor | Tier 2 แก้ไม่ได้ หรืออยู่ในความรับผิดชอบของผู้ผลิต | `support_tier = 3` + **บังคับกรอก `vendor_ref`** + เปิดให้ใช้สถานะ **`pending_vendor`** |
 
 **Hierarchical Escalation** — ผู้รับแจ้งมาจากตาราง `escalation_contact` · กฎเก็บใน `sla_escalation_rule` (แก้ได้โดยไม่ deploy ใหม่)
 
@@ -298,7 +305,7 @@
 |---|---|---|---|---|
 | KPI-1 | SLA Compliance | **≥ 95%** | รายเดือน | ticket ที่ปิดในเดือนและแก้ทันเวลา ÷ ticket ที่ปิดทั้งหมด **(ตัด `sla_exclusion_code` ออกจากตัวหาร)** |
 | KPI-2 | First Response Time | **≤ 30 นาที** | รายเดือน | `AVG(created_at → first_response_at)` — **แยกราย priority เสมอ** เพราะ P1 นับปฏิทิน P2–P4 นับเวลาทำการ |
-| KPI-3 | First Contact Resolution | **≥ 70%** | รายเดือน | incident ที่ `support_tier=1` และ `assignee_change_count=0` และไม่เคย `pending_user` และ `reopen_count=0` ÷ incident ที่ปิดทั้งหมด |
+| KPI-3 | First Contact Resolution | **≥ 70%** | รายเดือน | incident ที่ `support_tier=1` และ `assignee_change_count=0` และ `pending_duration_minutes=0` และ `reopen_count=0` ÷ incident ที่ปิดทั้งหมด<br>⚠️ `pending_duration_minutes=0` คือตัวแทนความหมาย *"ไม่เคยต้องรอใคร"* — กติกาการคืนเวลาใน §4.1 ถูกออกแบบมาเพื่อรักษาความหมายนี้ไว้ อย่าแก้ข้างใดข้างหนึ่งโดยไม่ดูอีกข้าง |
 | KPI-4 | CSAT | **≥ 4.2 / 5.0** | รายไตรมาส | `AVG(satisfaction_score)` **พร้อมรายงาน Response Rate ควบคู่เสมอ** = `csat_responded_at` ÷ `csat_sent_at` |
 | KPI-5 | Aged Backlog | **≤ 5%** | **รายสัปดาห์** | ticket ที่ยังเปิดและเกิน `resolution_due_at` ÷ ticket ที่ยังเปิดทั้งหมด |
 | KPI-6 | Uptime ระบบ Critical | **≥ 99.9%/เดือน** | รายเดือน | `[(เวลาที่ตกลงให้บริการ − Σ downtime ที่ไม่ได้วางแผน) ÷ เวลาที่ตกลงให้บริการ] × 100` · `is_24x7=true` → 43,200 นาที/เดือน |

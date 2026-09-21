@@ -18,7 +18,10 @@ import {
   type SupportProjectWrite,
 } from '../../db/repositories/support-project.repository';
 import { company, supportTeam, ticketCategory } from '../../db/schema';
-import { chatwootWebsiteInboxes } from '../../integrations/chatwoot/chatwoot-api';
+import {
+  chatwootCreateWebsiteInbox,
+  chatwootWebsiteInboxes,
+} from '../../integrations/chatwoot/chatwoot-api';
 import { readChatwootSyncConfig } from '../../integrations/chatwoot/chatwoot-sync.config';
 import { readChatwootWidgetConfig } from '../../integrations/chatwoot/chatwoot-widget.config';
 import {
@@ -118,6 +121,108 @@ export class SupportProjectsService {
       website_token: inbox.website_token ?? null,
       linked_project_code: linked.get(inbox.id) ?? null,
     }));
+  }
+
+  /**
+   * POST /support-projects/{id}/chatwoot-inbox — สร้าง inbox ใหม่ใน Chatwoot ให้โครงการนี้
+   *
+   * ⚠️ endpoint เดียวในระบบที่ **เขียน** ลง Chatwoot ซึ่งเป็นระบบที่ทีมใช้งานอยู่จริง
+   *    inbox ที่สร้างจะโผล่ในแอปของเจ้าหน้าที่ทันที และลบทิ้งจากที่นี่ไม่ได้
+   *    ด่านจึงเป็น user.assign_role เท่ากับการแก้โครงการทุกทาง และโครงการต้องอยู่ในขอบเขต
+   *
+   * **สร้างใหม่อย่างเดียว ไม่ผูกซ้ำ** — โครงการที่มี inbox อยู่แล้วได้ 409
+   * การเปลี่ยน inbox ของโครงการที่มีอยู่แล้วยังทำผ่าน PATCH เหมือนเดิม
+   * (ที่นั่นเลือกจาก inbox ที่มีอยู่ ไม่ได้สร้างของใหม่ทิ้งไว้ในระบบของคนอื่น)
+   */
+  async createChatwootInbox(scope: AccessScope, id: number): Promise<SupportProjectDto> {
+    scope.require(WRITE_PERMISSION);
+
+    const before = await this.projects.mustFind(id);
+    this.assertProjectInScope(scope, before.companyId);
+
+    if (before.chatwootInboxId !== null) {
+      throw new DomainError({
+        code: 'ALREADY_LINKED',
+        message: 'ໂຄງການນີ້ຜູກກັບ inbox ຢູ່ແລ້ວ',
+        kind: 'conflict',
+        issues: [{ field: 'chatwoot_inbox_id', message: 'ປ່ຽນ inbox ໄດ້ທີ່ໜ້າແກ້ໄຂໂຄງການ' }],
+      });
+    }
+
+    /*
+     * ⚠️ โครงการที่ปิดใช้งานอยู่ (เช่น ระบบที่ลงทะเบียนไว้ล่วงหน้าแต่ยังไม่ถึงคิวเปิดใช้)
+     *    ต้องเปิดใช้งานก่อน แล้วค่อยสร้าง inbox — ไม่ใช่กันย้อนกลับ
+     *
+     *    ก่อนเปิดใช้งานจริง เจ้าของระบบยังไม่ต้องการให้มี inbox ของโครงการนั้นเกิดขึ้น
+     *    ใน Chatwoot เลย แม้จะยังไม่ผูกกับหน้าเว็บใดก็ตาม — inbox ที่สร้างไปแล้วลบเองไม่ได้
+     *    (ดู log ด้านล่างตอนชนกันของ ALREADY_LINKED) การกันไว้ตรงนี้ที่เดียว
+     *    คุ้มครองทุกโครงการที่ยังปิดอยู่พร้อมกัน ไม่ใช่แค่ตัวใดตัวหนึ่ง
+     */
+    if (!before.isActive) {
+      throw new ValidationError('VALIDATION_ERROR', 'ໂຄງການນີ້ຍັງປິດໃຊ້ງານຢູ່', [
+        {
+          field: 'is_active',
+          message: 'ເປີດໃຊ້ງານໂຄງການກ່ອນ ຈຶ່ງສ້າງ inbox ໃນ Chatwoot ໄດ້',
+        },
+      ]);
+    }
+
+    if (!this.chatwoot.apiReady) {
+      throw new ServiceUnavailableError(
+        'CHATWOOT_NOT_CONFIGURED',
+        'ຍັງບໍ່ໄດ້ຕັ້ງຄ່າການເຊື່ອມຕໍ່ກັບ Chatwoot — ກະລຸນາແຈ້ງຜູ້ດູແລລະບົບ',
+      );
+    }
+
+    /*
+     * Chatwoot บังคับ website_url ของช่องทาง web_widget — ตรวจก่อนยิง
+     * ไม่งั้นผู้ใช้จะได้ข้อความดิบของ Rails กลับไปแทนคำแนะนำว่าต้องกรอกช่องไหน
+     */
+    if (!before.websiteUrl) {
+      throw new ValidationError('VALIDATION_ERROR', 'ກະລຸນາໃສ່ທີ່ຢູ່ເວັບຂອງໂຄງການກ່ອນ', [
+        { field: 'website_url', message: 'Chatwoot ຕ້ອງການທີ່ຢູ່ເວັບທີ່ widget ຈະຖືກຝັງ' },
+      ]);
+    }
+
+    const created = await chatwootCreateWebsiteInbox(this.chatwoot, {
+      name: before.name,
+      websiteUrl: before.websiteUrl,
+      locale: before.locale,
+    }).catch((error: unknown) => {
+      this.logger.warn(`สร้าง inbox ใน Chatwoot ไม่สำเร็จ: ${describe(error)}`);
+      throw new ServiceUnavailableError(
+        'CHATWOOT_UNREACHABLE',
+        'ສ້າງ inbox ໃນ Chatwoot ບໍ່ສຳເລັດ — ກະລຸນາລອງໃໝ່ພາຍຫຼັງ',
+      );
+    });
+
+    /*
+     * อ่านซ้ำก่อนเขียน — ระหว่างที่รอ Chatwoot ตอบ อาจมีคนผูก inbox ให้โครงการนี้ไปแล้ว
+     * เขียนทับตรงนี้จะทำให้ inbox ที่เขาเพิ่งผูกหลุดออกไปเงียบ ๆ
+     * inbox ที่เราเพิ่งสร้างจะค้างอยู่ใน Chatwoot โดยไม่มีโครงการไหนใช้ — ลบเองไม่ได้
+     * จึงบันทึกเลขไว้ใน log ให้ผู้ดูแลตามไปเก็บกวาดในแอปของ Chatwoot
+     */
+    const current = await this.projects.mustFind(id);
+    if (current.chatwootInboxId !== null) {
+      this.logger.warn(
+        `โครงการ ${current.code} ถูกผูก inbox ไปก่อนแล้ว — inbox #${created.id} ที่เพิ่งสร้างใน Chatwoot ไม่มีใครใช้ ต้องลบมือ`,
+      );
+      throw new DomainError({
+        code: 'ALREADY_LINKED',
+        message: 'ໂຄງການນີ້ຜູກກັບ inbox ຢູ່ແລ້ວ',
+        kind: 'conflict',
+        issues: [{ field: 'chatwoot_inbox_id', message: 'ປ່ຽນ inbox ໄດ້ທີ່ໜ້າແກ້ໄຂໂຄງການ' }],
+      });
+    }
+
+    await this.projects.updateProject(
+      id,
+      { chatwootInboxId: created.id, chatwootWebsiteToken: created.websiteToken },
+      scope.userId,
+      current,
+    );
+    this.logger.log(`สร้าง inbox #${created.id} ใน Chatwoot ให้โครงการ ${current.code} แล้ว`);
+    return this.detail(id);
   }
 
   /** POST /support-projects */
@@ -374,6 +479,11 @@ export class SupportProjectsService {
       throw new ForbiddenError('FORBIDDEN', 'ໂຄງການນີ້ບໍ່ຢູ່ໃນຂອບເຂດທີ່ທ່ານດູແລ');
     }
   }
+}
+
+/** ข้อความผิดพลาดที่ปลอดภัยพอจะเขียนลง log — ไม่พ่น object ทั้งก้อนออกมา */
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** ของส่วนกลาง (null) ทุกคนใช้ได้ · ของบริษัทต้องอยู่ในขอบเขต */

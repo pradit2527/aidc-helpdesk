@@ -11,12 +11,18 @@
 import 'dotenv/config';
 
 import * as argon2 from 'argon2';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import * as schema from '../schema';
-import { CATALOG_ITEMS, CHECKLIST_TEMPLATES, KB_CATEGORIES, TICKET_CATEGORIES } from './data/catalog';
+import {
+  CATALOG_ITEMS,
+  CHECKLIST_TEMPLATES,
+  KB_CATEGORIES,
+  TICKET_CATEGORIES,
+  TICKET_SUBCATEGORIES,
+} from './data/catalog';
 import { seedServices } from './services';
 import { seedTicketSubcategories } from './ticket-subcategories';
 import { COMPANIES, OWNER_COMPANY_CODE } from './data/organization';
@@ -69,7 +75,11 @@ function validate(): void {
     }
   }
 
-  const catalogCategories = new Set(TICKET_CATEGORIES.map((c) => c.code));
+  // รายการ catalog ผูกกับหมวดย่อย (ใบของต้นไม้) ได้ ไม่ใช่แค่หมวดหลัก
+  const catalogCategories = new Set([
+    ...TICKET_CATEGORIES.map((c) => c.code),
+    ...TICKET_SUBCATEGORIES.map((c) => c.code),
+  ]);
   for (const item of CATALOG_ITEMS) {
     if (!catalogCategories.has(item.categoryCode)) {
       throw new Error(`catalog ${item.code} อ้างหมวดหมู่ที่ไม่มี: ${item.categoryCode}`);
@@ -301,6 +311,7 @@ async function seedCatalog(db: Db): Promise<void> {
         nameTh: c.nameTh,
         defaultImpact: c.defaultImpact,
         defaultUrgency: c.defaultUrgency,
+        ticketTypeScope: c.ticketTypeScope ?? 'both',
         sortOrder: c.sortOrder,
         isActive: c.isActive ?? true,
       })),
@@ -311,6 +322,8 @@ async function seedCatalog(db: Db): Promise<void> {
         nameTh: sql`excluded.name_th`,
         defaultImpact: sql`excluded.default_impact`,
         defaultUrgency: sql`excluded.default_urgency`,
+        // ต้องอัปเดตด้วย มิฉะนั้นการปรับขอบเขตใน seed จะไม่มีผลกับฐานข้อมูลที่มีอยู่แล้ว
+        ticketTypeScope: sql`excluded.ticket_type_scope`,
         sortOrder: sql`excluded.sort_order`,
         // ต้องอัปเดตด้วย มิฉะนั้นการปิดหมวดใน seed จะไม่มีผลกับฐานข้อมูลที่มีอยู่แล้ว
         isActive: sql`excluded.is_active`,
@@ -320,6 +333,20 @@ async function seedCatalog(db: Db): Promise<void> {
   record('ticket_category', categories.length);
   const categoryId = new Map(categories.map((c) => [c.code, c.id]));
   record('ticket_category', await seedTicketSubcategories(db, categoryId));
+  // catalog ผูกกับหมวดย่อย — ต้องรู้ id ของหมวดย่อยที่เพิ่งใส่ด้วย
+  const subcategories = await db
+    .select({ id: schema.ticketCategory.id, code: schema.ticketCategory.code })
+    .from(schema.ticketCategory)
+    .where(
+      and(
+        isNull(schema.ticketCategory.companyId),
+        inArray(
+          schema.ticketCategory.code,
+          TICKET_SUBCATEGORIES.map((c) => c.code),
+        ),
+      ),
+    );
+  for (const c of subcategories) categoryId.set(c.code, c.id);
   record('service', (await seedServices(db)).length);
 
   const templates = await db

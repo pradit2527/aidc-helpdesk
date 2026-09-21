@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from 'dri
 import { NotFoundError } from '../../common/errors/domain-error';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../client';
-import { DB } from '../db.module';
+import { DB } from '../db.token';
 import { auditLog, company, supportChat, supportProject, supportTeam, ticketCategory } from '../schema';
 import { OWNER_COMPANY_CODE } from '../seed/data/organization';
 

@@ -6,7 +6,9 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
+import { ticketKeys } from '@/lib/queries/tickets';
+import type { TicketListItem } from '@/lib/types';
 
 /**
  * แชทช่วยเหลือระหว่างผู้ใช้กับทีมไอที
@@ -338,6 +340,80 @@ export function useMarkChatRead() {
       qc.setQueriesData<SupportChatSummary[]>({ queryKey: chatKeys.inboxAll() }, (old) =>
         old?.map(clear),
       );
+    },
+  });
+}
+
+/**
+ * เขียนสถานะล่าสุดของห้องลงทุกที่ที่ห้องนั้นโผล่อยู่
+ *
+ * ห้องเดียวกันอยู่ใน cache ได้หลายที่พร้อมกัน — ห้องที่เปิดค้างอยู่ กับกล่องแชท
+ * ทุกชุดตัวกรอง (ดูหมายเหตุใน useMarkChatRead) การเขียนแค่ที่เดียวจะเหลืออีกที่
+ * ถือค่าเก่า แล้วปุ่ม "ຍົກເປັນ Ticket" จะกลับมาโผล่ทั้งที่ยกไปแล้ว
+ *
+ * รวมข้อมูลทับของเดิม ไม่ใช่แทนที่ทั้งก้อน — คำตอบของ API เป็นรูปย่อที่ไม่มี messages
+ */
+function applyChatSummary(qc: QueryClient, chat: SupportChatSummary): void {
+  qc.setQueryData<SupportChatThread>(chatKeys.thread(chat.id), (old) =>
+    old ? { ...old, ...chat } : old,
+  );
+  qc.setQueriesData<SupportChatSummary[]>({ queryKey: chatKeys.inboxAll() }, (old) =>
+    old?.map((item) => (item.id === chat.id ? { ...item, ...chat } : item)),
+  );
+}
+
+/**
+ * ยกแชทเป็น Ticket
+ *
+ * ทุกช่องไม่บังคับยกเว้นหัวข้อ — ที่ไม่ส่งมา backend เติมค่าตั้งต้นของโครงการ
+ * และของหมวดหมู่ให้เอง (ห้ามเดาค่าพวกนั้นที่หน้าจอ กติกาอยู่ฝั่งเดียวเท่านั้น)
+ */
+export interface ConvertChatToTicketInput {
+  subject: string;
+  /** ไม่ส่ง = ให้ backend ประกอบรายละเอียดจากบทสนทนาเอง */
+  description?: string;
+  category_id?: number;
+  impact?: string;
+  urgency?: string;
+}
+
+/** ข้อมูลติดต่อ ณ วันที่ยกเป็น Ticket — เก็บไว้กับใบนั้น ไม่เปลี่ยนตามที่ผู้เข้าชมแก้ทีหลัง */
+export interface ChatContactSnapshot {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface ConvertChatToTicketResult {
+  chat: SupportChatSummary;
+  ticket: TicketListItem;
+  /** null = ห้องที่ไม่ได้มาจาก widget หรือผู้เข้าชมไม่ได้ฝากข้อมูลติดต่อไว้ */
+  contact_snapshot: ChatContactSnapshot | null;
+}
+
+export function useConvertChatToTicket(chatId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ConvertChatToTicketInput) =>
+      api.post<ConvertChatToTicketResult>(`/support-chat/${chatId}/ticket`, input),
+    onSuccess: (result) => {
+      applyChatSummary(qc, result.chat);
+      /*
+       * เรื่องใหม่โผล่ได้ทั้งในคิวทีมและในรายการของผู้แจ้ง จึงล้างทั้งกลุ่ม
+       * ไม่ใช่เฉพาะรายการเดียว — เหตุผลเดียวกับ useCreateTicket
+       */
+      void qc.invalidateQueries({ queryKey: ticketKeys.all });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (error) => {
+      /*
+       * 409 = มีคนอื่นยกห้องนี้เป็น Ticket ไปแล้วระหว่างที่กล่องนี้เปิดค้างอยู่
+       * ดึงห้องใหม่ทันที ปุ่มจะกลายเป็นลิงก์ไปใบที่มีอยู่แล้วเอง
+       */
+      if (error instanceof ApiError && error.status === 409) {
+        void qc.invalidateQueries({ queryKey: chatKeys.thread(chatId) });
+        void qc.invalidateQueries({ queryKey: chatKeys.inboxAll() });
+      }
     },
   });
 }

@@ -15,6 +15,7 @@ import {
   timestamp,
   unique,
   varchar,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 import { AUTH_PROVIDER, CONTACT_KEY } from '../../common/constants';
@@ -70,6 +71,24 @@ export const appUser = pgTable(
     phone: varchar('phone', { length: 30 }),
     jobTitle: varchar('job_title', { length: 100 }),
 
+    /**
+     * หัวหน้าสายงานของคนนี้ — ใช้หาผู้อนุมัติขั้น `line_manager` อัตโนมัติ
+     *
+     * ทำไมต้องเป็นสายงานจริง ไม่ใช่ "หัวหน้าแผนกของ department_id"
+     *   แผนกเป็นหน่วยจัดกลุ่มเพื่อรายงาน ไม่ใช่สายบังคับบัญชา — ในเครือ AIDC
+     *   มีคนที่สังกัดแผนกหนึ่งแต่รายงานตรงกับคนอีกแผนก และมีหัวหน้าแผนก
+     *   ที่ไม่ได้เป็นผู้อนุมัติของทุกคนในแผนกนั้น ถ้าเดาจากแผนก คำขอจะถูกส่ง
+     *   ไปให้คนที่ไม่มีอำนาจอนุมัติ แล้วค้างอยู่ในคิวของเขาโดยไม่มีใครรู้
+     *
+     * nullable โดยตั้งใจ — ผู้บริหารระดับบนสุดไม่มีหัวหน้า และบัญชีที่ยังไม่ได้
+     * ตั้งค่าก็ต้องใช้งานได้ตามปกติ กรณีนั้น approval_request.approver_id
+     * จะเป็น null แล้ว company_admin ต้องมากำหนดคนเอง (ตามหมายเหตุในตารางนั้น)
+     *
+     * ⚠️ ไม่มี CHECK กันวงจร (ก เป็นหัวหน้า ข, ข เป็นหัวหน้า ก) เพราะ CHECK
+     *    มองได้แค่แถวเดียว การไล่สายอนุมัติจึงต้องมีเพดานความลึกเสมอ
+     */
+    managerId: bigint('manager_id', { mode: 'number' }).references((): AnyPgColumn => appUser.id),
+
     // nullable เพราะผู้ใช้ SSO ในเฟส 2 จะไม่มีรหัสผ่าน — เตรียมไว้ตั้งแต่แรก
     // จะได้ไม่ต้องทำ migration ที่กระทบทุกแถวภายหลัง (B-01)
     passwordHash: varchar('password_hash', { length: 255 }),
@@ -106,6 +125,9 @@ export const appUser = pgTable(
       sql`auth_provider <> 'local' OR password_hash IS NOT NULL`,
     ),
     index('ix_app_user_company_active').on(t.companyId, t.isActive),
+    // "ใครรายงานตรงกับคนนี้บ้าง" — หน้าจัดการผู้ใช้ของ company_admin
+    // partial เพราะบัญชีส่วนใหญ่ยังไม่ได้ตั้งหัวหน้าไว้
+    index('ix_app_user_manager').on(t.managerId).where(sql`manager_id IS NOT NULL`),
   ],
 );
 

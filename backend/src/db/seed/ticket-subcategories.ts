@@ -32,6 +32,7 @@ export async function seedTicketSubcategories(
       nameTh: c.nameTh,
       defaultImpact: c.defaultImpact,
       defaultUrgency: c.defaultUrgency,
+      ticketTypeScope: c.ticketTypeScope ?? 'both',
       sortOrder: c.sortOrder,
       isActive: c.isActive ?? true,
     };
@@ -48,6 +49,7 @@ export async function seedTicketSubcategories(
         nameTh: sql`excluded.name_th`,
         defaultImpact: sql`excluded.default_impact`,
         defaultUrgency: sql`excluded.default_urgency`,
+        ticketTypeScope: sql`excluded.ticket_type_scope`,
         sortOrder: sql`excluded.sort_order`,
         isActive: sql`excluded.is_active`,
       },

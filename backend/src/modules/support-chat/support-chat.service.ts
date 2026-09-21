@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import {
   ConflictError,
@@ -18,13 +18,18 @@ import {
   type SupportChatMessageRow,
   type SupportChatRow,
 } from '../../db/repositories/support-chat.repository';
+import { SupportProjectRepository } from '../../db/repositories/support-project.repository';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { TicketsService, toTicketListItem } from '../tickets/tickets.service';
 import { chatFilePath, writeChatFile } from './chat-file-store';
 import { CHAT_MAX_FILE_BYTES, decodeUploadName, detectChatFile } from './chat-file-type';
+import { clampSubject, renderTranscript, resolveTicketDefaults } from './chat-ticket';
 import { ChatwootSyncService } from './chatwoot-sync.service';
 import { visitorName } from './chatwoot-widget';
 import {
   SUPPORT_CHAT_MAX_BODY,
+  type ConvertChatToTicketDto,
+  type ConvertChatToTicketResponseDto,
   type SendChatMessageDto,
   type SendChatMessageResponseDto,
   type SupportChatSummaryDto,
@@ -57,10 +62,14 @@ const ATTACHMENT_LABEL: Record<ChatAttachmentKind, string> = {
 
 @Injectable()
 export class SupportChatService {
+  private readonly logger = new Logger('SupportChat');
+
   constructor(
     private readonly chats: SupportChatRepository,
     private readonly realtime: RealtimeGateway,
     private readonly chatwoot: ChatwootSyncService,
+    private readonly projects: SupportProjectRepository,
+    private readonly tickets: TicketsService,
   ) {}
 
   /** ห้องแชทของผู้ใช้เอง — null ถ้ายังไม่เคยคุย */
@@ -181,6 +190,139 @@ export class SupportChatService {
 
     const current = await this.mustFind(row.id);
     return this.summary(current, 'staff', null);
+  }
+
+  /**
+   * ยกระดับห้องแชทเป็นเรื่องแจ้ง (POST /support-chat/{id}/ticket)
+   *
+   * ด่านเดียวกับการปิดห้อง: ต้องเป็นทีมไอทีในขอบเขตบริษัทของห้องนั้น
+   * (`ticket.change_status` — ดู access() และ STAFF_PERMISSION)
+   *
+   * ผู้แจ้งของเรื่องที่ได้
+   *   - ห้องของพนักงาน หรือห้องจาก widget ที่จับคู่กับบัญชีจริงแล้ว → บัญชีนั้น
+   *   - ห้องจาก widget ที่ยังไม่รู้ว่าเป็นใคร → **เจ้าหน้าที่ที่กด** เป็นทั้งผู้แจ้งและผู้สร้าง
+   *
+   * ⚠️ ข้อหลังสำคัญ: ห้ามสร้างบัญชีให้ผู้เข้าชม และห้ามยืมบัญชีใครมาเป็นผู้แจ้ง
+   *    ตัวตนของผู้เข้าชมเท่าที่รู้ถูกส่งกลับไปใน `contact_snapshot` ของคำตอบ
+   *    เพื่อให้หน้าจอบอกได้ว่าคนที่ถามจริง ๆ คือใคร โดยไม่ต้องแตะแถวของ ticket เลย
+   *
+   * ไม่มีการมอบหมายผู้รับผิดชอบอัตโนมัติ — เรื่องเข้าคิวที่ยังไม่มีคนรับตามปกติ
+   */
+  async convertToTicket(
+    scope: AccessScope,
+    id: number,
+    dto: ConvertChatToTicketDto,
+  ): Promise<ConvertChatToTicketResponseDto> {
+    const { row, side } = await this.access(scope, id);
+    if (side !== 'staff') {
+      throw new ForbiddenError('FORBIDDEN', 'ມີແຕ່ທີມໄອທີທີ່ສ້າງເລື່ອງແຈ້ງຈາກແຊັດໄດ້');
+    }
+    assertNotLinked(row);
+
+    const project = row.projectId === null ? null : await this.projects.byId(row.projectId);
+    const defaults = resolveTicketDefaults({
+      categoryId: dto.category_id,
+      projectDefaultCategoryId: project?.defaultCategoryId ?? null,
+      impact: dto.impact,
+      urgency: dto.urgency,
+    });
+    if (defaults.categoryId === null) {
+      throw new ValidationError('VALIDATION_ERROR', 'ກະລຸນາເລືອກໝວດໝູ່ຂອງເລື່ອງ', [
+        {
+          field: 'category_id',
+          message: 'ໂຄງການນີ້ຍັງບໍ່ໄດ້ຕັ້ງໝວດໝູ່ຕັ້ງຕົ້ນໄວ້ — ກະລຸນາເລືອກເອງ',
+        },
+      ]);
+    }
+
+    const description = dto.description?.trim() || (await this.transcriptOf(row));
+
+    /*
+     * สร้างผ่าน TicketsService เส้นทางเดียวกับ POST /tickets ทุกประการ
+     *
+     * จึงได้การตรวจหมวดหมู่ ขอบเขตบริษัท กฎ "แจ้งแทนผู้อื่น" การคำนวณ priority
+     * กำหนดเวลา SLA และการส่งขึ้นบอร์ด Super Work เหมือนเรื่องที่แจ้งตามปกติ
+     * ถ้าเขียน insert เองที่นี่ เรื่องที่มาจากแชทจะหลุดกฎเหล่านั้นไปทีละข้อ
+     */
+    /*
+     * ผู้ถามเป็นพนักงานในเครือจริงหรือไม่
+     *
+     * ⚠️ ตัดสินจาก requester_id ของ "ห้องแชท" ไม่ใช่ของ ticket ที่กำลังจะสร้าง
+     *    บรรทัดล่างใส่ `scope.userId` (เจ้าหน้าที่ที่กด) เป็นผู้แจ้งเมื่อห้องยัง
+     *    จับคู่กับบัญชีไม่ได้ ซึ่งเป็นการลงบัญชีให้คอลัมน์ NOT NULL มีค่า
+     *    ไม่ใช่ข้อเท็จจริงว่าคนถามเป็นพนักงาน ถ้าอ่านจากตรงนั้น กฎ
+     *    "เหตุขัดข้องเป็นของพนักงานเท่านั้น" จะเป็นจริงเสมอและไม่เคยทำงานเลย
+     */
+    const submitterIsInternal = row.requesterId !== null;
+
+    const detail = await this.tickets.create(scope, {
+      subject: clampSubject(dto.subject),
+      description,
+      category_id: defaults.categoryId,
+      impact: defaults.impact,
+      urgency: defaults.urgency,
+      company_id: row.companyId,
+      requester_id: row.requesterId ?? scope.userId,
+      ...(row.projectId !== null ? { project_id: row.projectId } : {}),
+    },
+    /*
+     * ส่งนอก DTO โดยตั้งใจ — ห้ามให้ค่านี้มาจาก request body เด็ดขาด
+     *
+     * ค่า true คือด้านที่ "ผ่อนกฎ" (ปลดล็อกให้แจ้งเหตุขัดข้องได้) ถ้ามันเป็น
+     * ฟิลด์ในเนื้อคำขอ ใครก็ตามที่เรียก API ได้จะส่ง true มาเองเพื่อข้ามกฎ
+     * ข้อเท็จจริงนี้ต้องมาจากสิ่งที่เซิร์ฟเวอร์รู้เท่านั้น
+     */
+    { submitterIsInternal });
+
+    /*
+     * ผูกสองทาง — ถ้าอีกแท็บผูกไปก่อนแล้ว เราจะได้ false ที่บรรทัดนี้
+     *
+     * เรื่องที่เพิ่งสร้างจะกลายเป็นเรื่องที่ไม่มีห้องผูกอยู่ ซึ่งลบทิ้งเองไม่ได้
+     * (ระบบนี้ไม่ลบ ticket) จึงบันทึกเลขที่ไว้ใน log ให้ทีมตามไปยกเลิกได้
+     * แล้วตอบ 409 เหมือนกรณีที่ตรวจเจอตั้งแต่ต้น — ผู้ใช้เห็นผลเดียวกันทั้งสองทาง
+     */
+    if (!(await this.chats.linkTicket(row.id, detail.id))) {
+      this.logger.warn(
+        `แชท #${row.id} ถูกผูกกับเรื่องอื่นไปก่อนแล้ว — เรื่อง ${detail.ticket_no} ที่เพิ่งสร้างจึงไม่มีห้องผูกอยู่`,
+      );
+      throw new ConflictError('CHAT_ALREADY_LINKED', 'ແຊັດນີ້ຖືກຜູກກັບເລື່ອງແຈ້ງແລ້ວ', {
+        chatId: row.id,
+        orphanTicketNo: detail.ticket_no,
+      });
+    }
+
+    const linked = await this.mustFind(row.id);
+    return {
+      chat: this.summary(linked, 'staff', null),
+      ticket: toTicketListItem(detail),
+      /*
+       * ตัวตนของผู้เข้าชม ณ เวลาที่ยกระดับ — เฉพาะห้องจาก widget
+       * ห้องของพนักงานมีผู้แจ้งเป็นบัญชีจริงอยู่แล้ว ไม่มีอะไรให้สับสน
+       *
+       * ผู้เข้าชมที่ไม่ได้ฝากอะไรไว้เลยก็เป็น null ไม่ใช่ก้อนที่ว่างทั้งสามช่อง —
+       * หน้าจอจะได้ตัดสินด้วยเงื่อนไขเดียวว่า "มีตัวตนให้แสดงไหม"
+       * ไม่ต้องไล่เช็คทีละช่องแล้วเผลอขึ้นกล่องเปล่า
+       */
+      contact_snapshot: contactSnapshot(linked),
+    };
+  }
+
+  /** บทสนทนาในห้องที่ถอดเป็นรายละเอียดของเรื่อง — ใช้เมื่อผู้เรียกไม่ได้เขียนมาเอง */
+  private async transcriptOf(row: SupportChatRow): Promise<string> {
+    const messages = await this.chats.messages(row.id);
+    return renderTranscript(
+      messages.map((message) => ({
+        senderId: message.senderId,
+        senderName: message.senderName,
+        externalSenderName: message.externalSenderName,
+        body: message.body,
+        isSystem: message.isSystem,
+        fromContact: message.fromContact,
+        attachmentKind: message.attachment?.kind ?? null,
+        createdAt: message.createdAt,
+      })),
+      { requesterId: row.requesterId, contactName: row.contactName },
+    );
   }
 
   private async postAsRequester(
@@ -398,6 +540,34 @@ function toLastMessage(chatId: number, message: SupportChatMessageRow): LastMess
 function assertOpen(row: SupportChatRow): void {
   if (row.status !== 'open') {
     throw new ConflictError('CHAT_CLOSED', 'ແຊັດນີ້ປິດແລ້ວ');
+  }
+}
+
+/**
+ * ตัวตนของผู้เข้าชม ณ เวลาที่ยกระดับเป็นเรื่อง
+ *
+ * null เมื่อห้องไม่ได้มาจาก widget หรือผู้เข้าชมไม่ได้ฝากอะไรไว้เลย
+ * ⚠️ ค่านี้อยู่ในคำตอบเท่านั้น ไม่ได้ถูกเขียนลงแถวของ ticket
+ */
+function contactSnapshot(
+  row: SupportChatRow,
+): { name: string | null; email: string | null; phone: string | null } | null {
+  if (row.origin !== 'widget') return null;
+  const snapshot = { name: row.contactName, email: row.contactEmail, phone: row.contactPhone };
+  return Object.values(snapshot).some((value) => value !== null) ? snapshot : null;
+}
+
+/**
+ * หนึ่งห้องผูกกับเรื่องได้เรื่องเดียว
+ *
+ * ถ้ายอมให้ผูกซ้ำ ข้อความบอกความคืบหน้าจากสองเรื่องจะไหลลงห้องเดียวกัน
+ * แล้วผู้ถามจะอ่านว่า "แก้ไขสำเร็จแล้ว" สลับกับ "กำลังดำเนินการ" โดยไม่รู้ว่าของเรื่องไหน
+ */
+function assertNotLinked(row: SupportChatRow): void {
+  if (row.ticketId !== null) {
+    throw new ConflictError('CHAT_ALREADY_LINKED', 'ແຊັດນີ້ຖືກຜູກກັບເລື່ອງແຈ້ງແລ້ວ', {
+      ticketId: row.ticketId,
+    });
   }
 }
 

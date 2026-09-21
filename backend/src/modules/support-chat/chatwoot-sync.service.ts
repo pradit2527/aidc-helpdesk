@@ -21,6 +21,7 @@ import { CHAT_MAX_FILE_BYTES, detectChatFile } from './chat-file-type';
 import {
   classifyMessage,
   isImportable,
+  isPushableToVisitor,
   isWithinWindow,
   requesterLinkDecision,
   shouldCloseFromChatwoot,
@@ -389,10 +390,16 @@ export class ChatwootSyncService implements OnModuleInit, OnModuleDestroy {
     const conversationId = row.chatwootConversationId;
     if (conversationId === null) return;
 
-    const pending = await this.chats.pendingOutbound(row.id);
+    /*
+     * ห้องที่ยังเปิดอยู่เอาข้อความของระบบมาด้วย — ตัวที่บอกผู้เข้าชมว่าเรื่องที่
+     * ผูกกับห้องนี้ไปถึงไหนแล้ว · isPushableToVisitor ตัดสินรายข้อความอีกชั้น
+     */
+    const pending = await this.chats.pendingOutbound(row.id, {
+      includeSystem: row.status === 'open',
+    });
+    const now = new Date();
     for (const message of pending) {
-      // ข้อความที่ไม่มีคนใน Helpdesk เป็นเจ้าของ ไม่ถูกส่งออกไปหาผู้เข้าชม
-      if (message.senderId === null) continue;
+      if (!isPushableToVisitor(row, message, now)) continue;
       const chatwootId = await this.postMessage(conversationId, message.body, 'outgoing', message);
       await this.chats.markPushed(message.id, chatwootId);
       await this.chats.advanceCursor(row.id, chatwootId);

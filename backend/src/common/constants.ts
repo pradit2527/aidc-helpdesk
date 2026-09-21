@@ -19,20 +19,104 @@ export type Urgency = (typeof URGENCY)[number];
 export const PRIORITY = ['P1', 'P2', 'P3', 'P4'] as const;
 export type Priority = (typeof PRIORITY)[number];
 
+/**
+ * สถานะทั้งหมดของเรื่องหนึ่งใบ — รวมทั้งสายเหตุขัดข้องและสายคำขอบริการ
+ *
+ * ⚠️ นี่เป็น "ยูเนียนของสองเครื่องสถานะ" ไม่ใช่เครื่องสถานะเดียว
+ *    เหตุขัดข้องใช้ได้บางค่า คำขอบริการใช้ได้บางค่า และมีค่าที่ใช้ร่วมกัน
+ *    ตารางที่บอกว่าใครใช้ค่าไหนได้อยู่ที่ ALLOWED_TRANSITIONS ใน
+ *    domain/ticket/ticket.entity.ts (ลอกจากแผนภาพสถานะใน docs/02-data-model.md)
+ *
+ * เรียงตามลำดับที่เรื่องเดินผ่านจริง ไม่เรียงตามตัวอักษร — หน้าจอที่วนค่านี้
+ * เพื่อทำตัวกรองหรือแถวสรุปจะได้เรียงตามเส้นทางของงาน ไม่ใช่เรียงมั่ว
+ */
 export const TICKET_STATUS = [
   'new',
+  // เฉพาะคำขอบริการที่รายการใน catalog ตั้ง requires_approval = true
+  'pending_approval',
+  // เฉพาะคำขอบริการ — ปลายทาง ต่างจาก cancelled ตรงที่ "มีคนพิจารณาแล้วไม่อนุมัติ"
+  'rejected',
   'assigned',
   'in_progress',
   'pending_user',
+  // แยกจาก pending_user เพราะนาฬิกา SLA ไม่หยุด (ดู PAUSED_STATUSES)
+  'pending_vendor',
+  // เฉพาะเหตุขัดข้อง — แก้แล้ว รอผู้แจ้งยืนยัน
   'resolved',
+  // เฉพาะคำขอบริการ — ส่งมอบแล้ว รอผู้แจ้งยืนยัน (คู่ขนานกับ resolved)
+  'fulfilled',
   'closed',
   'cancelled',
 ] as const;
 export type TicketStatus = (typeof TICKET_STATUS)[number];
 
-/** แยก 3 แบบตาม SLA 5.4 — vendor ต้องแจ้งผู้รับบริการก่อนจึงหยุดนับเวลาได้ */
-export const PENDING_REASON = ['user', 'vendor', 'approval'] as const;
-export type PendingReason = (typeof PENDING_REASON)[number];
+/**
+ * สถานะที่นาฬิกา SLA หยุดเดิน
+ *
+ * ⚠️ pending_vendor **ไม่อยู่ในรายการนี้โดยตั้งใจ**
+ *    SA ระบุชัดว่าการส่งของให้ผู้ให้บริการภายนอกไม่หยุดนาฬิกา เพราะการเลือกผู้ขาย
+ *    และการเร่งงานผู้ขายเป็นความรับผิดชอบของทีมไอที ต่างจากการรอผู้แจ้งตอบ
+ *    ซึ่งทีมทำอะไรไม่ได้เลย — ข้อนี้เป็นสวิตช์นโยบายที่เปลี่ยนได้ในอนาคต
+ *    แต่ยังไม่ทำตอนนี้ ถ้าจะเปลี่ยนให้ย้ายค่าเข้ามาที่นี่ที่เดียว
+ *
+ * แยกเป็นสองกลุ่มย่อยเพราะกติกาการคืนเวลาต่างกัน — ดู WAITING_STATUSES
+ */
+export const WAITING_STATUSES = ['pending_approval', 'pending_user'] as const;
+
+/**
+ * พักเพราะ "งานของเจ้าหน้าที่จบแล้ว รอผู้แจ้งยืนยัน"
+ *
+ * ต่างจาก WAITING_STATUSES ตรงการคืนเวลา: ช่วงที่ค้างอยู่ตรงนี้จะถูกคืนเข้า
+ * กำหนดแก้เสร็จ **เฉพาะเมื่อเรื่องถูกเปิดคืน** เท่านั้น ถ้าเรื่องปิดไปตามปกติ
+ * เวลาช่วงนี้ไม่เคยมีความหมาย เพราะตัววัดคือ resolved_at ไม่ใช่ closed_at
+ */
+export const AWAITING_CONFIRMATION_STATUSES = ['resolved', 'fulfilled'] as const;
+
+export const PAUSED_STATUSES = [
+  ...WAITING_STATUSES,
+  ...AWAITING_CONFIRMATION_STATUSES,
+] as const;
+
+/** สถานะที่ถือว่าจบแล้ว ไปต่อไม่ได้ (ยกเว้นการเปิดคืนจาก closed ภายใน 7 วัน) */
+export const TERMINAL_STATUSES = ['rejected', 'closed', 'cancelled'] as const;
+
+/** นาฬิกายังเดินอยู่และเรื่องยังไม่จบ — ส่วนที่เหลือจากสองรายการข้างบน */
+export const CLOCK_RUNNING_STATUSES = [
+  'new',
+  'assigned',
+  'in_progress',
+  'pending_vendor',
+] as const;
+
+export function isPausedStatus(status: TicketStatus): boolean {
+  return (PAUSED_STATUSES as readonly string[]).includes(status);
+}
+
+export function isTerminalStatus(status: TicketStatus): boolean {
+  return (TERMINAL_STATUSES as readonly string[]).includes(status);
+}
+
+/** นาฬิกาเดินอยู่ = ยังไม่จบ และไม่ได้พัก */
+export function isClockRunningStatus(status: TicketStatus): boolean {
+  return !isPausedStatus(status) && !isTerminalStatus(status);
+}
+
+/**
+ * ขอบเขตการใช้หมวดหมู่ — หมวดนี้ใช้แจ้งเรื่องชนิดไหนได้บ้าง
+ *
+ * `both` คือค่าตั้งต้น ทำให้การเพิ่มคอลัมน์นี้ไม่กระทบหมวดเดิมแม้แต่แถวเดียว
+ * หมวดหลักที่มีลูกทั้งสองชนิดอยู่ที่ `both` เสมอ — หน้าจอกรองที่ "ลูก" ไม่ใช่ซ่อนพ่อ
+ */
+export const TICKET_TYPE_SCOPE = ['incident', 'service_request', 'both'] as const;
+export type TicketTypeScope = (typeof TICKET_TYPE_SCOPE)[number];
+
+/** หมวดนี้ใช้กับเรื่องชนิดนี้ได้ไหม */
+export function categoryAllowsTicketType(
+  scope: TicketTypeScope | string,
+  ticketType: TicketType,
+): boolean {
+  return scope === 'both' || scope === ticketType;
+}
 
 /** 4 ช่องทางตาม SLA 3.2 / SOP 2.3 — ไม่มี LINE (LINE ใช้แจ้งเตือนขาออกเท่านั้น) */
 export const CHANNEL = ['portal', 'email', 'phone', 'walk_in'] as const;
@@ -99,6 +183,22 @@ export const CLOCK_START_EVENT = [
   'after_budget_approval',
 ] as const;
 export type ClockStartEvent = (typeof CLOCK_START_EVENT)[number];
+
+/**
+ * จุดเริ่มนับที่รอให้อนุมัติครบก่อน
+ *
+ * เหตุผลที่ต้องมีสองค่า: การอนุมัติงบ (after_budget_approval) เป็นสายอนุมัติ
+ * คนละสายกับการอนุมัติสิทธิ์ (after_approval) แต่ผลต่อนาฬิกาเหมือนกันทุกประการ
+ * คือ "เริ่มนับเมื่อ approval_request ทุกใบของเรื่องนี้เป็น approved"
+ *
+ * ⚠️ นี่คือหัวใจของข้อกำหนด "SLA fulfillment เริ่มนับหลังอนุมัติ ไม่ใช่ตอนเปิดเรื่อง"
+ *    ถ้าไม่มีข้อนี้ คำขอที่หัวหน้าดองไว้ 3 วันจะกลายเป็นไอทีผิด SLA
+ */
+export const APPROVAL_GATED_CLOCK_STARTS = ['after_approval', 'after_budget_approval'] as const;
+
+export function clockStartsAfterApproval(event: string | null | undefined): boolean {
+  return (APPROVAL_GATED_CLOCK_STARTS as readonly string[]).includes(event ?? '');
+}
 
 export const TARGET_MODE = ['duration', 'before_date', 'by_date'] as const;
 export type TargetMode = (typeof TARGET_MODE)[number];

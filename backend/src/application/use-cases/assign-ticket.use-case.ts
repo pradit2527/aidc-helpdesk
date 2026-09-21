@@ -19,6 +19,15 @@ export interface AssignTicketInput {
 /** ผู้รับผิดชอบคนก่อน — ผู้เรียกใช้ส่งสัญญาณให้คิวงานของเขารีเฟรชด้วย */
 export interface AssignTicketResult {
   fromAssigneeId: number | null;
+  /**
+   * สถานะก่อนและหลังการมอบหมาย
+   *
+   * การมอบหมายเรื่องที่ยังไม่มีใครรับทำให้สถานะขยับจาก new เป็น assigned ด้วย
+   * ห้องแชทที่ผูกกับเรื่องนี้ต้องรู้ว่า "ทีมงานรับเรื่องแล้ว" จากตรงนี้เท่านั้น —
+   * การมอบหมายซ้ำระหว่างทาง (fromStatus === toStatus) ไม่ใช่ข่าวของผู้ถาม
+   */
+  fromStatus: TicketStatus;
+  toStatus: TicketStatus;
 }
 
 /**
@@ -154,6 +163,10 @@ export class AssignTicketUseCase {
         : {}),
     });
 
-    return { fromAssigneeId: change.fromAssigneeId };
+    return {
+      fromAssigneeId: change.fromAssigneeId,
+      fromStatus: change.fromStatus,
+      toStatus: change.toStatus,
+    };
   }
 }

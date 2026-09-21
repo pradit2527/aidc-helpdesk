@@ -10,6 +10,7 @@ import {
   Paperclip,
   RotateCcw,
   Send,
+  ShieldCheck,
   Upload,
   X,
   type LucideIcon,
@@ -27,6 +28,7 @@ import {
   IMPACT_OPTIONS,
   PRIORITY,
   PRIORITY_MATRIX,
+  TICKET_STATUS,
   TICKET_TYPE,
   URGENCY_OPTIONS,
   previewPriority,
@@ -39,7 +41,13 @@ import { masterKeys, useActiveCategories, useCatalogItems } from '@/lib/queries/
 import { useUsers } from '@/lib/queries/operations';
 import { useCreateTicket, useUploadAttachments, type CreateTicketInput } from '@/lib/queries/tickets';
 import { useCan, useSession } from '@/lib/session';
-import type { Department, ServiceRecord, SessionUser, SlaPolicy } from '@/lib/types';
+import type {
+  Department,
+  ServiceRecord,
+  SessionUser,
+  SlaPolicy,
+  TicketCategory,
+} from '@/lib/types';
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const SUBJECT_MIN = 10;
@@ -83,6 +91,20 @@ const TYPE_CARDS: readonly {
     consequence: 'ເລືອກຈາກລາຍການບໍລິການ · ລາຍການທີ່ຕ້ອງອະນຸມັດຈະລໍຖ້າອະນຸມັດກ່ອນ',
   },
 ];
+
+/**
+ * หมวดนี้ใช้กับประเภทเรื่องที่เลือกอยู่ได้ไหม
+ *
+ * ⚠️ หมวดที่ API ไม่ได้ส่ง ticket_type_scope มาถือว่าใช้ได้ทั้งคู่
+ *
+ *    ค่าที่หายไปต้อง "ไม่กรอง" ไม่ใช่ "กรองทิ้ง" — ถ้าตีความกลับกัน ระบบที่รัน
+ *    frontend รุ่นใหม่คู่กับ backend รุ่นเก่าจะได้ dropdown หมวดว่างเปล่า
+ *    ซึ่งแปลว่าไม่มีใครแจ้งเรื่องได้เลยทั้งองค์กร
+ */
+function categoryAllowsType(category: TicketCategory, ticketType: TicketTypeKey): boolean {
+  const scope = category.ticket_type_scope;
+  return scope === undefined || scope === 'both' || scope === ticketType;
+}
 
 /** คำอธิบายใต้ตัวเลือก — ช่วยให้ผู้แจ้งตอบตรงกับเกณฑ์ในเอกสาร SLA ข้อ 4 */
 const IMPACT_DETAIL: Record<string, string> = {
@@ -210,15 +232,61 @@ export default function NewTicketPage(): React.JSX.Element {
     rows.filter((row) => row.company === null || row.company.id === companyId);
 
   const allCategories = forCompany(categories.data ?? []);
-  const parentCategories = allCategories
+  /*
+   * หมวดที่เลือกได้จริงสำหรับประเภทที่กำลังเลือกอยู่
+   *
+   * แยกจาก allCategories เพราะการ "ค้นหาหมวดตาม id" (เติมค่าตั้งต้น และหมวดที่มากับ
+   * รายการบริการ) ต้องค้นจากชุดเต็มเสมอ ไม่งั้นหมวดที่ถูกกรองออกไปจะหาไม่เจอ
+   * แล้วค่าตั้งต้นของผลกระทบ/ความเร่งด่วนจะเงียบหายไปโดยไม่มีอะไรฟ้อง
+   */
+  const typedCategories = allCategories.filter((c) => categoryAllowsType(c, form.ticket_type));
+  const parentCategories = typedCategories
     .filter((c) => c.parent_id === null)
     .sort((a, b) => a.sort_order - b.sort_order);
-  const subcategories = allCategories
+  const subcategories = typedCategories
     .filter((c) => form.parent_category_id !== '' && String(c.parent_id) === form.parent_category_id)
     .sort((a, b) => a.sort_order - b.sort_order);
+  // นับเฉพาะหมวดย่อยที่ประเภทนี้ใช้ได้ ไม่งั้นป้าย "3 ໝວດຍ່ອຍ" จะไม่ตรงกับที่เปิดออกมาเห็น
   const childCount = new Map<number, number>();
-  for (const c of allCategories) {
+  for (const c of typedCategories) {
     if (c.parent_id !== null) childCount.set(c.parent_id, (childCount.get(c.parent_id) ?? 0) + 1);
+  }
+
+  /**
+   * สลับการ์ดประเภทเรื่อง
+   *
+   * หมวดที่เลือกไว้อาจใช้กับประเภทใหม่ไม่ได้ ถ้าปล่อยค้างไว้ ช่องจะแสดงว่าง ๆ
+   * (เพราะ option หายไปจาก dropdown) ทั้งที่ค่าใน state ยังอยู่ แล้วผู้แจ้งจะกดส่ง
+   * ด้วยหมวดที่มองไม่เห็นและไม่ถูกต้อง — ได้ 422 จากเซิร์ฟเวอร์โดยไม่รู้ว่าผิดตรงไหน
+   * จึงล้างเฉพาะค่าที่ใช้ไม่ได้แล้ว และเก็บค่าที่ยังใช้ได้ไว้ ไม่ต้องเลือกซ้ำโดยไม่จำเป็น
+   */
+  function changeTicketType(next: TicketTypeKey): void {
+    const stillValid = (id: string): boolean => {
+      if (id === '') return false;
+      const category = allCategories.find((c) => String(c.id) === id);
+      return category !== undefined && categoryAllowsType(category, next);
+    };
+    const keepParent = stillValid(form.parent_category_id);
+    const keepSub = keepParent && stillValid(form.subcategory_id);
+
+    setForm((prev) => ({
+      ...prev,
+      ticket_type: next,
+      // รายการบริการเป็นของคำขอบริการเท่านั้น สลับไป incident แล้วต้องไม่ติดไปด้วย
+      catalog_item_id: '',
+      parent_category_id: keepParent ? prev.parent_category_id : '',
+      subcategory_id: keepSub ? prev.subcategory_id : '',
+    }));
+    setErrors((prev) => {
+      const nextErrors = { ...prev };
+      delete nextErrors.catalog_item_id;
+      delete nextErrors.parent_category_id;
+      delete nextErrors.subcategory_id;
+      return nextErrors;
+    });
+    if (!keepParent && form.parent_category_id !== '') {
+      toast.info(`ໝວດໝູ່ທີ່ເລືອກໄວ້ໃຊ້ກັບ «${TICKET_TYPE[next]}» ບໍ່ໄດ້ ກະລຸນາເລືອກໃໝ່`);
+    }
   }
   const selectedParent = parentCategories.find((c) => String(c.id) === form.parent_category_id) ?? null;
   const selectedSub = subcategories.find((c) => String(c.id) === form.subcategory_id) ?? null;
@@ -612,9 +680,7 @@ export default function NewTicketPage(): React.JSX.Element {
                             name="ticket_type"
                             value={card.value}
                             checked={checked}
-                            onChange={() =>
-                              setForm((prev) => ({ ...prev, ticket_type: card.value, catalog_item_id: '' }))
-                            }
+                            onChange={() => changeTicketType(card.value)}
                             className="h-4 w-4 flex-none accent-[var(--primary)]"
                           />
                           <Icon className="h-4 w-4 flex-none text-ink-2" aria-hidden="true" />
@@ -640,11 +706,7 @@ export default function NewTicketPage(): React.JSX.Element {
                     htmlFor="catalog_item_id"
                     required
                     error={errors.catalog_item_id}
-                    hint={
-                      selectedCatalog?.requires_approval
-                        ? 'ລາຍການນີ້ຕ້ອງຜ່ານການອະນຸມັດກ່ອນທີມງານຈະດຳເນີນການ'
-                        : 'ລາຍການບໍລິການມີເປົ້າໝາຍເວລາ ແລະ ຂັ້ນຕອນຂອງຕົນເອງ'
-                    }
+                    hint="ລາຍການບໍລິການມີເປົ້າໝາຍເວລາ ແລະ ຂັ້ນຕອນຂອງຕົນເອງ"
                     className="md:col-span-2"
                   >
                     <Select
@@ -681,7 +743,43 @@ export default function NewTicketPage(): React.JSX.Element {
                   </Field>
                 )}
 
-                <Field label="ໝວດໝູ່ (Category)" htmlFor="parent_category_id" required error={errors.parent_category_id}>
+                {/*
+                  รายการที่ต้องอนุมัติเปลี่ยนสิ่งที่จะเกิดขึ้นหลังกดส่งไปทั้งหมด —
+                  เรื่องจะไม่เข้าคิวทีมไอที แต่ไปจอดรอผู้อนุมัติก่อน ซึ่งผู้ขอต้องรู้
+                  "ก่อน" กดส่ง ไม่ใช่มางงทีหลังว่าทำไมไม่มีใครรับเรื่องสักที
+                  จึงเป็นกล่องที่เห็นชัด ไม่ใช่ hint สีจางใต้ช่อง
+                */}
+                {form.ticket_type === 'service_request' && selectedCatalog?.requires_approval && (
+                  <div
+                    role="status"
+                    className="flex gap-3 rounded border border-st-pending-fg/30 bg-st-pending-bg px-4 py-3 md:col-span-2"
+                  >
+                    <ShieldCheck className="mt-0.5 h-5 w-5 flex-none text-st-pending-fg" aria-hidden="true" />
+                    <div className="min-w-0 text-body-sm text-st-pending-fg">
+                      <p className="font-semibold">ລາຍການນີ້ຕ້ອງຜ່ານການອະນຸມັດກ່ອນ</p>
+                      <p className="mt-0.5">
+                        ເມື່ອກົດສົ່ງ ເລື່ອງຈະຢູ່ໃນສະຖານະ «{TICKET_STATUS.pending_approval.label}»
+                        ແລະ ທີມງານຈະເລີ່ມດຳເນີນການໄດ້ຫຼັງຜູ້ອະນຸມັດພິຈາລະນາແລ້ວເທົ່ານັ້ນ
+                        {selectedCatalog.approval_chain ? ` · ສາຍອະນຸມັດ ${selectedCatalog.approval_chain}` : ''}
+                      </p>
+                      <p className="mt-0.5 text-caption">ຂະນະລໍຖ້າອະນຸມັດ ໂມງ SLA ຈະຢຸດນັບ</p>
+                    </div>
+                  </div>
+                )}
+
+                <Field
+                  label="ໝວດໝູ່ (Category)"
+                  htmlFor="parent_category_id"
+                  required
+                  error={errors.parent_category_id}
+                  // รายการเปลี่ยนตามการ์ดประเภทด้านบน ต้องบอกไว้ ไม่งั้นผู้แจ้งที่จำได้ว่า
+                  // "เมื่อกี้มีหมวดนี้" จะคิดว่าระบบเสียแทนที่จะมองขึ้นไปสลับประเภท
+                  hint={
+                    parentCategories.length === 0
+                      ? `ຍັງບໍ່ມີໝວດໝູ່ສຳລັບ «${TICKET_TYPE[form.ticket_type]}» — ຕິດຕໍ່ຜູ້ດູແລລະບົບ`
+                      : `${parentCategories.length} ໝວດສຳລັບ «${TICKET_TYPE[form.ticket_type]}»`
+                  }
+                >
                   <Select
                     value={form.parent_category_id}
                     onChange={(e) => {
@@ -1039,7 +1137,9 @@ export default function NewTicketPage(): React.JSX.Element {
                   )}
                 </DefRow>
                 <DefRow label="ສະຖານະເລີ່ມຕົ້ນ">
-                  {selectedCatalog?.requires_approval ? 'ໃໝ່ · ລໍຖ້າອະນຸມັດ' : 'ໃໝ່'}
+                  {form.ticket_type === 'service_request' && selectedCatalog?.requires_approval
+                    ? TICKET_STATUS.pending_approval.label
+                    : TICKET_STATUS.new.label}
                 </DefRow>
                 <DefRow label="ລະດັບຄວາມສຳຄັນ">
                   {priority ? <PriorityBadge priority={priority} withMeter={false} /> : '—'}

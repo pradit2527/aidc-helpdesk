@@ -8,8 +8,8 @@
 import {
   PRIORITY,
   SLA_STATUS,
-  TICKET_STATUS,
   PENDING_REASON,
+  statusMeta,
   type Priority,
   type SlaStatus,
   type TicketStatus,
@@ -35,15 +35,26 @@ export function StatusBadge({
   pendingReason,
   className,
 }: {
-  status: TicketStatus;
-  pendingReason?: keyof typeof PENDING_REASON | null;
+  /** ຮັບ string ນຳ — ສະຖານະທີ່ backend ເພີ່ມກ່ອນ frontend ຕ້ອງສະແດງໄດ້ ບໍ່ແມ່ນລົ້ມ */
+  status: TicketStatus | (string & {});
+  /** ຂໍ້ຄວາມອິດສະຫຼະ — ບໍ່ແມ່ນ enum ອີກຕໍ່ໄປ (backend ຖອດ CHECK ອອກແລ້ວ) */
+  pendingReason?: string | null;
   className?: string;
 }) {
-  const meta = TICKET_STATUS[status];
+  const meta = statusMeta(status);
   const Icon = meta.icon;
-  // "ລໍຖ້າຜູ້ແຈ້ງ" ຢ່າງດຽວບໍ່ພໍ — ຜູ້ໃຊ້ຕ້ອງຮູ້ວ່າລໍຖ້າຫຍັງຢູ່ (G-06)
-  const label =
-    status === 'pending_user' && pendingReason ? PENDING_REASON[pendingReason] : meta.label;
+  /*
+   * "ລໍຖ້າຜູ້ແຈ້ງ" ຢ່າງດຽວບໍ່ພໍ — ຜູ້ໃຊ້ຕ້ອງຮູ້ວ່າລໍຖ້າຫຍັງຢູ່ (G-06)
+   *
+   * pending_vendor ກັບ pending_approval ບອກຢູ່ໃນຊື່ສະຖານະແລ້ວ ຈຶ່ງບໍ່ທັບ
+   * ເຫຼືອແຕ່ pending_user — ແລະ ຂໍ້ມູນເກົ່າຍັງເປັນ 'user'/'vendor'/'approval'
+   * ສ່ວນຂໍ້ມູນໃໝ່ເປັນຂໍ້ຄວາມອິດສະຫຼະ ຈຶ່ງແປໄດ້ກໍ່ແປ ແປບໍ່ໄດ້ກໍ່ສະແດງຕາມທີ່ມາ
+   */
+  const reasonLabel =
+    pendingReason && pendingReason in PENDING_REASON
+      ? PENDING_REASON[pendingReason as keyof typeof PENDING_REASON]
+      : (pendingReason ?? null);
+  const label = status === 'pending_user' && reasonLabel ? reasonLabel : meta.label;
 
   return (
     <span className={cn(BADGE, meta.className, className)}>

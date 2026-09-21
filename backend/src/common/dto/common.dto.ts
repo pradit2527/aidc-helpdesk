@@ -42,6 +42,18 @@ export class RefNamedDto {
   @ApiProperty({ example: 'ສາງສິນຄ້າ' }) name!: string;
 }
 
+/**
+ * โครงการใน AIDC Support Hub — หนึ่งเว็บแอปของกลุ่ม
+ *
+ * มีทั้ง code และ name เพราะหน้าจอใช้คนละอย่างกัน: `code` คือสิ่งที่สคริปต์ฝัง
+ * และผู้ดูแลใช้เรียกโครงการ ส่วน `name` คือสิ่งที่ผู้ใช้ทั่วไปอ่านรู้เรื่อง
+ */
+export class RefProjectDto {
+  @ApiProperty({ example: 1 }) id!: number;
+  @ApiProperty({ example: 'ILP' }) code!: string;
+  @ApiProperty({ example: 'ILP' }) name!: string;
+}
+
 export class RefCategoryDto {
   @ApiProperty({ example: 79 }) id!: number;
   @ApiProperty({ example: 'ເຄື່ອງສະແກນບາໂຄດ/ເຄື່ອງພິມສະຫຼາກ' }) name_th!: string;

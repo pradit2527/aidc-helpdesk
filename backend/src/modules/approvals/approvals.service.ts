@@ -1,14 +1,20 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { alias } from 'drizzle-orm/pg-core';
 import { and, asc, count, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 
 import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
+import type { Priority, TicketStatus } from '../../common/constants';
 import { ConflictError, NotFoundError, ValidationError } from '../../common/errors/domain-error';
 import { paged, type PagedResult } from '../../common/http/pagination';
 import { AccessScope } from '../../common/scope';
+import { computeDueAt, nextWorkingInstant } from '../../common/sla/business-time';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
+import { ServiceCatalogRepository } from '../../db/repositories/service-catalog.repository';
+import { SlaConfigRepository } from '../../db/repositories/sla-config.repository';
+import { TicketRepository } from '../../db/repositories/ticket.repository';
 import { appUser, approvalRequest, company, ticket } from '../../db/schema';
+import { TicketsService } from '../tickets/tickets.service';
 
 export interface ApprovalListParams {
   /** 'me' = เฉพาะที่ฉันเป็นผู้อนุมัติ · ไม่ระบุ = ทุกใบในขอบเขต (ต้องมี approval.read) */
@@ -31,9 +37,22 @@ export interface ApprovalListParams {
  */
 @Injectable()
 export class ApprovalsService {
+  private readonly logger = new Logger('Approvals');
+
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly changeStatus: ChangeTicketStatusUseCase,
+    private readonly tickets: TicketRepository,
+    private readonly slaConfig: SlaConfigRepository,
+    private readonly catalog: ServiceCatalogRepository,
+    /*
+     * ใช้ TicketsService ยิงสัญญาณด้วยเส้นทางเดียวกับ POST /tickets/{id}/status
+     *
+     * ไม่เกิดวงจรการฉีด เพราะ TicketsService ไม่ได้อ้างกลับมาที่นี่ —
+     * ข้อมูลการอนุมัติที่หน้ารายละเอียดแสดง อ่านผ่าน TicketDetailRepository
+     * ไม่ได้อ่านผ่าน service ตัวนี้
+     */
+    private readonly ticketsService: TicketsService,
   ) {}
 
   private scopeWhere(scope: AccessScope): SQL | undefined {
@@ -147,12 +166,17 @@ export class ApprovalsService {
    *   2. ห้ามอนุมัติคำขอของตนเอง แม้จะถูกตั้งเป็น approver ก็ตาม (422)
    *   3. ปฏิเสธต้องมีเหตุผล — บังคับที่ฐานข้อมูลด้วย
    *   4. ขั้นก่อนหน้าต้องอนุมัติครบก่อน มิฉะนั้นเป็นการอนุมัติข้ามขั้น
-   *   5. ปฏิเสธขั้นใดขั้นหนึ่ง → ticket ไป cancelled ทันที
+   *   5. ปฏิเสธขั้นใดขั้นหนึ่ง → ticket ไป **rejected** ทันที (ไม่ใช่ cancelled)
+   *   6. อนุมัติครบทุกขั้น → ticket ไป assigned **และนาฬิกา fulfillment เริ่มนับที่นี่**
    *
    * ⚠️ การเปลี่ยนสถานะ ticket มอบให้ ChangeTicketStatusUseCase ทำ ไม่เขียนเอง
    *    เพราะการออกจากสถานะพักต้องบวกเวลาที่หยุดนาฬิกาคืนเข้ากำหนดเวลา
    *    ถ้าเขียน UPDATE ตรงนี้เอง เวลาที่ใช้รออนุมัติจะถูกนับเป็นความล่าช้า
    *    ของทีมไอที ซึ่งขัดกับ SLA ข้อ 9
+   *
+   * ⚠️ และต้องยิงสัญญาณผ่าน TicketsService.afterStatusChange ทุกครั้งที่สถานะขยับ
+   *    การเขียนฐานข้อมูลสำเร็จโดยไม่บอกใครเลย คือบั๊กที่ไม่มีเทสต์ไหนจับได้
+   *    เพราะข้อมูลถูกต้องครบทุกตาราง — สิ่งที่หายไปคือคนที่ควรได้รู้
    */
   async decide(
     scope: AccessScope,
@@ -261,11 +285,21 @@ export class ApprovalsService {
     });
 
     if (input.decision === 'rejected') {
-      await this.changeStatus.execute(systemScope, row.ticket_id, {
-        toStatus: 'cancelled',
+      /*
+       * ปฏิเสธ → สถานะ rejected ไม่ใช่ cancelled อีกต่อไป
+       *
+       * สองคำนี้ต่างกันที่ "ใครเป็นคนหยุดเรื่อง" ซึ่งเป็นคำถามแรกที่ผู้ตรวจถาม
+       *   cancelled = ผู้แจ้งถอนเอง หรือเจ้าหน้าที่ยกเลิกเพราะไม่ใช่เรื่อง
+       *   rejected  = มีผู้มีอำนาจพิจารณาแล้วไม่อนุมัติ พร้อมเหตุผลเป็นลายลักษณ์อักษร
+       * เดิมทั้งสองกรณีลงเอยเป็น cancelled เหมือนกัน รายงาน "คำขอที่ไม่ผ่าน
+       * การอนุมัติ" จึงแยกออกจาก "คำขอที่ผู้แจ้งถอนเอง" ไม่ได้เลย
+       */
+      const transition = await this.changeStatus.execute(systemScope, row.ticket_id, {
+        toStatus: 'rejected',
         reason: `ຄຳຂໍຖືກປະຕິເສດຂັ້ນທີ ${row.seq}: ${comment}`,
       });
-      return { id, status: 'rejected' as const, ticket_status: 'cancelled', next_seq: null };
+      await this.announce(scope, row.ticket_id, transition, comment);
+      return { id, status: 'rejected' as const, ticket_status: 'rejected', next_seq: null };
     }
 
     // ยังมีขั้นถัดไปที่รอพิจารณาหรือไม่
@@ -283,7 +317,7 @@ export class ApprovalsService {
       .limit(1);
 
     if (next) {
-      // ยังไม่ครบสาย — ticket ค้างที่ pending_user ต่อไป นาฬิกายังหยุดอยู่
+      // ยังไม่ครบสาย — ticket ค้างที่ pending_approval ต่อไป นาฬิกายังหยุดอยู่
       return {
         id,
         status: 'approved' as const,
@@ -299,13 +333,126 @@ export class ApprovalsService {
      * ไม่ได้แปลว่ามีคนเริ่มลงมือทำแล้ว การตั้งเป็น in_progress เองจะทำให้
      * ตัวเลข "เรื่องที่กำลังดำเนินการ" สูงกว่าความจริง
      */
-    if (row.ticket_status === 'pending_user') {
-      await this.changeStatus.execute(systemScope, row.ticket_id, {
-        toStatus: 'assigned',
-        reason: `ອະນຸມັດຄົບທຸກຂັ້ນແລ້ວ (${row.seq} ຂັ້ນ)`,
-      });
+    if (row.ticket_status !== 'pending_approval') {
+      // เรื่องไม่ได้อยู่ในคิวอนุมัติแล้ว (ถูกยกเลิกไปก่อน หรือข้อมูลเก่าจากรุ่นก่อนหน้า)
+      // — บันทึกผลการพิจารณาไว้ แต่ไม่ไปดันสถานะที่ตารางไม่อนุญาต
+      return { id, status: 'approved' as const, ticket_status: row.ticket_status, next_seq: null };
     }
 
+    const transition = await this.changeStatus.execute(systemScope, row.ticket_id, {
+      toStatus: 'assigned',
+      reason: `ອະນຸມັດຄົບທຸກຂັ້ນແລ້ວ (${row.seq} ຂັ້ນ)`,
+    });
+
+    await this.startFulfillmentClock(row.ticket_id, row.company_id, now);
+    await this.announce(scope, row.ticket_id, transition);
+
     return { id, status: 'approved' as const, ticket_status: 'assigned', next_seq: null };
+  }
+
+  /**
+   * เริ่มจับเวลา fulfillment ตั้งแต่วินาทีที่อนุมัติครบ
+   *
+   * ข้อกำหนดจาก SA: *"SLA fulfillment เริ่มนับหลังอนุมัติ ไม่ใช่ตอนเปิดเรื่อง —
+   * ป้องกันไอทีโดนนับเวลาทั้งที่ยังรอหัวหน้าอนุมัติ"*
+   *
+   * เป้าหมายเวลาเอามาจากรายการใน catalog ก่อน (SLA 5.3 — "รีเซ็ตรหัสผ่าน 30 นาที"
+   * ไม่ใช่ 2,700 นาทีของ P4) ถ้ารายการไม่ได้กำหนดไว้จึงถอยไปใช้ตารางมาตรฐาน
+   *
+   * ⚠️ ล้มเหลวแล้วไม่โยนต่อ
+   *    การอนุมัติถูกบันทึกและสถานะถูกเปลี่ยนไปแล้วก่อนถึงบรรทัดนี้ ถ้าปล่อยให้
+   *    error ทะลุออกไป ผู้อนุมัติจะเห็นว่า "กดไม่สำเร็จ" แล้วกดซ้ำ ซึ่งจะได้
+   *    APPROVAL_ALREADY_DECIDED ทั้งที่ทุกอย่างสำเร็จไปแล้ว — เขียน log ไว้
+   *    ให้ผู้ดูแลตามแก้กำหนดเวลาแทน ซึ่งแก้ย้อนหลังได้ ต่างจากความสับสนของผู้ใช้
+   */
+  private async startFulfillmentClock(
+    ticketId: number,
+    companyId: number,
+    at: Date,
+  ): Promise<void> {
+    try {
+      const [detail] = await this.db
+        .select({
+          priority: ticket.priority,
+          catalogItemId: ticket.catalogItemId,
+          clockStartedAt: ticket.slaClockStartedAt,
+        })
+        .from(ticket)
+        .where(eq(ticket.id, ticketId))
+        .limit(1);
+
+      // นาฬิกาเริ่มไปแล้ว = รายการนี้ตั้ง clock_start_event = on_create ไว้
+      // เจ้าของนโยบายตั้งใจให้จับเวลาตั้งแต่ยื่น ไม่ใช่หน้าที่เราไปเลื่อนให้
+      if (!detail || detail.clockStartedAt !== null) return;
+
+      const [target, cal, item] = await Promise.all([
+        this.slaConfig.targetFor(companyId, detail.priority as Priority),
+        this.slaConfig.calendarFor(companyId),
+        detail.catalogItemId !== null
+          ? this.catalog.byId(detail.catalogItemId)
+          : Promise.resolve(null),
+      ]);
+
+      const resolutionMinutes =
+        item?.targetMode === 'duration' && item.targetMinutes !== null
+          ? item.targetMinutes
+          : target.resolutionMinutes;
+
+      // นอกเวลาทำการต้องเลื่อนไปเริ่มที่เวลาเปิดถัดไป — กติกาเดียวกับตอนสร้างเรื่อง
+      const clockStartedAt =
+        target.clockMode === 'calendar_24x7' ? at : nextWorkingInstant(at, cal);
+
+      const { responseDueAt, resolutionDueAt } = computeDueAt({
+        clockStart: clockStartedAt,
+        responseMinutes: target.responseMinutes,
+        resolutionMinutes,
+        cal,
+        mode: target.clockMode,
+      });
+
+      await this.tickets.startFulfillmentClock({
+        ticketId,
+        clockStartedAt,
+        responseDueAt,
+        resolutionDueAt,
+      });
+    } catch (error) {
+      this.logger.error(
+        `เริ่มนาฬิกา fulfillment ของเรื่อง #${ticketId} ไม่สำเร็จ: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * ยิงสัญญาณเดียวกับที่ POST /tickets/{id}/status ยิง
+   *
+   * ⚠️ นี่คือช่องว่างที่เคยมีอยู่จริง: decide() เขียนฐานข้อมูลครบทุกตาราง
+   *    แต่ไม่เคยบอกใครเลย หน้าที่เปิดเรื่องนั้นค้างอยู่ไม่รีเฟรช และห้องแชท
+   *    ของผู้เข้าชมเงียบสนิททั้งที่เรื่องของเขาเพิ่งถูกอนุมัติหรือถูกปฏิเสธ
+   *
+   * เรียก TicketsService.afterStatusChange ตัวเดียวกับที่ทางปกติเรียก
+   * ไม่ได้คัดลอกสองบรรทัดนั้นมาวางไว้ที่นี่ — ผลข้างเคียงที่ถูกคัดลอกคือ
+   * ผลข้างเคียงที่วันหนึ่งจะตกหล่นไปข้างหนึ่ง
+   *
+   * ล้มเหลวแล้วกลืน ด้วยเหตุผลเดียวกับ startFulfillmentClock
+   */
+  private async announce(
+    scope: AccessScope,
+    ticketId: number,
+    transition: { from: TicketStatus; to: TicketStatus },
+    reason?: string | null,
+  ): Promise<void> {
+    try {
+      const detail = await this.ticketsService.detail(scope, ticketId);
+      this.ticketsService.afterStatusChange(detail, scope.userId, transition, {
+        ...(reason ? { reason } : {}),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `แจ้งผลการพิจารณาของเรื่อง #${ticketId} ไม่สำเร็จ: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

@@ -178,7 +178,11 @@ function useApplyTicketUpdate(): (ticket: TicketDetail) => void {
 export interface ChangeTicketStatusInput {
   id: number;
   to_status: TicketStatus;
-  pending_reason?: 'user' | 'vendor' | 'approval';
+  /**
+   * ເຫດຜົນຍ່ອຍ — ໃຊ້ກັບ `pending_user` ເທົ່ານັ້ນ ແລະ ບໍ່ບັງຄັບ
+   * ການລໍຖ້າຜູ້ຂາຍ / ລໍຖ້າອະນຸມັດ ໃຊ້ສະຖານະຂອງຕົນເອງແລ້ວ
+   */
+  pending_reason?: string;
   /** เก็บในประวัติ — บังคับเมื่อพัก ยกเลิก และเปิดคืน */
   reason?: string;
   /** ข้อความถึงผู้แจ้ง */
@@ -256,6 +260,62 @@ export function useTicketAssignees(
     queryFn: () => api.get<TicketAssignee[]>(`/tickets/${id}/assignees`),
     enabled: enabled && Number.isFinite(id) && id > 0,
     staleTime: 60_000,
+  });
+}
+
+// ── ผูกเรื่องที่เกี่ยวข้องกัน ────────────────────────────────────────
+
+export interface LinkTicketInput {
+  id: number;
+  related_ticket_id: number;
+}
+
+/**
+ * ผูกเรื่องนี้กับอีกเรื่องหนึ่ง — POST /tickets/{id}/link
+ *
+ * ผูกได้ใบเดียว ไม่ใช่กราฟความสัมพันธ์ ถ้าผูกใบใหม่ทับ ใบเดิมจะหลุดไป
+ * ซึ่งเป็นพฤติกรรมที่ตั้งใจ — คำถามที่คนถามจริงคือ "เรื่องนี้เกี่ยวกับใบไหน"
+ * ใบเดียว ไม่ใช่ "เกี่ยวกับใบไหนบ้าง" และการผูกมีผลสองทางเสมอ
+ *
+ * ⚠️ ยังไม่มีทาง "ยกเลิกการผูก"
+ *    LinkTicketDto ฝั่ง backend ประกาศ related_ticket_id เป็น @IsInt() @Min(1)
+ *    ซึ่งส่ง null ไม่ได้ และยังไม่มี DELETE /tickets/{id}/link
+ *    หน้าจอจึงให้ "เปลี่ยนไปผูกใบอื่น" แทน ซึ่งทับค่าเดิมได้
+ *    ถ้าต้องการล้างค่าจริง ๆ ต้องขอให้ backend เพิ่ม endpoint ก่อน
+ */
+export function useLinkTicket(): ReturnType<
+  typeof useMutation<TicketDetail, Error, LinkTicketInput>
+> {
+  const apply = useApplyTicketUpdate();
+  return useMutation({
+    mutationFn: ({ id, related_ticket_id }: LinkTicketInput) =>
+      api.post<TicketDetail>(`/tickets/${id}/link`, { related_ticket_id }),
+    onSuccess: apply,
+  });
+}
+
+/**
+ * ค้นเรื่องด้วยเลขที่หรือหัวข้อ เพื่อเลือกมาผูก
+ *
+ * ใช้ GET /tickets ตัวเดียวกับหน้ารายการ ซึ่งกรองตามขอบเขตสิทธิ์ของผู้เรียกให้แล้ว
+ * จึงไม่มีทางผูกไปยังเรื่องที่ตัวเองมองไม่เห็น — ถ้าเขียน endpoint ค้นหาแยก
+ * ต้องจำกฎขอบเขตให้ตรงกันสองที่ ซึ่งวันหนึ่งจะเพี้ยนจากกัน
+ *
+ * คีย์แคชแยกจาก ticketKeys.lists() เพราะเป็นคนละเจตนา — ไม่ควรถูกล้างทิ้ง
+ * ทุกครั้งที่มีใครเปลี่ยนสถานะเรื่องสักใบระหว่างที่กล่องค้นหาเปิดอยู่
+ */
+export function useTicketSearch(q: string, excludeId: number): UseQueryResult<TicketListItem[], Error> {
+  const term = q.trim();
+  return useQuery({
+    queryKey: [...ticketKeys.all, 'search', term],
+    queryFn: async () => {
+      const page = await api.page<TicketListItem>('/tickets', { q: term, page_size: 10 });
+      return page.items;
+    },
+    // ค้นด้วยตัวอักษรเดียวได้ทั้งฐาน ซึ่งช้าและไม่ช่วยใครเลือกอะไร
+    enabled: term.length >= 2,
+    staleTime: 30_000,
+    select: (items) => items.filter((t) => t.id !== excludeId),
   });
 }
 

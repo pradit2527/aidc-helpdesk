@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { TicketStatus } from '../../common/constants';
 import { DomainError } from '../../common/errors/domain-error';
 import { TicketEntity, type NewTicketProps } from './ticket.entity';
 
@@ -92,9 +93,14 @@ describe('TicketEntity — การเปลี่ยนสถานะ', () =>
   });
 
   it('คำขอที่ต้องอนุมัติไปรออนุมัติได้ตั้งแต่ยังไม่มอบหมาย', () => {
+    const t = TicketEntity.create({ ...BASE, ticketType: 'service_request' });
+    t.changeStatus('pending_approval', AT);
+    expect(t.status).toBe('pending_approval');
+  });
+
+  it('เหตุขัดข้องไปรออนุมัติไม่ได้ — ไม่มีเส้นนี้ในตารางของมัน', () => {
     const t = TicketEntity.create(BASE);
-    t.changeStatus('pending_user', AT, { pendingReason: 'approval' });
-    expect(t.status).toBe('pending_user');
+    assertDomainError(() => t.changeStatus('pending_approval', AT), 'TICKET_INVALID_TRANSITION');
   });
 
   it('ข้ามขั้นไปสถานะที่ไม่อนุญาตไม่ได้', () => {
@@ -171,32 +177,38 @@ describe('TicketEntity — หน้าต่างเปิดซ้ำ 7 ว�
   });
 });
 
-describe('TicketEntity — การหยุดนาฬิการะหว่างรอผู้แจ้ง', () => {
-  it('บอกได้ว่าการเปลี่ยนสถานะรอบนี้ทำให้เลิกพักหรือไม่', () => {
+describe('TicketEntity — การหยุดนาฬิกา', () => {
+  it('บอกได้ว่าการเปลี่ยนสถานะรอบนี้ทำให้นาฬิกาเดินต่อหรือไม่', () => {
     const t = TicketEntity.create(BASE);
-    expect(t.willResumeFromPending('in_progress')).toBe(false);
+    expect(t.willResumeClock('in_progress')).toBe(false);
 
-    t.changeStatus('pending_user', AT, { pendingReason: 'user' });
-    expect(t.willResumeFromPending('in_progress')).toBe(true);
-    expect(t.willResumeFromPending('pending_user')).toBe(false);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('pending_user', AT);
+    expect(t.willResumeClock('in_progress')).toBe(true);
+    expect(t.willResumeClock('pending_user')).toBe(false);
   });
 
   it('สะสมนาทีที่หยุดนาฬิกาเมื่อกลับมาทำต่อ', () => {
     const t = TicketEntity.create(BASE);
-    t.changeStatus('pending_user', AT, { pendingReason: 'user' });
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('pending_user', AT);
     expect(t.pendingDurationMinutes).toBe(0);
 
     t.changeStatus('in_progress', AT, { pausedMinutesToAdd: 480 });
     expect(t.pendingDurationMinutes).toBe(480);
 
     // พักรอบที่สอง ต้องบวกทบของเดิม ไม่ใช่ทับ
-    t.changeStatus('pending_user', AT, { pendingReason: 'vendor' });
+    t.changeStatus('pending_user', AT);
     t.changeStatus('in_progress', AT, { pausedMinutesToAdd: 120 });
     expect(t.pendingDurationMinutes).toBe(600);
   });
 
   it('ล้างเหตุผลและเวลาเริ่มพักเมื่อออกจากสถานะรอ', () => {
     const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
     t.changeStatus('pending_user', AT, { pendingReason: 'user' });
     expect(t.toPersistence().pendingReason).toBe('user');
     expect(t.pendingStartedAt).toEqual(AT);
@@ -204,6 +216,192 @@ describe('TicketEntity — การหยุดนาฬิการะหว�
     t.changeStatus('in_progress', AT);
     expect(t.toPersistence().pendingReason).toBe(null);
     expect(t.pendingStartedAt).toBe(null);
+  });
+
+  /*
+   * ── การพักสองแบบคืนเวลาไม่เหมือนกัน ──
+   *
+   * นี่คือกฎที่ละเอียดที่สุดของการแก้รอบนี้ และเป็นจุดที่ถ้าทำผิดจะไม่มีอะไรฟ้อง
+   * นอกจากตัวเลข KPI ที่ค่อย ๆ เพี้ยนไปโดยไม่มีใครสังเกต
+   */
+  it('รอคนอื่น (pending_user) คืนเวลาแม้จะออกไปสถานะปลายทาง', () => {
+    const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('pending_user', AT);
+
+    // ติดตาม 2 ครั้งแล้วไม่ตอบ ปิดเลย (G-09) — เวลาที่รอต้องไม่ถูกนับเป็นของทีม
+    t.changeStatus('closed', AT, { pausedMinutesToAdd: 900, actorId: 7 });
+    expect(t.pendingDurationMinutes).toBe(900);
+  });
+
+  it('งานเสร็จรอยืนยัน (resolved) ไม่คืนเวลาเมื่อปิดตามปกติ', () => {
+    const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('resolved', AT);
+
+    /*
+     * ⚠️ ข้อนี้คุ้มครอง KPI-3 (FCR) โดยตรง
+     *    KPI-3 ใช้ pending_duration_minutes = 0 แทนความหมาย "ไม่เคยต้องรอใคร"
+     *    ถ้าการปิดตามปกติบวกเวลาที่ค้างอยู่ในสถานะ resolved เข้าไปด้วย
+     *    ทุกใบที่ปิดจะมีค่ามากกว่าศูนย์ แล้ว FCR จะร่วงเป็น 0% ทั้งกระดาน
+     */
+    t.changeStatus('closed', AT, { pausedMinutesToAdd: 1620, actorId: 7 });
+    expect(t.pendingDurationMinutes).toBe(0);
+  });
+
+  it('งานเสร็จรอยืนยัน (resolved) คืนเวลาเมื่อถูกเปิดคืน', () => {
+    const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('resolved', AT);
+
+    // ผู้แจ้งบอกว่ายังไม่หาย — ช่วงที่ค้างรอเขายืนยันไม่ใช่เวลาของทีม
+    t.changeStatus('in_progress', AT, { pausedMinutesToAdd: 540 });
+    expect(t.pendingDurationMinutes).toBe(540);
+  });
+
+  it('รอผู้ขาย (pending_vendor) ไม่หยุดนาฬิกา จึงไม่คืนเวลา', () => {
+    const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('pending_vendor', AT);
+
+    // นโยบายของ SA: การเลือกและเร่งผู้ขายเป็นความรับผิดชอบของทีมไอที
+    expect(t.willResumeClock('in_progress')).toBe(false);
+    t.changeStatus('in_progress', AT, { pausedMinutesToAdd: 2000 });
+    expect(t.pendingDurationMinutes).toBe(0);
+  });
+
+  it('ตั้งเวลาเริ่มพักให้ทุกสถานะที่หยุดนาฬิกา ไม่ใช่แค่ pending_user', () => {
+    const sr = TicketEntity.create({ ...BASE, ticketType: 'service_request' });
+    sr.changeStatus('pending_approval', AT);
+    // เดิมโค้ดตั้งค่านี้ให้เฉพาะ pending_user แล้วล้างทิ้งในสถานะอื่นทั้งหมด
+    // ผลคือนาฬิกาจะไม่มีวันหยุดเลยเพราะไม่มีจุดตั้งต้นให้หัก
+    expect(sr.pendingStartedAt).toEqual(AT);
+
+    const inc = TicketEntity.create(BASE);
+    inc.changeStatus('assigned', AT);
+    inc.changeStatus('in_progress', AT);
+    inc.changeStatus('resolved', AT);
+    expect(inc.pendingStartedAt).toEqual(AT);
+  });
+});
+
+describe('TicketEntity — ตารางสถานะของคำขอบริการ', () => {
+  const SR: NewTicketProps = { ...BASE, ticketType: 'service_request' };
+
+  it('เดินเส้นทางเต็มตั้งแต่รออนุมัติจนปิด', () => {
+    const t = TicketEntity.create(SR);
+    t.changeStatus('pending_approval', AT);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('fulfilled', AT);
+    t.changeStatus('closed', AT, { actorId: 9 });
+    expect(t.status).toBe('closed');
+  });
+
+  it('ข้ามขั้นอนุมัติได้เมื่อรายการไม่ต้องอนุมัติ', () => {
+    const t = TicketEntity.create(SR);
+    t.changeStatus('assigned', AT);
+    expect(t.status).toBe('assigned');
+  });
+
+  it('ยกเลิกได้ทั้งตอนมีคนรับแล้วและตอนกำลังทำ — SA ยืนยันว่าแผนภาพเดิมตกหล่นเส้นนี้', () => {
+    const assignedCase = TicketEntity.create(SR);
+    assignedCase.changeStatus('assigned', AT);
+    assignedCase.changeStatus('cancelled', AT);
+    expect(assignedCase.status).toBe('cancelled');
+
+    const inProgressCase = TicketEntity.create(SR);
+    inProgressCase.changeStatus('assigned', AT);
+    inProgressCase.changeStatus('in_progress', AT);
+    inProgressCase.changeStatus('cancelled', AT);
+    expect(inProgressCase.status).toBe('cancelled');
+  });
+
+  it('ปฏิเสธคำขอแล้วเป็นปลายทาง ไปต่อไม่ได้', () => {
+    const t = TicketEntity.create(SR);
+    t.changeStatus('pending_approval', AT);
+    t.changeStatus('rejected', AT);
+    assertDomainError(() => t.changeStatus('in_progress', AT), 'TICKET_INVALID_TRANSITION');
+  });
+
+  it('คำขอบริการไปสถานะ resolved ไม่ได้ — ต้องใช้ fulfilled', () => {
+    const t = TicketEntity.create(SR);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    assertDomainError(() => t.changeStatus('resolved', AT), 'TICKET_INVALID_TRANSITION');
+  });
+
+  it('เหตุขัดข้องไปสถานะ fulfilled ไม่ได้ — ต้องใช้ resolved', () => {
+    const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    assertDomainError(() => t.changeStatus('fulfilled', AT), 'TICKET_INVALID_TRANSITION');
+  });
+
+  it('fulfilled เขียน resolved_at เหมือน resolved — ตัววัดของ KPI-1 ใช้คอลัมน์เดียวกัน', () => {
+    const t = TicketEntity.create(SR);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+
+    const at = new Date('2026-09-04T05:00:00.000Z');
+    t.changeStatus('fulfilled', at);
+    expect(t.toPersistence().resolvedAt).toEqual(at);
+  });
+
+  it('เปิดคืนจาก fulfilled ได้ และล้างเวลาที่งานเสร็จออก', () => {
+    const t = TicketEntity.create(SR);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('fulfilled', AT);
+
+    t.changeStatus('in_progress', AT);
+    expect(t.toPersistence().resolvedAt).toBe(null);
+  });
+});
+
+describe('TicketEntity — ตารางสถานะของเหตุขัดข้อง', () => {
+  it('โอนทีมได้: in_progress ถอยกลับไป assigned', () => {
+    const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('assigned', AT);
+    expect(t.status).toBe('assigned');
+  });
+
+  it('รอผู้ขายแล้วกลับมาทำต่อได้', () => {
+    const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('pending_vendor', AT);
+    t.changeStatus('in_progress', AT);
+    expect(t.status).toBe('in_progress');
+  });
+
+  it('ยกเลิกได้ตลอดทางจนกว่าจะแก้เสร็จ', () => {
+    const paths: readonly (readonly TicketStatus[])[] = [
+      [],
+      ['assigned'],
+      ['assigned', 'in_progress'],
+    ];
+
+    for (const path of paths) {
+      const t = TicketEntity.create(BASE);
+      for (const step of path) t.changeStatus(step, AT);
+      t.changeStatus('cancelled', AT);
+      expect(t.status).toBe('cancelled');
+    }
+  });
+
+  it('แก้เสร็จแล้วยกเลิกไม่ได้ — ต้องเปิดคืนก่อน', () => {
+    const t = TicketEntity.create(BASE);
+    t.changeStatus('assigned', AT);
+    t.changeStatus('in_progress', AT);
+    t.changeStatus('resolved', AT);
+    assertDomainError(() => t.changeStatus('cancelled', AT), 'TICKET_INVALID_TRANSITION');
   });
 });
 

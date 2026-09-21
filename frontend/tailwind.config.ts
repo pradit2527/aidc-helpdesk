@@ -43,7 +43,8 @@ const config: Config = {
         p3: { fg: 'var(--p3-fg)', bg: 'var(--p3-bg)', solid: 'var(--p3-solid)' },
         p4: { fg: 'var(--p4-fg)', bg: 'var(--p4-bg)', solid: 'var(--p4-solid)' },
 
-        // ── สถานะเรื่อง 7 ค่า ──
+        // ── สถานะเรื่อง 11 ค่า ──
+        // pending ใช้ร่วมสามสถานะที่หยุดรอ · resolved ใช้ร่วม resolved/fulfilled
         'st-new': { fg: 'var(--st-new-fg)', bg: 'var(--st-new-bg)' },
         'st-assigned': { fg: 'var(--st-assigned-fg)', bg: 'var(--st-assigned-bg)' },
         'st-progress': { fg: 'var(--st-progress-fg)', bg: 'var(--st-progress-bg)' },
@@ -51,6 +52,7 @@ const config: Config = {
         'st-resolved': { fg: 'var(--st-resolved-fg)', bg: 'var(--st-resolved-bg)' },
         'st-closed': { fg: 'var(--st-closed-fg)', bg: 'var(--st-closed-bg)' },
         'st-cancelled': { fg: 'var(--st-cancelled-fg)', bg: 'var(--st-cancelled-bg)' },
+        'st-rejected': { fg: 'var(--st-rejected-fg)', bg: 'var(--st-rejected-bg)' },
 
         // ── สถานะ SLA 4 ค่า ──
         sla: {

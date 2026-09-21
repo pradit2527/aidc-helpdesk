@@ -1,20 +1,24 @@
 import { Injectable } from '@nestjs/common';
 
-import type { Impact, Priority, TicketStatus, Urgency } from '../../common/constants';
+import type { Impact, Priority, TicketStatus, TicketType, Urgency } from '../../common/constants';
 import type { AccessScope } from '../../common/scope';
-import { elapsedMinutes, slaStatus } from '../../common/sla/business-time';
+import { elapsedMinutes, minutesBetween, slaStatus } from '../../common/sla/business-time';
 import { AssignTicketUseCase } from '../../application/use-cases/assign-ticket.use-case';
 import { CreateTicketUseCase } from '../../application/use-cases/create-ticket.use-case';
 import { SuperworkService } from '../../integrations/superwork/superwork.service';
 import { MasterDataService } from '../master-data/master-data.service';
+import { IncidentAlertService } from '../notifications/incident-alert.service';
 import { RealtimeGateway, type TicketUpdateKind } from '../realtime/realtime.gateway';
 import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
 import { ReassessTicketPriorityUseCase } from '../../application/use-cases/reassess-ticket-priority.use-case';
+import { ServiceCatalogRepository } from '../../db/repositories/service-catalog.repository';
 import { SlaConfigRepository } from '../../db/repositories/sla-config.repository';
+import { SupportProjectRepository } from '../../db/repositories/support-project.repository';
 import { TicketDetailRepository } from '../../db/repositories/ticket-detail.repository';
 import { TicketRepository, type TicketRow } from '../../db/repositories/ticket.repository';
 import { TicketWriteRepository } from '../../db/repositories/ticket-write.repository';
 import { SupportTeamRepository } from '../../db/repositories/support-team.repository';
+import { TicketChatNotifier } from '../support-chat/ticket-chat-notifier.service';
 import {
   actorMayTransition,
   allowedTransitionsFrom,
@@ -27,6 +31,7 @@ import {
   ChangePriorityDto,
   ChangeStatusDto,
   CreateTicketDto,
+  LinkTicketDto,
   TicketAssigneeDto,
   TicketDetailDto,
   TicketListItemDto,
@@ -64,6 +69,7 @@ export class TicketsService {
     private readonly tickets: TicketRepository,
     private readonly details: TicketDetailRepository,
     private readonly slaConfig: SlaConfigRepository,
+    private readonly catalog: ServiceCatalogRepository,
     private readonly createTicket: CreateTicketUseCase,
     private readonly changeTicketStatus: ChangeTicketStatusUseCase,
     private readonly reassessPriority: ReassessTicketPriorityUseCase,
@@ -73,6 +79,9 @@ export class TicketsService {
     private readonly realtime: RealtimeGateway,
     private readonly master: MasterDataService,
     private readonly teams: SupportTeamRepository,
+    private readonly projects: SupportProjectRepository,
+    private readonly chatNotifier: TicketChatNotifier,
+    private readonly alerts: IncidentAlertService,
   ) {}
 
   async list(scope: AccessScope, query: Record<string, string>): Promise<TicketListResponseDto> {
@@ -87,6 +96,8 @@ export class TicketsService {
       assigneeId: query.assignee_id === 'me' ? scope.userId : undefined,
       requesterId: query.requester_id === 'me' ? scope.userId : undefined,
       unassigned: query.unassigned === 'true',
+      // ค่าที่แปลงเป็นจำนวนเต็มบวกไม่ได้ ถือว่าไม่ได้ส่งมา — กติกาเดียวกับรายงาน
+      projectId: positiveInt(query.project_id),
       q: query.q,
       // รับเฉพาะค่าที่รู้จัก ค่าอื่นถือว่าไม่ได้ส่ง — ไม่เอาข้อความจาก query ไปต่อเป็น ORDER BY
       sort:
@@ -160,12 +171,31 @@ export class TicketsService {
      */
     const canSeeInternal = scope.has('ticket.comment_internal', 'ticket.assign');
 
-    const [comments, history, checklist, approvals] = await Promise.all([
-      this.details.comments(row.id, canSeeInternal),
-      base.can.view_history ? this.details.history(row.id) : Promise.resolve([]),
-      this.details.checklist(row.id),
-      this.details.approvals(row.id),
-    ]);
+    const isOwner = row.requesterId === scope.userId;
+    const [comments, history, checklist, approvals, catalogItem, requesterTickets] =
+      await Promise.all([
+        this.details.comments(row.id, canSeeInternal),
+        base.can.view_history ? this.details.history(row.id) : Promise.resolve([]),
+        this.details.checklist(row.id),
+        this.details.approvals(row.id),
+        row.catalogItemId === null
+          ? Promise.resolve(null)
+          : this.catalog.summaryById(row.catalogItemId),
+        /*
+         * เรื่องอื่นของผู้แจ้งคนเดียวกัน — ผ่าน list() เพื่อให้ได้ตัวกรองขอบเขตสิทธิ์ชุดเดียว
+         * กับหน้ารายการ (เหตุความปลอดภัย · บริษัทอื่น) ไม่เขียนเงื่อนไขซ้ำที่นี่
+         * ผู้แจ้งดูเรื่องของตัวเองอยู่แล้ว การ์ดนี้จึงไม่มีความหมายสำหรับเขา ข้ามการยิงคิวรีเลย
+         * ขอ 6 ใบเพราะใบปัจจุบันอาจติดมาด้วย ตัดออกแล้วเหลือ 5
+         */
+        isOwner
+          ? Promise.resolve({ rows: [] as TicketRow[], total: 0 })
+          : this.tickets.list(scope, {
+              requesterId: row.requesterId,
+              sort: 'created',
+              page: 1,
+              pageSize: 6,
+            }),
+      ]);
 
     /*
      * ไฟล์แนบของคอมเมนต์ต้องดึงหลังรู้ว่าคอมเมนต์ไหนรอดจากการกรองแล้ว
@@ -185,6 +215,19 @@ export class TicketsService {
 
     return {
       ...base,
+      catalog_item: catalogItem
+        ? { id: catalogItem.id, code: catalogItem.code, name_th: catalogItem.nameTh }
+        : null,
+      requester_tickets: requesterTickets.rows
+        .filter((r) => r.id !== row.id)
+        .slice(0, 5)
+        .map((r) => ({
+          id: r.id,
+          ticket_no: r.ticketNo,
+          subject: r.subject,
+          status: r.status as TicketStatus,
+          ticket_type: r.ticketType as TicketType,
+        })),
       comments: comments.map((c) => ({
         id: c.id,
         body: c.body,
@@ -237,11 +280,23 @@ export class TicketsService {
     };
   }
 
-  async create(scope: AccessScope, dto: CreateTicketDto): Promise<TicketDetailDto> {
+  /**
+   * แจ้งเรื่องใหม่
+   *
+   * @param options ข้อเท็จจริงที่ **เซิร์ฟเวอร์รู้เอง** ไม่ได้มาจากเนื้อคำขอ
+   *        ต้องไม่ย้ายไปอยู่ใน CreateTicketDto เด็ดขาด — ดูคอมเมนต์ที่จุดเรียก
+   *        ใน SupportChatService.convertToTicket
+   */
+  async create(
+    scope: AccessScope,
+    dto: CreateTicketDto,
+    options: { submitterIsInternal?: boolean } = {},
+  ): Promise<TicketDetailDto> {
     // หมวดหลักที่มีหมวดย่อยใช้แจ้งตรง ๆ ไม่ได้ — รายงานรายหมวดย่อยจะนับขาด
     await this.master.assertCategoryUsableForTicket(scope, dto.category_id);
+    await this.assertProjectInReach(scope, dto.project_id);
 
-    const id = await this.createTicket.execute(scope, {
+    const { id } = await this.createTicket.execute(scope, {
       companyId: dto.company_id,
       requesterId: dto.requester_id,
       categoryId: dto.category_id,
@@ -250,15 +305,45 @@ export class TicketsService {
       impact: dto.impact as Impact,
       urgency: dto.urgency as Urgency,
       ...(dto.ticket_type ? { ticketType: dto.ticket_type } : {}),
+      /*
+       * ทางนี้เป็นพนักงานในเครือเสมอ — ต้องล็อกอินก่อนถึงจะเรียกได้
+       *
+       * ส่งค่าให้ชัดแทนที่จะพึ่งค่าตั้งต้น เพื่อให้เห็นว่ากฎ "เหตุขัดข้อง
+       * เป็นของพนักงานเท่านั้น" ถูกประเมินที่ทางเข้านี้ด้วย ไม่ใช่แค่ทางแชท
+       * วันนี้เป็น no-op (ไม่มีทางที่ค่าจะเป็น false) แต่ถ้าวันหนึ่งมีทางเข้า
+       * แบบไม่ต้องล็อกอินเพิ่มเข้ามา กฎจะถูกบังคับอยู่แล้วโดยไม่ต้องไปตามแก้
+       */
+      submitterIsInternal: options.submitterIsInternal ?? true,
       ...(dto.channel ? { channel: dto.channel } : {}),
       ...(dto.department_id !== undefined ? { departmentId: dto.department_id } : {}),
       ...(dto.catalog_item_id !== undefined ? { catalogItemId: dto.catalog_item_id } : {}),
       ...(dto.service_id !== undefined ? { serviceId: dto.service_id } : {}),
       ...(dto.source_device !== undefined ? { sourceDevice: dto.source_device } : {}),
       ...(dto.asset_tag !== undefined ? { assetTag: dto.asset_tag } : {}),
+      ...(dto.project_id !== undefined ? { supportProjectId: dto.project_id } : {}),
     });
 
     const ticket = await this.detail(scope, id);
+
+    /*
+     * เหตุร้ายแรง (P1) ต้องถึงหัวหน้าไอทีทันที ไม่รอให้ใครเปิดหน้าจอมาเห็น
+     *
+     * ES-01 / SLA 6.2 — "เหตุ P1 ทุกกรณี ทันที นอกเวลาทำการก็ส่ง"
+     * ธง is_major_incident ถูกตั้งตั้งแต่ตอนสร้างโดย TicketEntity อยู่แล้ว
+     * (P1 คือเหตุร้ายแรงตามนิยาม) — ก่อนหน้านี้ไม่มีอะไรทำอะไรกับธงนั้นเลย
+     *
+     * ไม่ await ด้วยเหตุผลเดียวกับ Super Work: ผู้ใช้กดแจ้งเรื่องเพื่อขอ
+     * ความช่วยเหลือ การแจ้งเตือนที่ช้าหรือล้มต้องไม่ทำให้การแจ้งเรื่องช้าหรือล้มตาม
+     */
+    if (ticket.is_major_incident) {
+      void this.alerts.majorIncidentDeclared({
+        ticketId: ticket.id,
+        ticketNo: ticket.ticket_no,
+        companyId: ticket.company.id,
+        subject: ticket.subject,
+        priority: ticket.priority,
+      });
+    }
 
     /*
      * ส่งขึ้นบอร์ด Super Work แบบไม่รอผล
@@ -277,7 +362,7 @@ export class TicketsService {
     id: number,
     dto: ChangeStatusDto,
   ): Promise<TicketDetailDto> {
-    await this.changeTicketStatus.execute(scope, id, {
+    const transition = await this.changeTicketStatus.execute(scope, id, {
       toStatus: dto.to_status as TicketStatus,
       reason: dto.reason,
       pendingReason: dto.pending_reason,
@@ -286,8 +371,47 @@ export class TicketsService {
       satisfactionScore: dto.satisfaction_score,
     });
     const ticket = await this.detail(scope, id);
-    this.announce(ticket, scope.userId, 'status');
+    this.afterStatusChange(ticket, scope.userId, transition, {
+      reason: dto.reason,
+      resolutionNote: dto.resolution_note,
+    });
     return ticket;
+  }
+
+  /**
+   * ผลข้างเคียงที่ต้องเกิด "ทุกครั้ง" ที่สถานะของเรื่องเปลี่ยน
+   *
+   * ⚠️ ทางเข้าที่เปลี่ยนสถานะไม่ได้มีแค่ POST /tickets/{id}/status
+   *    ApprovalsService.decide() ก็เปลี่ยนสถานะเหมือนกัน (อนุมัติครบ → assigned,
+   *    ปฏิเสธ → rejected) และเดิมมันเรียก ChangeTicketStatusUseCase ตรง ๆ
+   *    ซึ่งเขียนฐานข้อมูลครบทุกตาราง แต่ **ไม่เคยยิงสัญญาณให้ใครเลย** —
+   *    หน้าที่เปิดเรื่องนั้นค้างอยู่ไม่รีเฟรช และห้องแชทของผู้เข้าชมเงียบสนิท
+   *    ทั้งที่เรื่องของเขาเพิ่งถูกอนุมัติหรือถูกปฏิเสธ
+   *
+   *    รวมไว้ที่เมท็อดเดียวแล้วให้ทุกทางเข้าเรียกตัวนี้ แทนที่จะคัดลอกสองบรรทัดนั้น
+   *    ไปวางในแต่ละที่ — ผลข้างเคียงที่ถูกคัดลอกคือผลข้างเคียงที่วันหนึ่งจะตกหล่น
+   *
+   * ไม่ await อะไรเลยโดยตั้งใจ ทั้งสองอย่างเป็นการบอกกล่าว ไม่ใช่การบันทึก
+   * ถ้าล้มเหลวต้องไม่ทำให้คำสั่งที่เขียนฐานข้อมูลสำเร็จไปแล้วดูเหมือนล้มเหลว
+   */
+  afterStatusChange(
+    ticket: TicketDetailDto,
+    actorId: number,
+    transition: { from: TicketStatus; to: TicketStatus },
+    detail: { reason?: string | undefined; resolutionNote?: string | undefined } = {},
+  ): void {
+    this.announce(ticket, actorId, 'status');
+    /*
+     * ห้องแชทที่ยกระดับมาเป็นเรื่องนี้ได้ข้อความบอกความคืบหน้าด้วย
+     *
+     * ผู้เข้าชมเว็บไม่มีบัญชีใน Helpdesk เขาเปิดหน้าเรื่องไม่ได้เลย
+     * ห้องแชทคือทางเดียวที่เขาจะรู้ว่าเรื่องของตัวเองไปถึงไหนแล้ว
+     */
+    this.chatNotifier.ticketStatusChanged({
+      ticketId: ticket.id,
+      ...transition,
+      detail,
+    });
   }
 
   async changePriority(
@@ -295,6 +419,7 @@ export class TicketsService {
     id: number,
     dto: ChangePriorityDto,
   ): Promise<TicketDetailDto> {
+    const before = await this.tickets.findById(scope, id);
     await this.reassessPriority.execute(scope, id, {
       impact: dto.impact as Impact | undefined,
       urgency: dto.urgency as Urgency | undefined,
@@ -302,12 +427,31 @@ export class TicketsService {
     });
     const ticket = await this.detail(scope, id);
     this.announce(ticket, scope.userId, 'priority');
+
+    /*
+     * ยกระดับขึ้นมาเป็น P1 = เหตุร้ายแรงเพิ่งเกิดในสายตาของระบบ ต้องแจ้งเหมือน
+     * ตอนแจ้งเรื่องใหม่ที่เป็น P1 ตั้งแต่ต้น
+     *
+     * เทียบกับค่าก่อนหน้าเพื่อไม่ยิงซ้ำตอนทบทวนระดับของเรื่องที่เป็น P1 อยู่แล้ว
+     * (ดัชนีกันซ้ำในตาราง notification กันอีกชั้นอยู่แล้ว แต่การไม่ยิงเลย
+     *  ประหยัดกว่าการยิงแล้วให้ฐานข้อมูลปฏิเสธ)
+     */
+    if (ticket.priority === 'P1' && before.priority !== 'P1') {
+      void this.alerts.majorIncidentDeclared({
+        ticketId: ticket.id,
+        ticketNo: ticket.ticket_no,
+        companyId: ticket.company.id,
+        subject: ticket.subject,
+        priority: ticket.priority,
+      });
+    }
+
     return ticket;
   }
 
   /** มอบหมายผู้รับผิดชอบ หรือรับงานเอง (POST /tickets/{id}/assign) */
   async assign(scope: AccessScope, id: number, dto: AssignTicketDto): Promise<TicketDetailDto> {
-    const { fromAssigneeId } = await this.assignTicket.execute(scope, id, {
+    const { fromAssigneeId, fromStatus, toStatus } = await this.assignTicket.execute(scope, id, {
       assigneeId: dto.assignee_id,
       comment: dto.comment,
       reason: dto.reason,
@@ -315,6 +459,11 @@ export class TicketsService {
     const ticket = await this.detail(scope, id);
     // ผู้รับผิดชอบคนเดิมต้องได้สัญญาณด้วย คิวงานของเขาเพิ่งหายไปหนึ่งเรื่อง
     this.announce(ticket, scope.userId, 'assign', fromAssigneeId);
+    /*
+     * การรับเรื่องครั้งแรกทำให้สถานะขยับ new → assigned ซึ่งเป็นข่าวของผู้ถาม
+     * การย้ายมือระหว่างทาง (สถานะเท่าเดิม) ไม่ใช่ — notifier กรองให้เองจาก from/to
+     */
+    this.chatNotifier.ticketStatusChanged({ ticketId: ticket.id, from: fromStatus, to: toStatus });
     return ticket;
   }
 
@@ -432,6 +581,80 @@ export class TicketsService {
     );
   }
 
+  /**
+   * ผูกเรื่องสองใบเข้าด้วยกัน (POST /tickets/{id}/link)
+   *
+   * กรณีใช้งานจริงที่ SA ยกมา: โน้ตบุ๊กพัง (เหตุขัดข้อง) แล้วเปิดคำขอเบิกเครื่อง
+   * ทดแทน (คำขอบริการ) — สองใบนี้ต้องเดินคนละ SLA และปิดคนละเวลา
+   * แต่คนอ่านต้องกระโดดไปมาได้
+   *
+   * ⚠️ ทั้งสองใบต้องผ่าน findById ก่อน ไม่ใช่ใบเดียว
+   *    findById เป็นที่เดียวที่บังคับขอบเขตสิทธิ์ ถ้าตรวจแค่ใบต้นทาง ผู้เรียก
+   *    จะผูกเรื่องของตัวเองเข้ากับเรื่องที่เขาไม่มีสิทธิ์เห็นได้ แล้วชิปบนหน้าจอ
+   *    จะเปิดเผยเลขที่และหัวข้อของใบนั้นให้เขาอ่าน — เป็นการรั่วข้อมูลข้ามบริษัท
+   *    ผ่านช่องที่ดูไม่เหมือนช่องอ่านข้อมูล
+   */
+  async link(scope: AccessScope, id: number, dto: LinkTicketDto): Promise<TicketDetailDto> {
+    const row = await this.tickets.findById(scope, id);
+    scope.require('ticket.change_status');
+
+    if (dto.related_ticket_id === id) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຜູກເລື່ອງກັບຕົວມັນເອງບໍ່ໄດ້', [
+        { field: 'related_ticket_id', message: 'ກະລຸນາເລືອກເລື່ອງອື່ນ' },
+      ]);
+    }
+
+    // 404 ถ้าอยู่นอกขอบเขต — กติกาเดียวกับการเปิดเรื่องนั้นตรง ๆ
+    const other = await this.tickets.findById(scope, dto.related_ticket_id);
+
+    /*
+     * ข้ามบริษัทผูกกันไม่ได้
+     *
+     * ผู้ดูแลหลายบริษัทเห็นทั้งสองใบได้จริง จึงผ่าน findById ทั้งคู่ — ด่านนี้
+     * จึงไม่ซ้ำซ้อนกับด่านบน มันกันคนละเรื่องกัน: รายงานรายบริษัทต้องรวมยอด
+     * ได้โดยไม่มีเรื่องของบริษัทอื่นโผล่มาในชิป และผู้ใช้ปลายทางที่เห็นบริษัทเดียว
+     * จะเห็นชิปที่กดแล้วได้ 404 ทุกครั้ง
+     */
+    if (other.companyId !== row.companyId) {
+      throw new ValidationError('VALIDATION_ERROR', 'ຜູກເລື່ອງຂ້າມບໍລິສັດບໍ່ໄດ້', [
+        { field: 'related_ticket_id', message: 'ຕ້ອງເປັນເລື່ອງຂອງບໍລິສັດດຽວກັນ' },
+      ]);
+    }
+
+    await this.tickets.linkTickets({
+      ticketId: id,
+      relatedTicketId: other.id,
+      actorId: scope.userId,
+      companyId: row.companyId,
+      at: new Date(),
+    });
+
+    return this.detail(scope, id);
+  }
+
+  /**
+   * โครงการที่ผู้เรียกอ้างถึงต้องมีอยู่จริงและอยู่ในขอบเขตของเขา
+   *
+   * ⚠️ ตรวจฝั่งเซิร์ฟเวอร์เสมอ — id มาจากเบราว์เซอร์ ถ้าไม่ตรวจ ผู้ใช้บริษัท ก.
+   *    จะติดป้ายเรื่องของตัวเองด้วยโครงการของบริษัท ข. แล้วรายงานรายโครงการ
+   *    ของอีกบริษัทจะมีเรื่องที่ไม่ใช่ของเขาปนอยู่
+   *
+   * โครงการส่วนกลาง (company_id เป็น null) ใช้ได้ทุกคน — กติกาเดียวกับทีมและหมวดหมู่
+   */
+  private async assertProjectInReach(
+    scope: AccessScope,
+    projectId: number | undefined,
+  ): Promise<void> {
+    if (projectId === undefined) return;
+
+    const project = await this.projects.byId(projectId);
+    if (!project || !(project.companyId === null || scope.inScope(project.companyId))) {
+      throw new ValidationError('VALIDATION_ERROR', 'ໂຄງການນີ້ບໍ່ຢູ່ໃນຂອບເຂດທີ່ທ່ານເຫັນໄດ້', [
+        { field: 'project_id', message: 'ກະລຸນາເລືອກໂຄງການໃນຂອບເຂດຂອງທ່ານ' },
+      ]);
+    }
+  }
+
   // ── การแปลงแถวเป็น DTO ───────────────────────────────────────────
 
   private async slaBlock(row: TicketRow): Promise<TicketSlaDto> {
@@ -465,6 +688,27 @@ export class TicketsService {
       workaroundAt: row.workaroundAt,
     });
 
+    /*
+     * งบเวลาของ resolution
+     *
+     * incident ใช้เป้าตาราง priority ตามเดิมทุกประการ ส่วนคำขอบริการเป้าอยู่ที่รายการ
+     * ใน catalog (รีเซ็ตรหัสผ่าน 30 นาที ขณะที่ P4 คือ 5 วัน) ตาราง priority จึงบอกงบ
+     * ที่แท้จริงไม่ได้ — ถอดจากกำหนดเสร็จที่บันทึกไว้แล้วแทน: due = เริ่ม + งบ + เวลาที่หยุด
+     * ไม่ต้องถามฐานข้อมูลเพิ่มต่อหนึ่งแถวในรายการ
+     */
+    const clockStarted = row.slaClockStartedAt !== null || row.ticketType !== 'service_request';
+    const budget =
+      row.ticketType === 'service_request'
+        ? row.slaClockStartedAt !== null && row.resolutionDueAt !== null
+          ? Math.max(
+              0,
+              minutesBetween(row.slaClockStartedAt, row.resolutionDueAt, cal, target.clockMode) -
+                row.pendingDurationMinutes,
+            )
+          : null
+        : target.resolutionMinutes;
+    const remaining = budget === null ? null : budget - used;
+
     return {
       policy_id: target.policyId,
       doc_ref: target.docRef ?? undefined,
@@ -477,7 +721,7 @@ export class TicketsService {
       status,
       // นาทีที่เหลือ คิดจากเป้าหมายลบเวลาที่ใช้ไป — ติดลบแปลว่าเกินกำหนดแล้ว
       // ระหว่างหยุดนับให้เป็น null เพราะ "เหลืออีกเท่าไร" ไม่มีความหมายตอนโมงหยุด
-      remaining_minutes: status === 'paused' ? null : target.resolutionMinutes - used,
+      remaining_minutes: status === 'paused' ? null : remaining,
       remaining_unit:
         target.clockMode === 'calendar_24x7' ? 'calendar_minutes' : 'business_minutes',
       next_status_report_due_at: null,
@@ -488,6 +732,15 @@ export class TicketsService {
       pending_duration_minutes: row.pendingDurationMinutes,
       workaround_at: row.workaroundAt?.toISOString() ?? null,
       exclusion_code: row.slaExclusionCode,
+      budget_minutes: budget,
+      // เกินกำหนดแล้วแถบเต็ม 100 ไม่ว่าเวลาที่ใช้จะคำนวณออกมาเท่าไร — ใช้ธง breach เป็นตัวตัดสิน
+      // เหมือนงานกวาด SLA (ค่าสองตัวนี้ไม่ตรงกันได้เมื่อ due ถูกเลื่อนหลังพัก)
+      elapsed_percent: !clockStarted || budget === null || budget <= 0
+        ? null
+        : status === 'breached'
+          ? 100
+          : Math.min(100, Math.max(0, Math.round((used / budget) * 100))),
+      clock_started: clockStarted,
     };
   }
 
@@ -540,11 +793,27 @@ export class TicketsService {
   private async toDetail(
     row: TicketRow,
     scope: AccessScope,
-  ): Promise<Omit<TicketDetailDto, 'comments' | 'history' | 'checklist' | 'approvals'>> {
+  ): Promise<
+    Omit<
+      TicketDetailDto,
+      'comments' | 'history' | 'checklist' | 'approvals' | 'catalog_item' | 'requester_tickets'
+    >
+  > {
     const base = await this.toListItem(row);
-    const closed = ['resolved', 'closed', 'cancelled'].includes(row.status);
+    /*
+     * "จบแล้ว" สำหรับการเปิด/ปิดปุ่มแก้ไข
+     *
+     * fulfilled และ rejected ต้องอยู่ในรายการนี้ด้วย มิฉะนั้นคำขอที่ส่งมอบแล้ว
+     * หรือถูกปฏิเสธไปแล้วจะยังมีปุ่มแก้ไข มอบหมาย และแนบไฟล์ขึ้นให้กด
+     */
+    const closed = ['resolved', 'fulfilled', 'closed', 'cancelled', 'rejected'].includes(
+      row.status,
+    );
     const isOwner = row.requesterId === scope.userId;
     const status = row.status as TicketStatus;
+    const ticketType = (row.ticketType ?? 'incident') as TicketType;
+    const related =
+      row.relatedTicketId === null ? null : await this.tickets.relatedSummary(row.relatedTicketId);
 
     /*
      * สถานะที่ผู้เรียกคนนี้ไปต่อได้ — ใช้ actorMayTransition ตัวเดียวกับ use case
@@ -559,9 +828,9 @@ export class TicketsService {
       canReopen: scope.has('ticket.reopen'),
     };
     const now = new Date();
-    const availableTransitions = allowedTransitionsFrom(status).filter(
+    const availableTransitions = allowedTransitionsFrom(status, ticketType).filter(
       (to) =>
-        actorMayTransition(status, to, actor) &&
+        actorMayTransition(status, to, actor, ticketType) &&
         !(status === 'closed' && !isWithinReopenWindow(row.closedAt, now)),
     );
 
@@ -582,6 +851,16 @@ export class TicketsService {
       is_major_incident: row.isMajorIncident,
       is_security_incident: row.isSecurityIncident,
       satisfaction_score: row.satisfactionScore,
+      related_ticket:
+        related === null
+          ? null
+          : {
+              id: related.id,
+              ticket_no: related.ticketNo,
+              subject: related.subject,
+              status: related.status as TicketStatus,
+              ticket_type: related.ticketType as TicketType,
+            },
       can: {
         update: !closed && (scope.has('ticket.update') || (isOwner && row.status === 'new')),
         /*
@@ -626,10 +905,17 @@ export class TicketsService {
          * (use case ปฏิเสธคะแนนจากคนที่ไม่ใช่ผู้แจ้งอยู่แล้ว แต่ปุ่มไม่ควรโผล่ให้กดตั้งแต่แรก)
          * เจ้าหน้าที่ปิดเรื่องหรือเปิดคืนผ่าน change_status ซึ่งมีสองปลายทางนี้ให้อยู่แล้ว
          */
-        close_own: isOwner && status === 'resolved' && availableTransitions.includes('closed'),
+        /*
+         * ยืนยันปิดเรื่องที่งานเสร็จแล้ว — resolved (เหตุขัดข้อง) หรือ fulfilled (คำขอบริการ)
+         * สองค่านี้คือ "เสร็จ" ของคนละสาย เรื่องหนึ่งใบเจอได้แค่ค่าเดียวเสมอ
+         */
+        close_own:
+          isOwner &&
+          (status === 'resolved' || status === 'fulfilled') &&
+          availableTransitions.includes('closed'),
         reopen:
           isOwner &&
-          (status === 'resolved' || status === 'closed') &&
+          (status === 'resolved' || status === 'fulfilled' || status === 'closed') &&
           availableTransitions.includes('in_progress'),
         cancel: availableTransitions.includes('cancelled'),
         delete: scope.has('ticket.delete'),
@@ -752,4 +1038,53 @@ export class TicketsService {
     };
   }
 
+}
+
+/**
+ * ตัดรายละเอียดของเรื่องให้เหลือรูป "รายการ"
+ *
+ * ใช้โดยเส้นทางที่สร้างเรื่องแล้วต้องคืนเรื่องนั้นในรูปเดียวกับ `GET /tickets`
+ * (ตอนนี้คือการยกระดับแชทเป็นเรื่อง) — ไม่ประกาศ DTO ของเรื่องขึ้นมาอีกชุด
+ * ซึ่งวันหนึ่งจะเพี้ยนจากของจริงโดยไม่มีอะไรฟ้อง
+ *
+ * ⚠️ คืน object ใหม่ ไม่ใช่ส่ง detail ต่อไปทั้งก้อน — TicketDetailDto สืบทอดจาก
+ *    TicketListItemDto ตัวตรวจชนิดจึงไม่บ่น แต่คำตอบจะมีคอมเมนต์ ประวัติ และบล็อก can
+ *    ติดไปด้วย ซึ่งไม่ได้ประกาศไว้ในสัญญาของ endpoint นั้น
+ */
+export function toTicketListItem(detail: TicketDetailDto): TicketListItemDto {
+  return {
+    id: detail.id,
+    ticket_no: detail.ticket_no,
+    ticket_type: detail.ticket_type,
+    subject: detail.subject,
+    status: detail.status,
+    pending_reason: detail.pending_reason ?? null,
+    priority: detail.priority,
+    support_tier: detail.support_tier,
+    company: detail.company,
+    department: detail.department ?? null,
+    category: detail.category,
+    requester: detail.requester,
+    assignee: detail.assignee ?? null,
+    sla: detail.sla,
+    reopen_count: detail.reopen_count,
+    comment_count: detail.comment_count,
+    attachment_count: detail.attachment_count,
+    closed_at: detail.closed_at,
+    satisfaction_score: detail.satisfaction_score,
+    created_at: detail.created_at,
+    updated_at: detail.updated_at,
+  };
+}
+
+/**
+ * แปลง id จาก query string — รับเฉพาะจำนวนเต็มบวก ค่าอื่นถือว่าไม่ได้ส่ง
+ *
+ * ไม่ตอบ 422 เพราะ id ที่ "ไม่ถูกต้อง" กับ id ที่ "อยู่นอกขอบเขต" ต้องได้ผลเหมือนกัน
+ * (รายการเปล่า) — กติกาเดียวกับ ReportsController
+ */
+function positiveInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
 }

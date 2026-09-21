@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyMessage,
   isImportable,
+  isPushableToVisitor,
   isWithinWindow,
   requesterLinkDecision,
   shouldCloseFromChatwoot,
@@ -12,6 +13,7 @@ import {
   widgetCompanyId,
   WIDGET_VISITOR_NAME,
   type ChatwootConversation,
+  type OutboundCandidate,
 } from './chatwoot-widget';
 
 /*
@@ -231,5 +233,75 @@ describe('widgetCompanyId', () => {
 
   it('โครงการส่วนกลางตกมาที่บริษัทเจ้าของระบบ ไม่ใช่ปล่อยว่าง', () => {
     expect(widgetCompanyId(null, 1)).toBe(1);
+  });
+});
+
+describe('isPushableToVisitor', () => {
+  const at = new Date('2026-09-17T03:00:00.000Z');
+  const now = new Date('2026-09-17T03:00:30.000Z');
+  const open = { status: 'open' };
+
+  function candidate(over: Partial<OutboundCandidate> = {}): OutboundCandidate {
+    return {
+      senderId: 22,
+      isSystem: false,
+      fromContact: false,
+      externalSenderName: null,
+      chatwootMessageId: null,
+      createdAt: at,
+      ...over,
+    };
+  }
+
+  it('คำตอบของเจ้าหน้าที่ส่งออกได้ — พฤติกรรมเดิมไม่เปลี่ยน', () => {
+    expect(isPushableToVisitor(open, candidate(), now)).toBe(true);
+  });
+
+  it('ข้อความที่ส่งไปแล้วไม่ถูกส่งซ้ำ', () => {
+    expect(isPushableToVisitor(open, candidate({ chatwootMessageId: 91 }), now)).toBe(false);
+  });
+
+  it('ข้อความที่ดึงมาจาก Chatwoot ไม่ถูกส่งกลับไป', () => {
+    expect(isPushableToVisitor(open, candidate({ externalSenderName: 'Somsak' }), now)).toBe(false);
+    expect(isPushableToVisitor(open, candidate({ fromContact: true, senderId: null }), now)).toBe(
+      false,
+    );
+  });
+
+  it('ข้อความที่ไม่ใช่ของระบบและไม่มีเจ้าของใน Helpdesk ยังส่งไม่ได้เหมือนเดิม', () => {
+    expect(isPushableToVisitor(open, candidate({ senderId: null }), now)).toBe(false);
+  });
+
+  it('ข้อความของระบบที่เราสร้างเอง ส่งถึงผู้เข้าชมได้ทั้งที่ sender_id เป็น null', () => {
+    // นี่คือข้อความที่บอกผู้ถามว่าเรื่องของเขาไปถึงไหนแล้ว
+    expect(isPushableToVisitor(open, candidate({ isSystem: true, senderId: null }), now)).toBe(true);
+  });
+
+  it('ห้องที่ปิดแล้วไม่ส่งข้อความของระบบออกไป', () => {
+    /*
+     * กันสองข้อความที่มีอยู่เดิมพร้อมกัน — "ທີມໄອທີປິດແຊັດນີ້ແລ້ວ" ที่เขียนตอนปิดห้อง
+     * และ "ບົດສົນທະນານີ້ຖືກປິດຈາກ Chatwoot ແລ້ວ" ซึ่งถ้าส่งกลับไปเท่ากับพูดซ้ำ
+     * สิ่งที่ Chatwoot เพิ่งทำเอง
+     */
+    const closed = { status: 'closed' };
+    expect(isPushableToVisitor(closed, candidate({ isSystem: true, senderId: null }), now)).toBe(
+      false,
+    );
+  });
+
+  it('คำตอบของเจ้าหน้าที่ยังส่งได้แม้ห้องถูกปิดไปแล้ว', () => {
+    // ปิดห้องแล้วยังมีข้อความค้างส่งอยู่ เป็นเรื่องปกติของการซิงก์ที่ไม่รอผล
+    expect(isPushableToVisitor({ status: 'closed' }, candidate(), now)).toBe(true);
+  });
+
+  it('ข้อความของระบบที่ค้างเกินเพดานเวลา ไม่ถูกส่งตามหลัง', () => {
+    const stale = candidate({
+      isSystem: true,
+      senderId: null,
+      createdAt: new Date('2026-09-17T01:00:00.000Z'),
+    });
+    expect(isPushableToVisitor(open, stale, now)).toBe(false);
+    // คำตอบของเจ้าหน้าที่ไม่ถูกเพดานนี้แตะ — ลองใหม่ได้ตลอดเหมือนเดิม
+    expect(isPushableToVisitor(open, { ...stale, isSystem: false, senderId: 22 }, now)).toBe(true);
   });
 });

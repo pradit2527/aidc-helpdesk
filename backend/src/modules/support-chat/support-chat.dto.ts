@@ -1,7 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
+import { IMPACT, URGENCY, type Impact, type Urgency } from '../../common/constants';
 import { SUPPORT_CHAT_ORIGIN } from '../../db/schema/support-chat';
+import { TicketListItemDto } from '../tickets/dto/ticket.dto';
+import { SUBJECT_MAX_LENGTH } from './chat-ticket';
 
 export const SUPPORT_CHAT_MAX_BODY = 4000;
 
@@ -179,4 +182,83 @@ export class SupportChatThreadDto extends SupportChatSummaryDto {
 export class SendChatMessageResponseDto {
   @ApiProperty({ type: SupportChatSummaryDto }) chat!: SupportChatSummaryDto;
   @ApiProperty({ type: SupportChatMessageDto }) message!: SupportChatMessageDto;
+}
+
+// ══════════════════════ ยกระดับแชทเป็นเรื่องแจ้ง ══════════════════════
+
+export class ConvertChatToTicketDto {
+  @ApiProperty({
+    example: 'ເຂົ້າລະບົບ ILP ບໍ່ໄດ້ ຂຶ້ນວ່າລະຫັດຜິດ',
+    minLength: 5,
+    maxLength: SUBJECT_MAX_LENGTH,
+    description: 'หัวข้อของเรื่อง — เจ้าหน้าที่สรุปเองจากบทสนทนา',
+  })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(SUBJECT_MAX_LENGTH)
+  subject!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'ไม่ส่ง = ระบบถอดบทสนทนาในห้องให้เอง (มีเวลากำกับ · ติดป้ายผู้พูด · ตัดข้อความระบบออก · ' +
+      `ยาวไม่เกิน ${SUPPORT_CHAT_MAX_BODY} ตัวอักษร แล้วบอกว่าที่เหลืออ่านได้ที่ห้องแชท)`,
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  description?: string;
+
+  @ApiPropertyOptional({
+    example: 79,
+    description:
+      'ไม่ส่ง = ใช้ `default_category` ของโครงการที่ห้องนี้สังกัด · ' +
+      'ถ้าโครงการไม่ได้ตั้งไว้และไม่ส่งมาด้วย จะได้ `422` ให้เลือกหมวดหมู่เอง',
+  })
+  @IsOptional()
+  @IsInt()
+  category_id?: number;
+
+  @ApiPropertyOptional({ enum: IMPACT, default: 'individual' })
+  @IsOptional()
+  @IsIn(IMPACT)
+  impact?: Impact;
+
+  @ApiPropertyOptional({ enum: URGENCY, default: 'medium' })
+  @IsOptional()
+  @IsIn(URGENCY)
+  urgency?: Urgency;
+}
+
+/**
+ * ตัวตนของผู้เข้าชม ณ เวลาที่ยกระดับเป็นเรื่อง
+ *
+ * ⚠️ อยู่ใน **คำตอบเท่านั้น** ไม่ได้ถูกเขียนลงแถวของ ticket
+ *    ห้องจาก widget ที่ยังไม่ผูกกับบัญชีใด ไม่มีคนใน Helpdesk ให้ตั้งเป็นผู้แจ้ง
+ *    ระบบจึงใช้เจ้าหน้าที่ที่กดเป็นทั้งผู้แจ้งและผู้สร้าง — ค่านี้มีไว้ให้หน้าจอ
+ *    บอกได้ว่า "คนที่ถามจริง ๆ คือใคร" โดยไม่ต้องเดาจากชื่อผู้แจ้งในตั๋ว
+ */
+export class ChatContactSnapshotDto {
+  @ApiProperty({ nullable: true, type: String, example: 'ນາງ ສົມໃຈ' }) name!: string | null;
+  @ApiProperty({ nullable: true, type: String, example: 'somjai@example.com' }) email!: string | null;
+  @ApiProperty({ nullable: true, type: String, example: '+8562055550000' }) phone!: string | null;
+}
+
+export class ConvertChatToTicketResponseDto {
+  @ApiProperty({ type: SupportChatSummaryDto, description: 'ห้องเดิม พร้อม `ticket_id` ที่ผูกแล้ว' })
+  chat!: SupportChatSummaryDto;
+
+  @ApiProperty({
+    type: TicketListItemDto,
+    description: 'รูปเดียวกับแถวใน `GET /tickets` ทุกฟิลด์ — ไม่ใช่ DTO ชุดใหม่',
+  })
+  ticket!: TicketListItemDto;
+
+  @ApiProperty({
+    type: ChatContactSnapshotDto,
+    nullable: true,
+    description:
+      'null เมื่อห้องนี้ไม่ได้มาจาก widget (ผู้แจ้งเป็นพนักงานที่มีบัญชีอยู่แล้ว) ' +
+      'หรือผู้เข้าชมไม่ได้ฝากชื่อ อีเมล และเบอร์ไว้เลยสักช่อง — ไม่มีก้อนที่ว่างทั้งสามช่อง',
+  })
+  contact_snapshot!: ChatContactSnapshotDto | null;
 }

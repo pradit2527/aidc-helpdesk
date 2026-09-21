@@ -4,7 +4,7 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 import type { ClockMode, Priority } from '../../common/constants';
 import { defaultCalendar, type BusinessCalendar } from '../../common/sla/business-time';
 import type { Db } from '../client';
-import { DB } from '../db.module';
+import { DB } from '../db.token';
 import { businessHours, holiday, slaPolicy, slaTarget } from '../schema';
 
 export interface ResolvedTarget {

@@ -102,6 +102,15 @@ describe('actorMayTransition — ใครเปลี่ยนสถานะ�
       false,
     );
   });
+
+  it('คำขอบริการที่มีคนรับแล้ว เจ้าหน้าที่ยกเลิกได้ แต่ผู้แจ้งเองยกเลิกไม่ได้', () => {
+    expect(actorMayTransition('assigned', 'cancelled', STAFF, 'service_request')).toBe(true);
+    expect(actorMayTransition('in_progress', 'cancelled', STAFF, 'service_request')).toBe(true);
+    expect(actorMayTransition('assigned', 'cancelled', REQUESTER, 'service_request')).toBe(false);
+    expect(actorMayTransition('in_progress', 'cancelled', REQUESTER, 'service_request')).toBe(
+      false,
+    );
+  });
 });
 
 describe('isWithinReopenWindow', () => {

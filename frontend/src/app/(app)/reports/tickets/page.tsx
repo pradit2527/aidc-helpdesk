@@ -27,14 +27,25 @@ import { Alert, Avatar, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import {
   PRIORITY,
+  STATUS_ORDER,
   TICKET_STATUS,
   TICKET_TYPE,
+  TYPE_STATUSES,
+  isWaitingStatus,
+  statusLabel,
   type Priority,
   type SlaStatus,
   type TicketStatus,
 } from '@/config/enums';
 import { cn } from '@/lib/cn';
-import { TIMEZONE, formatDateShort, formatDateTime, formatNumber, formatPercent } from '@/lib/format';
+import {
+  TIMEZONE,
+  formatDateShort,
+  formatDateTime,
+  formatMinutes,
+  formatNumber,
+  formatPercent,
+} from '@/lib/format';
 import { useCompanies, useDepartments } from '@/lib/queries/master-data';
 import { useUser, useUsers } from '@/lib/queries/operations';
 import {
@@ -46,6 +57,7 @@ import {
   type TicketReportItem,
   type TicketReportParams,
 } from '@/lib/queries/reports';
+import { useSupportProjects } from '@/lib/queries/support-projects';
 import { useCan, useSession } from '@/lib/session';
 import { useDebounced } from '@/lib/use-debounced';
 
@@ -65,25 +77,19 @@ const PAGE_SIZE = 20;
 /** เป้า SLA ตาม AIDC-IT-SLA-001 ข้อ 7.1 (KPI-1) — ใช้ระบายสี % ทันเวลาเท่านั้น */
 const TARGET_PERCENT = 95;
 
-/** ลำดับสถานะบนชิป — เรียงตามวงจรชีวิตของเรื่อง ไม่ใช่ตามตัวอักษร */
-const STATUS_ORDER: readonly TicketStatus[] = [
-  'new',
-  'assigned',
-  'in_progress',
-  'pending_user',
-  'resolved',
-  'closed',
-  'cancelled',
-];
-
 const PRIORITY_ORDER: readonly Priority[] = ['P1', 'P2', 'P3', 'P4'];
 
 type PersonRole = 'assignee' | 'requester';
+type TypeFilter = '' | keyof typeof TICKET_TYPE;
 
 /** ตัวกรองที่อ่านจาก URL — ค่าว่างแปลว่า "ไม่กรอง" ทุกช่อง */
 interface Filters {
   company: string;
   department: string;
+  /** id ของโครงการที่รับซัพพอร์ต — ว่าง = ทุกโครงการ */
+  project: string;
+  /** ประเภทเรื่อง — ว่าง = ทั้งสองประเภท */
+  type: TypeFilter;
   status: TicketStatus[];
   person: string;
   personRole: PersonRole;
@@ -213,6 +219,7 @@ function TicketReportContent(): React.JSX.Element {
 
   const companies = useCompanies();
   const departments = useDepartments();
+  const projects = useSupportProjects();
 
   /*
    * "ทั้งองค์กร" เสนอให้เฉพาะคนที่ขอบเขตกว้างกว่าหนึ่งบริษัท
@@ -236,13 +243,26 @@ function TicketReportContent(): React.JSX.Element {
       .split(',')
       .filter((s): s is TicketStatus => s in TICKET_STATUS);
     const role = searchParams.get('person_role');
+    const rawType = searchParams.get('type');
+    const type: TypeFilter = rawType === 'incident' || rawType === 'service_request' ? rawType : '';
     const from = searchParams.get('from');
     const to = searchParams.get('to');
     const page = Number(searchParams.get('page') ?? 1);
     return {
       company: searchParams.get('company') ?? defaultCompany,
       department: searchParams.get('department') ?? '',
-      status: [...new Set(status)],
+      project: searchParams.get('project') ?? '',
+      type,
+      /*
+       * สถานะที่ไม่ได้อยู่ในประเภทที่กรอง เลือกไว้ก็ได้ผลลัพธ์ศูนย์เสมอ
+       *
+       * เกิดได้จริงจากลิงก์ที่ส่งต่อกัน — เลือก "ສົ່ງມອບແລ້ວ" ไว้แล้วสลับไป
+       * เหตุขัดข้อง ถ้าไม่ตัดออก รายงานจะว่างเปล่าโดยที่ชิปที่ทำให้ว่างหายไป
+       * จากแถบตัวกรองแล้ว (เพราะชิปวาดตามประเภท) ผู้ใช้จึงหาไม่เจอว่าเพราะอะไร
+       */
+      status: [...new Set(status)].filter(
+        (s) => type === '' || TYPE_STATUSES[type].includes(s),
+      ),
       person: searchParams.get('person') ?? '',
       personRole: role === 'requester' ? 'requester' : 'assignee',
       from: isYmd(from) ? from : defaultRange.from,
@@ -261,6 +281,8 @@ function TicketReportContent(): React.JSX.Element {
       const q = new URLSearchParams();
       if (next.company !== defaultCompany) q.set('company', next.company);
       if (next.department) q.set('department', next.department);
+      if (next.project) q.set('project', next.project);
+      if (next.type) q.set('type', next.type);
       if (next.status.length > 0) q.set('status', next.status.join(','));
       if (next.person) {
         q.set('person', next.person);
@@ -278,6 +300,8 @@ function TicketReportContent(): React.JSX.Element {
   const params: TicketReportParams = {
     company_id: filters.company ? Number(filters.company) : undefined,
     department_id: filters.department ? Number(filters.department) : undefined,
+    project_id: filters.project ? Number(filters.project) : undefined,
+    ticket_type: filters.type || undefined,
     status: filters.status.length > 0 ? filters.status.join(',') : undefined,
     assignee_id:
       filters.person && filters.personRole === 'assignee' ? Number(filters.person) : undefined,
@@ -296,14 +320,24 @@ function TicketReportContent(): React.JSX.Element {
   const departmentOptions = (departments.data ?? [])
     .filter((d) => filters.company && String(d.company.id) === filters.company)
     .sort((a, b) => a.name.localeCompare(b.name));
+  /*
+   * องค์กรที่ยังไม่ได้เปิดใช้ Support Hub ไม่มีโครงการสักอัน และ API รุ่นที่ยังไม่มี
+   * endpoint นี้ตอบ 403/404 ทันที — ทั้งสองกรณีต้องได้รายงานหน้าตาเดิม
+   * ไม่ใช่ตัวกรองเปล่า ๆ หรือข้อความผิดพลาดคาหน้า (แบบเดียวกับกล่องแชท)
+   */
+  const projectOptions = projects.isError ? [] : (projects.data ?? []);
 
   const selectedCompany = companyOptions.find((c) => String(c.id) === filters.company);
   const selectedDepartment = departmentOptions.find((d) => String(d.id) === filters.department);
+  const selectedProject = projectOptions.find((p) => String(p.id) === filters.project);
 
   const activePreset = PRESETS.find((p) => {
     const r = p.range(today);
     return r.from === filters.from && r.to === filters.to;
   });
+
+  /* ชิปที่แสดงจริง — กรองประเภทไว้แล้วก็ไม่ต้องเสนอสถานะที่ประเภทนั้นไม่มีวันเป็น */
+  const statusChoices = filters.type === '' ? STATUS_ORDER : TYPE_STATUSES[filters.type];
 
   function toggleStatus(status: TicketStatus): void {
     const has = filters.status.includes(status);
@@ -314,9 +348,19 @@ function TicketReportContent(): React.JSX.Element {
     });
   }
 
+  function changeType(type: TypeFilter): void {
+    // สถานะที่ค้างอยู่อาจใช้กับประเภทใหม่ไม่ได้ — ตัดออกพร้อมกัน ไม่ปล่อยให้รายงานว่างเปล่าเงียบ ๆ
+    update({
+      type,
+      status: type === '' ? filters.status : filters.status.filter((s) => TYPE_STATUSES[type].includes(s)),
+    });
+  }
+
   const hasCustomFilter =
     filters.company !== defaultCompany ||
     filters.department !== '' ||
+    filters.project !== '' ||
+    filters.type !== '' ||
     filters.status.length > 0 ||
     filters.person !== '' ||
     filters.from !== defaultRange.from ||
@@ -333,11 +377,16 @@ function TicketReportContent(): React.JSX.Element {
     );
   }
 
-  const scopeLabel = selectedCompany
+  const orgLabel = selectedCompany
     ? selectedDepartment
       ? `${selectedCompany.code} · ${selectedDepartment.name}`
       : selectedCompany.code
     : allLabel;
+  // ขอบเขตต้องอ่านออกจากหัวรายงานเสมอ — ลิงก์ที่ส่งต่อกันต้องบอกตัวเองได้ว่าเป็นรายงานของอะไร
+  const projectLabel = selectedProject ? `${orgLabel} · ໂຄງການ ${selectedProject.code}` : orgLabel;
+  // ประเภทที่กรองต้องอยู่ในหัวรายงานด้วย — ตัวเลข MTTR ของ "เหตุขัดข้อง" กับของ
+  // "ทุกประเภท" เป็นคนละตัวเลข ลิงก์ที่ส่งต่อกันต้องบอกได้เองว่าเป็นอันไหน
+  const scopeLabel = filters.type ? `${projectLabel} · ${TICKET_TYPE[filters.type]}` : projectLabel;
 
   return (
     <div className="flex flex-col gap-4">
@@ -426,6 +475,58 @@ function TicketReportContent(): React.JSX.Element {
                 onChange={(e) => isYmd(e.target.value) && update({ to: e.target.value })}
               />
             </Field>
+
+            {/*
+              ตัวกรองโครงการโผล่เฉพาะองค์กรที่เปิดใช้ Support Hub แล้วจริง ๆ
+              วางไว้ท้ายสุดเพื่อไม่ให้ช่อง "ຈາກວັນທີ – ຖິງວັນທີ" ถูกแยกคนละแถว
+              ซึ่งทำให้เทียบช่วงเวลาที่เลือกไว้ยากขึ้นโดยไม่จำเป็น
+            */}
+            {projectOptions.length > 0 && (
+              <Field
+                label="ໂຄງການ"
+                htmlFor="report-project"
+                hint="ເລື່ອງທີ່ຍົກມາຈາກແຊັດຂອງເວັບທີ່ຮັບຊັບພອດ"
+              >
+                <Select
+                  value={filters.project}
+                  onChange={(e) => update({ project: e.target.value })}
+                >
+                  <option value="">ທຸກໂຄງການ</option>
+                  {projectOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} — {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+          </div>
+
+          {/*
+            ตัวกรองประเภท — ปุ่มไม่ใช่ dropdown เพราะมีแค่สามทางเลือก และการสลับไปมา
+            ระหว่าง "เหตุขัดข้อง" กับ "คำขอบริการ" เป็นสิ่งที่ผู้บริหารทำบ่อยตอนอ่านรายงาน
+            วางไว้เหนือชิปสถานะ เพราะมันเปลี่ยนว่ามีชิปอะไรให้เลือกบ้าง
+          */}
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="ກັ່ນຕອງຕາມປະເພດເລື່ອງ">
+            <span className="text-caption text-ink-3">ປະເພດ:</span>
+            {(
+              [
+                ['', 'ທຸກປະເພດ'],
+                ['incident', TICKET_TYPE.incident],
+                ['service_request', TICKET_TYPE.service_request],
+              ] as const
+            ).map(([key, label]) => (
+              <Button
+                key={key || 'all'}
+                type="button"
+                size="sm"
+                variant={filters.type === key ? 'primary' : 'secondary'}
+                aria-pressed={filters.type === key}
+                onClick={() => changeType(key)}
+              >
+                {label}
+              </Button>
+            ))}
           </div>
 
           <div className="flex flex-wrap items-center gap-2" role="group" aria-label="ຊ່ວງເວລາດ່ວນ">
@@ -444,7 +545,12 @@ function TicketReportContent(): React.JSX.Element {
             ))}
           </div>
 
-          <StatusChips selected={filters.status} onToggle={toggleStatus} onClear={() => update({ status: [] })} />
+          <StatusChips
+            choices={statusChoices}
+            selected={filters.status}
+            onToggle={toggleStatus}
+            onClear={() => update({ status: [] })}
+          />
 
           <PersonFilter
             person={filters.person}
@@ -486,10 +592,13 @@ function TicketReportContent(): React.JSX.Element {
  * ชิปที่ไม่ได้เลือกจางลงแต่ยังอ่านออก และมี aria-pressed ให้โปรแกรมอ่านหน้าจอ
  */
 function StatusChips({
+  choices,
   selected,
   onToggle,
   onClear,
 }: {
+  /** สถานะที่เสนอให้เลือก — แคบลงตามประเภทที่กรองอยู่ */
+  choices: readonly TicketStatus[];
   selected: TicketStatus[];
   onToggle: (status: TicketStatus) => void;
   onClear: () => void;
@@ -511,7 +620,7 @@ function StatusChips({
       >
         ທຸກສະຖານະ
       </button>
-      {STATUS_ORDER.map((status) => {
+      {choices.map((status) => {
         const active = selected.includes(status);
         return (
           <button
@@ -711,13 +820,15 @@ function ReportContent({
   const t = report.totals;
   const showCompanies = report.by_company.length > 1;
   const showDepartments = report.by_department.length > 1;
+  const showProject = report.tickets.items.some((i) => i.support_project);
 
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="ທັງໝົດ" value={formatNumber(t.total)} icon={Layers} hint="ເລື່ອງທີ່ແຈ້ງໃນຊ່ວງເວລານີ້" />
-        <StatCard label="ຍັງເປີດຢູ່" value={formatNumber(t.open)} icon={Inbox} hint="ໃໝ່ · ມອບໝາຍ · ດຳເນີນການ · ລໍຖ້າຜູ້ແຈ້ງ" />
-        <StatCard label="ແກ້ໄຂແລ້ວ" value={formatNumber(t.resolved)} tone="ok" icon={CheckCircle2} hint="ລໍຖ້າຜູ້ແຈ້ງຢືນຢັນປິດ" />
+        <StatCard label="ຍັງເປີດຢູ່" value={formatNumber(t.open)} icon={Inbox} hint="ຍັງບໍ່ທັນຈົບ — ລວມທຸກສະຖານະທີ່ລໍຖ້າ" />
+        {/* incident นับเป็น resolved · service_request นับเป็น fulfilled — ทั้งคู่คือ "ทีมงานทำจบแล้ว รอผู้แจ้งยืนยัน" */}
+        <StatCard label="ເຮັດສຳເລັດແລ້ວ" value={formatNumber(t.resolved)} tone="ok" icon={CheckCircle2} hint="ແກ້ໄຂ / ສົ່ງມອບແລ້ວ ລໍຖ້າຜູ້ແຈ້ງຢືນຢັນປິດ" />
         <StatCard label="ປິດແລ້ວ" value={formatNumber(t.closed)} icon={Archive} />
         <StatCard label="ຍົກເລີກ" value={formatNumber(t.cancelled)} icon={XCircle} />
         <StatCard
@@ -749,6 +860,8 @@ function ReportContent({
           }
         />
       </div>
+
+      <TypeKpis report={report} type={filters.type} />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
@@ -843,7 +956,7 @@ function ReportContent({
         </CardHeader>
         <CardBody className="p-0">
           <DataTable
-            columns={ticketColumns}
+            columns={ticketColumns(showProject)}
             rows={report.tickets.items}
             rowKey={(r) => r.id}
             caption="ລາຍການເລື່ອງແຈ້ງໃນລາຍງານ"
@@ -859,6 +972,166 @@ function ReportContent({
         />
       </Card>
     </>
+  );
+}
+
+/**
+ * ตัวชี้วัดเฉพาะของแต่ละประเภท
+ *
+ * เหตุขัดข้องกับคำขอบริการวัดกันคนละเรื่อง — "แก้เร็วแค่ไหน" กับ "ส่งมอบเร็วแค่ไหน"
+ * ไม่ใช่ตัวเลขที่เอามาเฉลี่ยรวมกันแล้วยังมีความหมาย จึงแยกเป็นคนละชุดการ์ด
+ *
+ * ⚠️ วาดเท่าที่ API ส่งมาจริง ไม่ได้ตัดสินจากตัวกรองที่ผู้ใช้เลือก
+ *    ถ้า backend ยังไม่ส่งบล็อกพวกนี้ (หรือส่งมาเป็น null) ทั้งส่วนนี้จะหายไปเงียบ ๆ
+ *    ซึ่งถูกต้องกว่าการ์ดที่เขียนว่า MTTR 0 นาที ทั้งที่แปลว่า "ไม่รู้"
+ */
+function TypeKpis({
+  report,
+  type,
+}: {
+  report: TicketReport;
+  /** ประเภทที่ผู้ใช้กรองอยู่ — '' = ไม่ได้กรอง จึงแสดงทั้งสองชุดคู่กัน */
+  type: TypeFilter;
+}): React.JSX.Element | null {
+  /*
+   * backend ส่งทั้งสองบล็อกเสมอ และคำนวณแยกตามประเภทของตัวเองอยู่แล้ว
+   * จึงซ่อนชุดที่ผู้ใช้ไม่ได้กรองถามถึง ไม่ใช่เพราะไม่มีข้อมูล แต่เพราะหน้าที่พาดหัวว่า
+   * "เหตุขัดข้อง" ไม่ควรมีการ์ดคำขอบริการโผล่มาให้อ่านผิด
+   */
+  const inc = type !== 'service_request' ? (report.incident_metrics ?? null) : null;
+  const sr = type !== 'incident' ? (report.service_request_metrics ?? null) : null;
+  if (!inc && !sr) return null;
+
+  return (
+    <div className={cn('grid gap-4', inc && sr && 'xl:grid-cols-2')}>
+      {inc && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{TICKET_TYPE.incident}</CardTitle>
+            <span className="tabular text-caption text-ink-3">{formatNumber(inc.total)} ເລື່ອງ</span>
+          </CardHeader>
+          <CardBody className="grid gap-3 sm:grid-cols-3">
+            <KpiCell
+              label="ເວລາແກ້ໄຂສະເລ່ຍ (MTTR)"
+              value={
+                inc.mttr_business_minutes === null
+                  ? '—'
+                  : formatMinutes(inc.mttr_business_minutes, 'business_minutes')
+              }
+              hint={
+                inc.mttr_business_minutes === null
+                  ? 'ຍັງບໍ່ມີເລື່ອງທີ່ແກ້ໄຂສຳເລັດ'
+                  : `ຈາກ ${formatNumber(inc.resolved_count)} ເລື່ອງ · ນັບສະເພາະເວລາເຮັດວຽກ`
+              }
+            />
+            <KpiCell
+              label="% ທັນກຳນົດ SLA"
+              value={inc.sla_met_percent === null ? '—' : formatPercent(inc.sla_met_percent)}
+              hint={inc.sla_met_percent === null ? 'ບໍ່ມີເລື່ອງໃນຕົວຫານ' : `ເປົ້າ ≥ ${TARGET_PERCENT}%`}
+              {...(inc.sla_met_percent === null
+                ? {}
+                : { tone: inc.sla_met_percent >= TARGET_PERCENT ? ('ok' as const) : ('breach' as const) })}
+            />
+            <KpiCell
+              label="ການເປີດເລື່ອງຊ້ຳ"
+              value={formatNumber(inc.reopen_total)}
+              // สองตัวเลขนี้ต่างกันจริง — 3 ครั้งอาจมาจากใบเดียวที่เปิดซ้ำสามรอบ
+              hint={`${formatNumber(inc.reopen_total)} ຄັ້ງ ຈາກ ${formatNumber(inc.reopened_tickets)} ເລື່ອງ`}
+              {...(inc.reopen_total > 0 ? { tone: 'risk' as const } : {})}
+            />
+          </CardBody>
+        </Card>
+      )}
+
+      {sr && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{TICKET_TYPE.service_request}</CardTitle>
+            <span className="tabular text-caption text-ink-3">{formatNumber(sr.total)} ເລື່ອງ</span>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <KpiCell
+                label="ເວລາສົ່ງມອບສະເລ່ຍ"
+                value={
+                  sr.avg_fulfillment_business_minutes === null
+                    ? '—'
+                    : formatMinutes(sr.avg_fulfillment_business_minutes, 'business_minutes')
+                }
+                // ต้องบอกว่านับจากตอนอนุมัติครบ ไม่ใช่ตอนเปิดเรื่อง ไม่งั้นผู้บริหารจะเทียบ
+                // ตัวเลขนี้กับ "ผู้ขอรอมานานแค่ไหน" ซึ่งเป็นคนละอย่างและยาวกว่าเสมอ
+                hint={
+                  sr.avg_fulfillment_business_minutes === null
+                    ? 'ຍັງບໍ່ມີຄຳຂໍທີ່ສົ່ງມອບແລ້ວ'
+                    : `ຈາກ ${formatNumber(sr.fulfilled_count)} ເລື່ອງ · ນັບຕັ້ງແຕ່ອະນຸມັດຄົບ`
+                }
+              />
+              <KpiCell
+                label="ຄ້າງລໍຖ້າອະນຸມັດ"
+                value={formatNumber(sr.pending_approval_count)}
+                hint="ຄໍຂວດທີ່ທີມໄອທີແກ້ເອງບໍ່ໄດ້"
+                {...(sr.pending_approval_count > 0 ? { tone: 'risk' as const } : {})}
+              />
+              <KpiCell
+                label="ບໍ່ອະນຸມັດ"
+                value={formatNumber(sr.rejected_count)}
+                hint="ຄຳຂໍທີ່ຜູ້ພິຈາລະນາປະຕິເສດ"
+              />
+            </div>
+
+            <div className="border-t border-hair pt-3">
+              <p className="mb-2 text-label text-ink">ລາຍການບໍລິການທີ່ຖືກຂໍຫຼາຍທີ່ສຸດ</p>
+              {sr.top_catalog_items.length === 0 ? (
+                <p className="text-caption text-ink-3">ຍັງບໍ່ມີຄຳຂໍທີ່ຜູກກັບລາຍການບໍລິການ</p>
+              ) : (
+                <BreakdownBars
+                  rows={sr.top_catalog_items.map((item) => ({
+                    key: String(item.id),
+                    label: (
+                      <span className="text-body-sm text-ink" title={item.code}>
+                        {item.name_th}
+                      </span>
+                    ),
+                    count: item.count,
+                  }))}
+                  total={sr.top_catalog_items.reduce((sum, i) => sum + i.count, 0)}
+                />
+              )}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** ตัวเลขหนึ่งตัวพร้อมคำอธิบาย — เล็กกว่า StatCard เพราะอยู่ในการ์ดอีกที */
+function KpiCell({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone?: 'ok' | 'risk' | 'breach' | undefined;
+}): React.JSX.Element {
+  return (
+    <div>
+      <p className="text-caption text-ink-2">{label}</p>
+      <p
+        className={cn(
+          'tabular mt-0.5 text-h2 font-semibold',
+          tone === 'ok' && 'text-sla-ok',
+          tone === 'risk' && 'text-sla-risk',
+          tone === 'breach' && 'text-sla-breach',
+        )}
+      >
+        {value}
+      </p>
+      <p className="text-caption text-ink-3">{hint}</p>
+    </div>
   );
 }
 
@@ -997,13 +1270,29 @@ function departmentColumns(withCompany: boolean): Column<TicketReportDepartmentR
  * (ต้องอ่านปฏิทินและนโยบายรายบริษัทต่อใบ ซึ่งไม่คุ้มสำหรับหน้าสรุป)
  */
 function reportSlaStatus(t: TicketReportItem): SlaStatus | null {
-  if (t.status === 'cancelled') return null;
+  // เรื่องที่จบแบบไม่ได้ทำ ไม่มี SLA ให้วัด — ทั้งยกเลิกเองและถูกปฏิเสธการอนุมัติ
+  if (t.status === 'cancelled' || t.status === 'rejected') return null;
   if (t.is_resolution_breached) return 'breached';
-  if (t.status === 'pending_user') return 'paused';
+  /*
+   * "หยุดนับ" เฉพาะที่นาฬิกาหยุดจริง — รออนุมัติและรอผู้แจ้งเท่านั้น
+   *
+   * pending_vendor ไม่นับ เพราะนาฬิกายังเดินอยู่ (ดู WAITING_STATUSES ใน enums.ts)
+   * ถ้าเหมารวมเข้ามา เรื่องที่ค้างรออะไหล่จนใกล้เกินกำหนดจะขึ้นป้าย "ຢຸດນັບ"
+   * แล้วไม่มีใครตามต่อจนกว่าจะเกินไปแล้ว
+   */
+  if (isWaitingStatus(t.status)) return 'paused';
   return 'on_track';
 }
 
-const ticketColumns: Column<TicketReportItem>[] = [
+/**
+ * คอลัมน์ของรายการเรื่อง
+ *
+ * คอลัมน์โครงการโผล่เฉพาะเมื่อมีเรื่องที่มาจากโครงการจริงในหน้านี้ — องค์กรที่ยัง
+ * ไม่ได้เปิดใช้ Support Hub (หรือ API รุ่นที่ยังไม่ส่งช่องนี้มา) จะได้ตารางเดิม
+ * ไม่ใช่คอลัมน์ที่มีแต่ขีดกลางทั้งแถว
+ */
+function ticketColumns(withProject: boolean): Column<TicketReportItem>[] {
+  return [
   {
     key: 'ticket',
     header: 'ເລກທີ່ / ຫົວຂໍ້',
@@ -1094,6 +1383,29 @@ const ticketColumns: Column<TicketReportItem>[] = [
       </span>
     ),
   },
+  ...(withProject
+    ? [
+        {
+          key: 'project',
+          header: 'ໂຄງການ',
+          hideBelow: 'xl' as const,
+          width: '1%',
+          cellClassName: 'whitespace-nowrap',
+          // แสดงรหัส ไม่ใช่ชื่อเต็ม เหมือนป้ายโครงการในกล่องแชท ชื่อเต็มอยู่ใน title
+          render: (t: TicketReportItem) =>
+            t.support_project ? (
+              <span
+                className="inline-flex rounded-sm border border-hair px-1.5 py-0.5 font-mono text-caption text-ink-2"
+                title={t.support_project.name}
+              >
+                {t.support_project.code}
+              </span>
+            ) : (
+              <span className="text-caption text-ink-3">—</span>
+            ),
+        },
+      ]
+    : []),
   {
     key: 'created',
     header: 'ແຈ້ງເມື່ອ',
@@ -1106,7 +1418,8 @@ const ticketColumns: Column<TicketReportItem>[] = [
       </time>
     ),
   },
-];
+  ];
+}
 
 // ── ส่งออก CSV ─────────────────────────────────────────────────────────
 
@@ -1134,6 +1447,8 @@ function downloadCsv(report: TicketReport, filters: Filters): void {
   const t = report.totals;
 
   rows.push(['ລາຍງານເລື່ອງແຈ້ງ', `${filters.from} – ${filters.to}`]);
+  // ประเภทที่กรองต้องอยู่ในไฟล์ด้วย ไม่งั้นไฟล์ที่ส่งต่อกันบอกไม่ได้ว่าเป็นตัวเลขของอะไร
+  rows.push(['ປະເພດເລື່ອງ', filters.type ? TICKET_TYPE[filters.type] : 'ທຸກປະເພດ']);
   rows.push([]);
   rows.push(['ສະຫຼຸບ']);
   rows.push(['ທັງໝົດ', t.total]);
@@ -1144,9 +1459,35 @@ function downloadCsv(report: TicketReport, filters: Filters): void {
   rows.push(['ເກີນກຳນົດ SLA', t.breached, pct(t.breached_percent)]);
   rows.push(['ຄະແນນຄວາມພໍໃຈສະເລ່ຍ', t.avg_satisfaction, `ຈາກ ${t.rated} ຄົນ`]);
 
+  // ตัวชี้วัดเฉพาะประเภท — เขียนเฉพาะบล็อกที่ API ส่งมาจริง เหมือนกับที่หน้าจอวาด
+  const inc = report.incident_metrics;
+  if (inc) {
+    rows.push([]);
+    rows.push([TICKET_TYPE.incident, inc.total]);
+    rows.push(['ເວລາແກ້ໄຂສະເລ່ຍ MTTR (ນາທີເຮັດວຽກ)', inc.mttr_business_minutes, `ຈາກ ${inc.resolved_count} ເລື່ອງ`]);
+    rows.push(['% ທັນກຳນົດ SLA', pct(inc.sla_met_percent)]);
+    rows.push(['ການເປີດເລື່ອງຊ້ຳ (ຄັ້ງ)', inc.reopen_total, `ຈາກ ${inc.reopened_tickets} ເລື່ອງ`]);
+  }
+  const sr = report.service_request_metrics;
+  if (sr) {
+    rows.push([]);
+    rows.push([TICKET_TYPE.service_request, sr.total]);
+    rows.push([
+      'ເວລາສົ່ງມອບສະເລ່ຍ (ນາທີເຮັດວຽກ ນັບຕັ້ງແຕ່ອະນຸມັດຄົບ)',
+      sr.avg_fulfillment_business_minutes,
+      `ຈາກ ${sr.fulfilled_count} ເລື່ອງ`,
+    ]);
+    rows.push(['ຄ້າງລໍຖ້າອະນຸມັດ', sr.pending_approval_count]);
+    rows.push(['ບໍ່ອະນຸມັດ', sr.rejected_count]);
+    rows.push(['ລາຍການບໍລິການທີ່ຖືກຂໍຫຼາຍທີ່ສຸດ', 'ລະຫັດ', 'ຈຳນວນ']);
+    for (const item of sr.top_catalog_items) {
+      rows.push([item.name_th, item.code, item.count]);
+    }
+  }
+
   rows.push([]);
   rows.push(['ແຍກຕາມສະຖານະ', 'ຈຳນວນ']);
-  for (const r of report.by_status) rows.push([TICKET_STATUS[r.status].label, r.count]);
+  for (const r of report.by_status) rows.push([statusLabel(r.status), r.count]);
 
   rows.push([]);
   rows.push(['ແຍກຕາມລະດັບ', 'ຈຳນວນ']);
@@ -1190,6 +1531,7 @@ function downloadCsv(report: TicketReport, filters: Filters): void {
     'ບໍລິສັດ',
     'ພະແນກ',
     'ໝວດໝູ່',
+    'ໂຄງການ',
     'ຜູ້ແຈ້ງ',
     'ຜູ້ຮັບຜິດຊອບ',
     'ແຈ້ງເມື່ອ',
@@ -1204,11 +1546,12 @@ function downloadCsv(report: TicketReport, filters: Filters): void {
       i.ticket_no,
       TICKET_TYPE[i.ticket_type],
       i.subject,
-      TICKET_STATUS[i.status].label,
+      statusLabel(i.status),
       i.priority,
       i.company.code,
       i.department?.name ?? '',
       i.category.name_th,
+      i.support_project?.code ?? '',
       i.requester.full_name,
       i.assignee?.full_name ?? '',
       i.created_at,

@@ -3,7 +3,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { NotFoundError, ValidationError } from '../../common/errors/domain-error';
 import type { Db } from '../client';
-import { DB } from '../db.module';
+import { DB } from '../db.token';
 import {
   appUser,
   ticket,

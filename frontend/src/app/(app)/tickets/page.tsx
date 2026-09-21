@@ -11,7 +11,7 @@ import { Input, Select } from '@/components/ui/field';
 import { PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { useDebounced } from '@/lib/use-debounced';
-import { PRIORITY, TICKET_STATUS, TICKET_TYPE } from '@/config/enums';
+import { PRIORITY, STATUS_ORDER, TICKET_STATUS, TICKET_TYPE } from '@/config/enums';
 import { useTickets } from '@/lib/queries/tickets';
 import { useSession } from '@/lib/session';
 import { TICKET_CATEGORIES } from '@/mocks/data';
@@ -99,9 +99,10 @@ export default function AllTicketsPage(): React.JSX.Element {
               aria-label="ກັ່ນຕອງຕາມສະຖານະ"
             >
               <option value="">ທຸກສະຖານະ</option>
-              {Object.entries(TICKET_STATUS).map(([key, meta]) => (
+              {/* เรียงตามวงจรชีวิต ไม่ใช่ลำดับที่ประกาศใน TICKET_STATUS */}
+              {STATUS_ORDER.map((key) => (
                 <option key={key} value={key}>
-                  {meta.label}
+                  {TICKET_STATUS[key].label}
                 </option>
               ))}
             </Select>

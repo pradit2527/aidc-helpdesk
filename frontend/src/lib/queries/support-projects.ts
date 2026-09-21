@@ -165,6 +165,30 @@ export function useUpdateSupportProject(): UseMutationResult<
 }
 
 /**
+ * สร้าง inbox ใหม่ใน Chatwoot ให้โครงการนี้ แล้วผูกให้เสร็จในคำขอเดียว
+ *
+ * ⚠️ นี่คือการเขียนลงระบบภายนอกที่ทุกทีมใช้ร่วมกัน ไม่ใช่ข้อมูลของ Helpdesk เอง
+ *    inbox ที่สร้างแล้วลบได้เฉพาะในหน้าจอของ Chatwoot โดยผู้ดูแลของที่นั่น
+ *    การกดผิดจึงทิ้งขยะไว้ในระบบของคนอื่น — หน้าจอที่เรียกต้องมีขั้นยืนยันเสมอ
+ *
+ * ต้องมีสิทธิ์ user.assign_role เหมือน endpoint อื่นของโครงการ และตอบ 409
+ * เมื่อโครงการนี้ผูก inbox ไว้อยู่แล้ว
+ */
+export function useCreateChatwootInbox(): UseMutationResult<SupportProject, Error, number> {
+  const invalidate = useInvalidateProjects();
+  return useMutation({
+    mutationFn: (projectId: number) =>
+      api.post<SupportProject>(`/support-projects/${projectId}/chatwoot-inbox`),
+    /*
+     * invalidate ล้างทั้ง supportProjectKeys.all ซึ่งคลุมรายการ inbox ที่ดึงจาก Chatwoot ด้วย
+     * จำเป็น เพราะ inbox ที่เพิ่งสร้างยังไม่อยู่ในรายการชุดเก่า — ถ้าไม่ล้าง ผู้ใช้ที่กด
+     * "ດຶງຈາກ Chatwoot" ต่อทันทีจะไม่เห็นตัวที่ตัวเองเพิ่งสร้าง แล้วกดสร้างซ้ำอีกใบ
+     */
+    onSuccess: invalidate,
+  });
+}
+
+/**
  * สคริปต์ที่ทีมอื่นก็อปไปวางในเว็บของตัวเอง
  *
  * origin มาจากหน้าเว็บที่ผู้ดูแลเปิดอยู่ ไม่ใช่ค่าคงที่ในโค้ด — ผู้ดูแลที่เปิด

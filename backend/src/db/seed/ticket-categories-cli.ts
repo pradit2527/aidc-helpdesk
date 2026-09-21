@@ -44,6 +44,7 @@ async function main(): Promise<void> {
             nameTh: c.nameTh,
             defaultImpact: c.defaultImpact,
             defaultUrgency: c.defaultUrgency,
+            ticketTypeScope: c.ticketTypeScope ?? 'both',
             sortOrder: c.sortOrder,
             isActive: c.isActive ?? true,
           })),

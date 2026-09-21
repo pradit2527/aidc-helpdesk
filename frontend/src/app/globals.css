@@ -63,9 +63,14 @@
   --p3-fg: #854d0e;  --p3-bg: #fef9c3;  --p3-solid: #a16207;
   --p4-fg: #166534;  --p4-bg: #dcfce7;  --p4-solid: #15803d;
 
-  /* ── สถานะเรื่อง 7 ค่า ──
+  /* ── สถานะเรื่อง 11 ค่า ──
      closed กับ cancelled ใช้โทนเทาใกล้กันโดยตั้งใจ (ทั้งคู่คือ "จบแล้ว")
-     แยกกันด้วยไอคอนคนละตัว + ข้อความ + cancelled มีเส้นขอบประ */
+     แยกกันด้วยไอคอนคนละตัว + ข้อความ + cancelled มีเส้นขอบประ
+
+     สามสถานะที่ "หยุดรอ" (pending_user / pending_vendor / pending_approval)
+     ใช้ --st-pending ร่วมกัน เพราะสีบอก "ไลฟ์ไซเคิลหยุดเดิน" เหมือนกันทั้งสาม
+     ส่วนจะรออะไรอ่านจากไอคอนกับข้อความ เช่นเดียวกับ resolved / fulfilled
+     ที่ใช้ --st-resolved ร่วมกัน (ทั้งคู่คือ "ทีมงานทำเสร็จแล้ว รอผู้แจ้งยืนยัน") */
   --st-new-fg: #1e40af;        --st-new-bg: #dbeafe;
   --st-assigned-fg: #5b21b6;   --st-assigned-bg: #ede9fe;
   --st-progress-fg: #075985;   --st-progress-bg: #e0f2fe;
@@ -73,6 +78,9 @@
   --st-resolved-fg: #166534;   --st-resolved-bg: #dcfce7;
   --st-closed-fg: #334155;     --st-closed-bg: #e2e8f0;
   --st-cancelled-fg: #475569;  --st-cancelled-bg: #f1f5f9;
+  /* ไม่อนุมัติ = จบแบบถูกปฏิเสธ ซึ่งหนักกว่า "ยกเลิก" ที่ผู้ขอถอนเอง
+     จึงใช้แดงชุดเดียวกับ --p1 / --sla-breach ที่มีอยู่แล้ว ไม่ได้เพิ่มสีใหม่เข้าจาน */
+  --st-rejected-fg: #991b1b;   --st-rejected-bg: #fee2e2;
 
   /* ── สถานะ SLA 4 ค่า ── */
   --sla-ok-fg: #166534;      --sla-ok-bg: #dcfce7;
@@ -142,6 +150,7 @@
   --st-resolved-fg: #86efac;   --st-resolved-bg: #17301f;
   --st-closed-fg: #cbd5e1;     --st-closed-bg: #22304b;
   --st-cancelled-fg: #94a3b8;  --st-cancelled-bg: #1b2740;
+  --st-rejected-fg: #fca5a5;   --st-rejected-bg: #3b1a1d;
 
   --sla-ok-fg: #86efac;      --sla-ok-bg: #17301f;
   --sla-risk-fg: #fdba74;    --sla-risk-bg: #3a2417;

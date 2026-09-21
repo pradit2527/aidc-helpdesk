@@ -21,14 +21,17 @@ type MyTab = 'open' | 'waiting' | 'done' | 'all';
  *    ซึ่งเป็นเรื่องดี — ถ้าส่งเลขได้ ใครก็แก้เป็นเลขคนอื่นแล้วดูเรื่องของเขา
  */
 const TAB_FILTER: Record<MyTab, TicketListParams> = {
-  open: { requester_id: 'me', status: 'new,assigned,in_progress' },
+  /* รออนุมัติและรอผู้ให้บริการยังนับว่า "กำลังดำเนินการ" ในสายตาผู้แจ้ง — เขายังไม่ต้องทำอะไร */
+  open: { requester_id: 'me', status: 'new,pending_approval,assigned,in_progress,pending_vendor' },
   /*
-   * "แก้ไขสำเร็จ" (resolved) อยู่แท็บนี้ ไม่ใช่แท็บ "จบแล้ว" — เรื่องยังไม่จบจนกว่า
-   * ผู้แจ้งจะยืนยันปิดพร้อมให้คะแนน หรือเปิดคืนถ้ายังไม่หาย ทั้งสองอย่างเป็นงานของ
-   * ผู้แจ้ง เหมือนกับตอนเจ้าหน้าที่รอข้อมูลเพิ่ม (pending_user)
+   * "แก้ไขสำเร็จ" (resolved) และ "ส่งมอบแล้ว" (fulfilled) อยู่แท็บนี้ ไม่ใช่แท็บ "จบแล้ว"
+   * — เรื่องยังไม่จบจนกว่าผู้แจ้งจะยืนยันปิดพร้อมให้คะแนน หรือเปิดคืนถ้ายังไม่หาย
+   * ทั้งสองอย่างเป็นงานของผู้แจ้ง เหมือนกับตอนเจ้าหน้าที่รอข้อมูลเพิ่ม (pending_user)
+   *
+   * แท็บนี้จึงเป็น "ลูกอยู่ที่ผู้แจ้ง" ส่วน open คือ "ลูกอยู่ที่ทีมงาน"
    */
-  waiting: { requester_id: 'me', status: 'pending_user,resolved' },
-  done: { requester_id: 'me', status: 'closed,cancelled' },
+  waiting: { requester_id: 'me', status: 'pending_user,resolved,fulfilled' },
+  done: { requester_id: 'me', status: 'closed,cancelled,rejected' },
   all: { requester_id: 'me' },
 };
 

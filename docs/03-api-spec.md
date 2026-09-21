@@ -20,7 +20,7 @@
 | 2 | `priority` เปลี่ยนค่าเป็น **`P1`/`P2`/`P3`/`P4`** และ**ผู้แจ้งส่ง `impact` + `urgency` แทน** | G-02, G-17 |
 | 3 | `source` → **`channel`** (`portal`/`email`/`phone`/`walk_in`) + `source_device` | G-15 |
 | 4 | เพิ่ม **`ticket_type`** และ `catalog_item_id` | G-14 |
-| 5 | `POST /tickets/{id}/status` รับ **`pending_reason`** และบังคับตามเหตุผล | G-06 |
+| 5 | ~~`POST /tickets/{id}/status` รับ **`pending_reason`** และบังคับตามเหตุผล~~ → **v3: `pending_vendor` / `pending_approval` เป็นสถานะจริงแล้ว `pending_reason` ไม่บังคับอีกต่อไป** | G-06 |
 | 6 | เพิ่ม **`can: {}`** ในทุก ticket response — backend คำนวณสิทธิ์ระดับ ticket ให้ | **FE-02** |
 | 7 | `GET /auth/me` เพิ่ม **`must_change_password`** | **FE-03** |
 | 8 | `POST /tickets/{id}/status` รับ **`satisfaction_score`** และ **`resolved_by_kb_id`** | **FE-04, FE-05** |
@@ -114,8 +114,9 @@ sequenceDiagram
 | `impact` | `org_wide` · `department` · `individual` |
 | `urgency` | `high` · `medium` · `low` |
 | `priority` | **`P1` · `P2` · `P3` · `P4`** (อ่านอย่างเดียวจากมุมผู้แจ้ง — ระบบคำนวณ) |
-| `status` | `new` · `assigned` · `in_progress` · `pending_user` · `resolved` · `closed` · `cancelled` |
-| `pending_reason` | `user` · `vendor` · `approval` |
+| `status` | **11 ค่า** · `new` · `pending_approval`¹ · `rejected`¹ · `assigned` · `in_progress` · `pending_user` · `pending_vendor` · `resolved`² · `fulfilled`¹ · `closed` · `cancelled`<br>¹ เฉพาะ `service_request` · ² เฉพาะ `incident` — ดู `02-data-model.md` §6 |
+| `pending_reason` | **ข้อความอิสระ ไม่ใช่ enum แล้ว** · ใช้กับ `pending_user` เท่านั้น และไม่บังคับ · แถวเก่ายังมี `user`/`vendor`/`approval` ค้างอยู่ |
+| `ticket_type_scope` | `incident` · `service_request` · `both` (ของ `ticket_category`) |
 | `channel` | `portal` · `email` · `phone` · `walk_in` |
 | `source_device` | `web` · `mobile_web` |
 | `sla_status` | `on_track` · `at_risk` · `breached` · `paused` |
@@ -171,6 +172,7 @@ sequenceDiagram
 | PATCH | `/tickets/{id}` | `ticket.update` | `subject`, `description`, `category_id`, `department_id`, `service_id`, `asset_tag` |
 | POST | `/tickets/{id}/status` | `ticket.change_status` / `ticket.close_own` / `ticket.reopen` / `ticket.cancel` | ดูตัวอย่าง 3.4 |
 | POST | `/tickets/{id}/assign` | `ticket.assign` | `assignee_id` (null = ยกเลิกมอบหมาย) |
+| POST | `/tickets/{id}/link` 🆕 | `ticket.change_status` | `related_ticket_id` — ผูกเรื่องสองใบที่เกิดจากเหตุเดียวกันแต่เดินคนละ SLA (incident เครื่องพัง ↔ service_request ขอเครื่องทดแทน) · **ผูกสองทางเสมอ** · เฟส 1 ผูกได้ใบเดียว การเรียกซ้ำทับของเดิม · ทั้งสองใบต้องอยู่บริษัทเดียวกันและอยู่ในขอบเขตของผู้เรียก (`404` ถ้าไม่) · ผลอยู่ใน `related_ticket` ของ `GET /tickets/{id}` |
 | POST | `/tickets/{id}/claim` | `ticket.assign_self` | `409 ALREADY_ASSIGNED` |
 | POST | `/tickets/{id}/priority` | `ticket.change_priority` | `impact`, `urgency` **หรือ** `priority` โดยตรง + `reason` (บังคับ) → คืน due ใหม่ที่คำนวณจาก `priority_changed_at` |
 | **POST** | **`/tickets/{id}/priority-review`** | `ticket.request_priority_review` | ผู้แจ้งขอทบทวนระดับ + `reason` (บังคับ) — **ไม่เปลี่ยน priority ทันที** (ES-08) |
@@ -211,7 +213,13 @@ sequenceDiagram
 | POST | `/approvals/{id}/decide` | `approval.decide` (เฉพาะ approver ของแถวนั้น) | `decision` (`approved`/`rejected`), `comment` (**บังคับเมื่อ rejected**), `attachment_id?`, `access_expires_at?` |
 | POST | `/tickets/{id}/approvals/reassign` | `company_admin` ขึ้นไป | ใช้เมื่อ `approver_id` เป็น null หรือผู้อนุมัติไม่อยู่ |
 
-**กฎ:** ขั้น `n+1` เปิดใช้เมื่อขั้น `n` เป็น `approved` · ปฏิเสธขั้นใด → ticket ไป `cancelled` · **ห้ามอนุมัติคำขอของตนเอง** (`422`)
+**กฎ:** ขั้น `n+1` เปิดใช้เมื่อขั้น `n` เป็น `approved` · **ห้ามอนุมัติคำขอของตนเอง** (`422`)
+
+- ปฏิเสธขั้นใด → ticket ไป **`rejected`** (เดิมคือ `cancelled`) พร้อมเหตุผลจาก `comment`
+- อนุมัติครบทุกขั้น → ticket ไป **`assigned`** และ **นาฬิกา fulfillment เริ่มนับที่วินาทีนั้น**
+  (`sla_clock_started_at = now()` แล้วคำนวณ `resolution_due_at` ใหม่จาก `catalog.target_minutes`)
+- ทั้งสองทางยิงสัญญาณเดียวกับ `POST /tickets/{id}/status` — หน้าที่เปิดอยู่รีเฟรช
+  และห้องแชทที่ผูกไว้ได้ข้อความบอกผล
 
 ### 2.8 Checklist (3) 🆕
 
@@ -277,6 +285,7 @@ sequenceDiagram
 |---|---|---|---|
 | GET | `/dashboard/summary` | `dashboard.view` | การ์ดสรุป + สัดส่วนตามสถานะ/priority/ประเภท |
 | GET | `/dashboard/by-company` · `/by-category` · `/by-assignee` · `/trend` | `dashboard.view` | |
+| GET | `/reports/tickets` | `report.view` / `report.export` | รายงานเรื่องแจ้งแบบกรองได้ · ตัวกรอง `company_id` · `department_id` · `status` · `assignee_id` · `requester_id` · `project_id` · **`ticket_type`** 🆕 · คืน `incident_metrics` และ `service_request_metrics` มาด้วยเสมอ (ดูด้านล่าง) |
 | GET | `/reports/sla-compliance` | `report.view` | KPI-1 แยกบริษัท × priority |
 | **GET** | **`/reports/kpi`** | `report.view` | **KPI-1…KPI-7 ครบชุดเทียบเป้าหมาย** (SLA 7.1) |
 | **GET** | **`/reports/aged-backlog`** | `report.view` | **รายสัปดาห์** — ticket ที่ยังเปิดและเกินกำหนด |
@@ -505,11 +514,10 @@ GET /api/v1/tickets?status=new,assigned,in_progress&priority=P1,P2&company_id=7
 
 ### 3.4 เปลี่ยนสถานะ — `POST /api/v1/tickets/1042/status`
 
-**เข้าสู่ `pending_user`**
+**เข้าสู่ `pending_vendor`** (เดิมคือ `pending_user` + `pending_reason='vendor'`)
 ```json
 {
-  "to_status": "pending_user",
-  "pending_reason": "vendor",
+  "to_status": "pending_vendor",
   "reason": "รออะไหล่หัวอ่านจากผู้จำหน่าย กำหนดส่ง 3 ก.ย.",
   "comment": "แจ้งให้ทราบว่าสั่งอะไหล่แล้วครับ คาดว่าได้รับวันที่ 3 ก.ย. จะรีบเข้าเปลี่ยนให้ทันที",
   "vendor_ref": "PO-2026-0891"
@@ -519,10 +527,10 @@ GET /api/v1/tickets?status=new,assigned,in_progress&priority=P1,P2&company_id=7
 | ฟิลด์ | บังคับเมื่อ |
 |---|---|
 | `to_status` | เสมอ |
-| `pending_reason` | `to_status = pending_user` |
-| `comment` | `pending_reason` เป็น `user` หรือ `vendor` — **`vendor` ต้องมีคอมเมนต์สาธารณะแจ้งผู้รับบริการก่อนจึงหยุดนับเวลาได้** (SLA 5.4) |
-| `reason` | `cancelled`, `pending_user`, reopen |
-| `resolution_note` | `resolved` |
+| `pending_reason` | **ไม่บังคับแล้ว** — เป็นข้อความอิสระที่มีความหมายเฉพาะกับ `pending_user` |
+| `comment` | `pending_user` หรือ `pending_vendor` — ต้องมีคอมเมนต์สาธารณะแจ้งผู้รับบริการ (SLA 5.4) · ถ้าไม่ส่ง ระบบใช้ `reason` เป็นข้อความแจ้งแทน |
+| `reason` | `pending_user` / `pending_vendor` / `pending_approval` (≥ 10) · `cancelled` / `rejected` (≥ 5) · reopen (≥ 10) |
+| `resolution_note` | `resolved` (≥ 15) — **`fulfilled` รับได้แต่ไม่บังคับ** |
 | `satisfaction_score` (1–5) | — · รับได้เมื่อ `to_status = closed` โดยผู้แจ้ง (**FE-04**) |
 | `resolved_by_kb_id` | — · รับได้เมื่อ `to_status = resolved` (**FE-05**) |
 
@@ -530,8 +538,8 @@ GET /api/v1/tickets?status=new,assigned,in_progress&priority=P1,P2&company_id=7
 ```json
 {
   "id": 1042,
-  "status": "pending_user",
-  "pending_reason": "vendor",
+  "status": "pending_vendor",
+  "pending_reason": null,
   "sla": {
     "status": "paused",
     "paused_at": "2026-08-31T11:30:00+07:00",
@@ -651,6 +659,45 @@ GET /api/v1/tickets?status=new,assigned,in_progress&priority=P1,P2&company_id=7
 
 > **KPI-2 แยกราย priority เสมอ** เพราะ P1 นับนาทีปฏิทินส่วน P2–P4 นับนาทีทำการ การเฉลี่ยรวมกันไม่มีความหมายเชิงสถิติ (ประเด็นที่ยกไว้ใน `05-…` KPI-2)
 
+### 3.8 รายงานเรื่องแจ้ง แยกตามชนิด — `GET /api/v1/reports/tickets` 🆕
+
+```json
+{
+  "filters": { "company_id": 7, "ticket_type": null, "project_id": null },
+  "incident_metrics": {
+    "total": 24,
+    "mttr_business_minutes": 312.5,
+    "resolved_count": 18,
+    "sla_met_percent": 94.4,
+    "reopen_total": 3,
+    "reopened_tickets": 2
+  },
+  "service_request_metrics": {
+    "total": 61,
+    "avg_fulfillment_business_minutes": 1240.0,
+    "fulfilled_count": 37,
+    "pending_approval_count": 5,
+    "rejected_count": 1,
+    "top_catalog_items": [
+      { "id": 55, "code": "SR-PASSWORD-RESET", "name_th": "ຣີເຊັດລະຫັດຜ່ານ", "count": 42 }
+    ]
+  }
+}
+```
+
+**กฎที่ต้องไม่ลืมเมื่ออ่านตัวเลขชุดนี้**
+
+- ทั้งสองก้อนคิดจาก **ชนิดของตัวเองเสมอ** ไม่ว่าจะส่ง `ticket_type` มาหรือไม่ —
+  กรอง `ticket_type=incident` แล้ว `service_request_metrics` จะเป็นศูนย์ทั้งก้อน
+  **ไม่ใช่** กลายเป็นตัวเลขของเหตุขัดข้อง
+- `mttr_business_minutes` และ `avg_fulfillment_business_minutes` เป็น **นาทีทำการ**
+  หักเวลาที่หยุดนับออกแล้ว (P1 นับ 24×7 ตามโหมดของระดับความสำคัญ)
+- **เวลาส่งมอบนับจาก `sla_clock_started_at`** ซึ่งสำหรับคำขอที่ต้องอนุมัติคือ
+  *เวลาที่อนุมัติครบ* ไม่ใช่เวลาที่เปิดเรื่อง — คำขอที่ยังไม่เริ่มนาฬิกาถูกตัดออกจาก
+  ค่าเฉลี่ย ไม่ใช่ถอยไปนับจาก `created_at` (ซึ่งจะเป็นการนับเวลารออนุมัติเข้าไปด้วย)
+- `reopen_total` คือ **ผลรวมจำนวนครั้ง** ส่วน `reopened_tickets` คือ **จำนวนใบ** — คนละตัว
+- ตัวหารเป็นศูนย์คืน `null` ไม่ใช่ `0` — ดูหลักข้อ 1 ใน `reports.service.ts`
+
 ---
 
 ## 4. เหตุการณ์ที่ทำให้เกิดการแจ้งเตือน
@@ -679,10 +726,10 @@ GET /api/v1/tickets?status=new,assigned,in_progress&priority=P1,P2&company_id=7
 
 | งาน | ความถี่ | หน้าที่ |
 |---|---|---|
-| `scan_sla` | ทุก 5 นาที | ตั้งธง breach + แจ้ง `sla_warning`/`sla_breached` · **ประเมิน P1 ตลอด 24 ชม.** · ข้าม ticket ที่มี `sla_exclusion_code` หรือ `workaround_at` |
+| `scan_sla` | ทุก 5 นาที | ตั้งธง breach · **ยกระดับที่ 80% และ 100%** ของเป้าหมาย (เขียนแถว `notification` + ตั้ง `escalation_notified_at`) · **ปิดอัตโนมัติ** `resolved`/`fulfilled` ที่ครบ 3 วันทำการ · ข้าม ticket ที่มี `sla_exclusion_code` หรือ `workaround_at`<br>⚙️ รันบน **BullMQ repeatable job** ไม่ใช่ `@nestjs/schedule` — `setInterval` รันในทุกอินสแตนซ์ ทำให้การแจ้งเตือนถูกส่งซ้ำเท่าจำนวนเครื่อง |
 | **`status_report_reminder`** | ทุก 15 นาที | เตือนเมื่อเลย `next_status_report_due_at` |
 | **`escalate_tier1_overdue`** | ทุก 15 นาที | ES-04 — Tier 1 เกิน 2 ชม.ทำการ (ตั้งธง ไม่เปลี่ยน tier เอง) |
-| `auto_close_resolved` | ทุกวัน 06:00 | `resolved` ครบ 3 วันทำการ → `closed` + ส่ง CSAT |
+| ~~`auto_close_resolved`~~ | — | **รวมเข้า `scan_sla` แล้ว** · ครอบทั้ง `resolved` (incident) และ `fulfilled` (service_request) · `closed_by` เป็น NULL = ระบบปิดให้ |
 | **`followup_pending`** | ทุกวัน 09:00 | ส่งติดตามครั้งที่ 1 และ 2 (ห่างกัน 1 วันทำการ) |
 | **`auto_close_unresponsive`** | ทุกวัน 06:00 | ปิดเมื่อ `followup_count >= 2` และครบ 3 วันทำการ **(แทน `auto_resolve_pending` เดิมที่ขัดเอกสาร)** |
 | **`rca_due_reminder`** | ทุกวัน 09:00 | Problem ที่ `rca_due_at` ใกล้ถึง/เลยแล้ว |

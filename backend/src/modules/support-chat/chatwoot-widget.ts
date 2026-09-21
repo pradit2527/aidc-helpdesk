@@ -160,6 +160,58 @@ export function shouldCloseFromChatwoot(
 }
 
 /**
+ * ข้อความระบบที่ค้างส่งเกินเท่านี้ ไม่ส่งออกไปหาผู้เข้าชมอีก
+ *
+ * ข้อความอย่าง "ທີມງານຮັບເລື່ອງແລ້ວ" เป็นข่าวสารตามเวลา — ส่งช้าไปครึ่งวัน
+ * แล้วมันจะไปโผล่ผิดลำดับกับสิ่งที่เกิดขึ้นจริง ซึ่งสับสนกว่าการไม่ส่งเลย
+ * (ห้องที่ปิดอยู่ตอนข้อความถูกสร้างจะยังค้างอยู่จนกว่าจะเปิดกลับ ถ้าไม่มีเพดานนี้
+ * ผู้เข้าชมที่กลับมาถามใหม่อีกเดือนหนึ่งจะได้ข่าวเก่าทั้งชุดรัวใส่หน้า)
+ */
+export const SYSTEM_NOTICE_MAX_AGE_MINUTES = 60;
+
+/** ข้อความหนึ่งข้อความเท่าที่ต้องรู้เพื่อตัดสินว่าส่งออกไปหาผู้เข้าชมได้ไหม */
+export interface OutboundCandidate {
+  senderId: number | null;
+  isSystem: boolean;
+  fromContact: boolean;
+  externalSenderName: string | null;
+  chatwootMessageId: number | null;
+  createdAt: Date;
+}
+
+/**
+ * ข้อความนี้ส่งออกไปหาผู้เข้าชมได้ไหม (ห้องจาก widget เท่านั้น)
+ *
+ * เดิมเส้นทางนี้ตัดสินด้วยบรรทัดเดียวว่า "sender_id เป็น null = ส่งไม่ได้"
+ * ซึ่งถูกสำหรับข้อความที่ดึงมาจาก Chatwoot แต่พลอยตัดข้อความของระบบที่เรา
+ * สร้างเองออกไปด้วย — และนั่นคือข้อความที่บอกผู้ถามว่าเรื่องของเขาไปถึงไหนแล้ว
+ *
+ * ⚠️ ข้อความระบบส่งได้เฉพาะตอนห้อง **ยังเปิดอยู่**
+ *    ข้อความระบบสองชนิดที่มีอยู่เดิมเขียนตอนห้องเพิ่งถูกปิดพอดี
+ *    ("ທີມໄອທີປິດແຊັດນີ້ແລ້ວ" และ "ບົດສົນທະນານີ້ຖືກປິດຈາກ Chatwoot ແລ້ວ")
+ *    ตัวหลังมาจากการที่ Chatwoot ปิดบทสนทนาเอง การส่งกลับไปคือการพูดซ้ำสิ่งที่
+ *    Chatwoot เพิ่งทำ เงื่อนไข "ห้องต้องเปิด" จึงกันทั้งคู่ไว้พร้อมกัน
+ *    และรักษาพฤติกรรมเดิมของการปิดห้องไว้ครบทุกข้อ
+ */
+export function isPushableToVisitor(
+  chat: { status: string },
+  message: OutboundCandidate,
+  now: Date,
+  maxSystemAgeMinutes: number = SYSTEM_NOTICE_MAX_AGE_MINUTES,
+): boolean {
+  // ส่งไปแล้ว หรือเป็นข้อความที่ดึงมาจาก Chatwoot — ส่งกลับ = พูดซ้ำให้เขาฟัง
+  if (message.chatwootMessageId !== null) return false;
+  if (message.externalSenderName !== null) return false;
+  if (message.fromContact) return false;
+
+  // เส้นทางเดิมไม่เปลี่ยน: ข้อความที่คนใน Helpdesk พิมพ์เองส่งได้เสมอ
+  if (!message.isSystem) return message.senderId !== null;
+
+  if (chat.status !== 'open') return false;
+  return now.getTime() - message.createdAt.getTime() <= maxSystemAgeMinutes * 60_000;
+}
+
+/**
  * ขอบเขตของรอบค้นหา — เอาเฉพาะบทสนทนาที่ขยับภายใน N วันที่ผ่านมา
  *
  * ถ้าไม่จำกัด ทุกรอบจะไล่บทสนทนาที่ตายไปแล้วเป็นร้อยรายการ ยิง Chatwoot ซ้ำ ๆ

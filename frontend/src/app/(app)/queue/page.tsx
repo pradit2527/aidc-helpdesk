@@ -11,8 +11,15 @@ import { useCan, useSession } from '@/lib/session';
 
 type QueueTab = 'unassigned' | 'mine' | 'pending' | 'breached';
 
-/** สถานะที่ยังต้องทำงานอยู่ — ปิดหรือยกเลิกแล้วไม่ควรอยู่ในคิว */
-const OPEN_STATUS = 'new,assigned,in_progress,pending_user';
+/**
+ * สถานะที่ยังต้องทำงานอยู่ — ปิดหรือยกเลิกแล้วไม่ควรอยู่ในคิว
+ *
+ * รวมทุกสถานะที่ค้างรออยู่ด้วย เพราะ "รออะไรอยู่" ไม่ได้แปลว่าไม่ใช่งานของทีมแล้ว
+ * โดยเฉพาะ pending_vendor ซึ่งนาฬิกา SLA ยังเดินอยู่ (ดู WAITING_STATUSES ใน enums.ts)
+ * ถ้าตัดออกจากคิว เรื่องที่รออะไหล่จะหายไปจากสายตาทุกคนจนกระทั่งเกินกำหนดไปแล้ว
+ */
+const WAITING_STATUS = 'pending_user,pending_vendor,pending_approval';
+const OPEN_STATUS = `new,assigned,in_progress,${WAITING_STATUS}`;
 
 /**
  * คิวของ "ผู้จ่ายงาน" — หัวหน้าทีมและผู้ดูแล
@@ -26,7 +33,7 @@ const OPEN_STATUS = 'new,assigned,in_progress,pending_user';
 const DISPATCHER_FILTER: Record<QueueTab, TicketListParams> = {
   unassigned: { status: OPEN_STATUS, unassigned: true, sort: '-created_at' },
   mine: { status: OPEN_STATUS, assignee_id: 'me', sort: '-assigned_at' },
-  pending: { status: 'pending_user' },
+  pending: { status: WAITING_STATUS },
   breached: { status: OPEN_STATUS, sla_status: 'breached' },
 };
 
@@ -42,7 +49,7 @@ const DISPATCHER_FILTER: Record<QueueTab, TicketListParams> = {
  */
 const MEMBER_FILTER: Record<Exclude<QueueTab, 'unassigned'>, TicketListParams> = {
   mine: { status: OPEN_STATUS, assignee_id: 'me', sort: '-assigned_at' },
-  pending: { status: 'pending_user', assignee_id: 'me', sort: '-assigned_at' },
+  pending: { status: WAITING_STATUS, assignee_id: 'me', sort: '-assigned_at' },
   breached: {
     status: OPEN_STATUS,
     assignee_id: 'me',
@@ -54,7 +61,9 @@ const MEMBER_FILTER: Record<Exclude<QueueTab, 'unassigned'>, TicketListParams> =
 const TAB_LABEL: Record<QueueTab, string> = {
   unassigned: 'ຍັງບໍ່ມີຄົນຮັບ',
   mine: 'ວຽກຂອງຂ້ອຍ',
-  pending: 'ລໍຖ້າຜູ້ແຈ້ງ',
+  // รวมทุกแบบของการรอ ไม่ใช่เฉพาะรอผู้แจ้ง — และไม่ใช้คำว่า "หยุด" เพราะ
+  // นาฬิกาของ pending_vendor ยังเดินอยู่ การเขียนว่าหยุดจะทำให้เข้าใจผิดว่าปลอดภัย
+  pending: 'ລໍຖ້າຢູ່',
   breached: 'ເກີນກຳນົດ',
 };
 
@@ -69,7 +78,9 @@ function emptyHint(tab: QueueTab, dispatcher: boolean): string {
       : 'ຫົວໜ້າທີມຍັງບໍ່ໄດ້ມອບໝາຍວຽກໃຫ້ທ່ານ — ເມື່ອມີວຽກໃໝ່ ຈະຂຶ້ນຢູ່ເທິງສຸດຂອງໜ້ານີ້';
   }
   if (tab === 'pending') {
-    return dispatcher ? 'ບໍ່ມີເລື່ອງທີ່ລໍຖ້າຜູ້ແຈ້ງຢູ່' : 'ບໍ່ມີວຽກຂອງທ່ານທີ່ລໍຖ້າຜູ້ແຈ້ງຢູ່';
+    return dispatcher
+      ? 'ບໍ່ມີເລື່ອງທີ່ລໍຖ້າຜູ້ແຈ້ງ ຜູ້ອະນຸມັດ ຫຼື ຜູ້ໃຫ້ບໍລິການພາຍນອກ'
+      : 'ບໍ່ມີວຽກຂອງທ່ານທີ່ລໍຖ້າຜູ້ແຈ້ງ ຜູ້ອະນຸມັດ ຫຼື ຜູ້ໃຫ້ບໍລິການພາຍນອກ';
   }
   return dispatcher ? 'ບໍ່ມີເລື່ອງໃດເກີນກຳນົດ SLA' : 'ບໍ່ມີວຽກຂອງທ່ານທີ່ເກີນກຳນົດ SLA';
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import { Link2, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, Link2, RefreshCw, Sparkles, X } from 'lucide-react';
 import * as React from 'react';
+import { toast } from 'sonner';
 
 import { toastApiError } from '@/components/tickets/owner-actions';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { cn } from '@/lib/cn';
 import {
   PROJECT_CODE_PATTERN,
   useChatwootInboxes,
+  useCreateChatwootInbox,
   type SupportProject,
   type SupportProjectLocale,
 } from '@/lib/queries/support-projects';
@@ -203,6 +205,17 @@ export function SupportProjectFormDialog({
     }
   };
 
+  /**
+   * เซิร์ฟเวอร์สร้าง inbox ให้แล้ว — เติมค่าที่ได้กลับลงฟอร์ม
+   *
+   * การผูกเกิดขึ้นแล้วจริงที่เซิร์ฟเวอร์ ไม่ได้รอกดบันทึก ค่าสองช่องนี้เติมไว้
+   * เพื่อให้สิ่งที่เห็นบนหน้าจอตรงกับของจริง ไม่ใช่เพื่อส่งกลับไปอีกรอบ
+   */
+  const onInboxCreated = (updated: SupportProject): void => {
+    if (updated.chatwoot.inbox_id === null) return;
+    pickInbox(updated.chatwoot.inbox_id, updated.chatwoot.website_token);
+  };
+
   /** เลือก inbox จากรายการ — เติมทั้งเลขและ token ให้ครบคู่ ค่าที่มีแค่ครึ่งเดียวใช้ไม่ได้ */
   const pickInbox = (inboxId: number, token: string | null): void => {
     setValues((v) => ({
@@ -388,6 +401,10 @@ export function SupportProjectFormDialog({
               onChangeInboxId={(value) => set('chatwoot_inbox_id', value)}
               onChangeToken={(value) => set('chatwoot_website_token', value)}
               onPick={pickInbox}
+              /* สร้าง inbox ให้อัตโนมัติได้เฉพาะโครงการที่บันทึกแล้ว — ของใหม่ยังไม่มี id ให้อ้าง */
+              projectId={projectId}
+              websiteUrl={values.website_url}
+              onCreated={onInboxCreated}
               disabled={saving}
               inboxIdError={fieldErrors.chatwoot_inbox_id}
               tokenError={fieldErrors.chatwoot_website_token}
@@ -491,6 +508,102 @@ function WebhookHelp({ hint }: { hint: string | null }): React.JSX.Element {
 }
 
 /**
+ * ให้ระบบสร้าง inbox ใน Chatwoot ให้เอง
+ *
+ * มีไว้สำหรับเว็บใหม่ที่ยังไม่มี inbox อยู่เลย ส่วนเว็บที่ทีม Chatwoot ตั้งไว้ให้แล้ว
+ * ยังใช้ "ດຶງຈາກ Chatwoot" เลือกจากรายการเหมือนเดิม — สองทางนี้อยู่คู่กัน ไม่แทนกัน
+ *
+ * ⚠️ ปุ่มนี้เขียนลงระบบของคนอื่น ไม่ใช่ฐานข้อมูลของ Helpdesk
+ *    Chatwoot เครื่องเดียวถูกใช้ร่วมกันทุกทีม และ inbox ที่สร้างแล้วลบได้เฉพาะ
+ *    ในหน้าจอของ Chatwoot โดยผู้ดูแลของที่นั่น กดผิดหนึ่งครั้งจึงกลายเป็นขยะ
+ *    ที่คนอื่นต้องไปตามเก็บ — ขั้นยืนยันตรงนี้ไม่ใช่พิธีกรรม และห้ามตัดออก
+ *
+ * ยืนยันด้วยการกดสองจังหวะในที่เดียวกัน ไม่ใช่ window.confirm — ข้อความเตือน
+ * ต้องบอกให้ครบว่าเกิดอะไรขึ้นและย้อนกลับยังไง ซึ่งยาวเกินกว่ากล่องของเบราว์เซอร์
+ */
+function AutoCreateInbox({
+  projectId,
+  websiteUrl,
+  disabled,
+  onCreated,
+}: {
+  projectId: number;
+  websiteUrl: string;
+  disabled: boolean;
+  onCreated: (project: SupportProject) => void;
+}): React.JSX.Element {
+  const create = useCreateChatwootInbox();
+  const [confirming, setConfirming] = React.useState(false);
+
+  /* Chatwoot บังคับให้ inbox แบบ Website มี URL — ไม่มีค่านี้ยิงไปก็ถูกปฏิเสธ */
+  const ready = websiteUrl.trim() !== '';
+
+  const run = async (): Promise<void> => {
+    try {
+      const updated = await create.mutateAsync(projectId);
+      onCreated(updated);
+      setConfirming(false);
+      toast.success(`ສ້າງ inbox ໃນ Chatwoot ໃຫ້ ${updated.code} ແລ້ວ`);
+    } catch (err) {
+      toastApiError(err, 'ສ້າງ inbox ໃນ Chatwoot ບໍ່ສຳເລັດ');
+    }
+  };
+
+  return (
+    <div className="mb-3 rounded border border-hair bg-subtle px-3 py-3">
+      <p className="text-body-sm font-semibold text-ink">ຍັງບໍ່ມີ inbox ໃນ Chatwoot ເທື່ອບໍ?</p>
+      <p className="mt-0.5 text-caption text-ink-2">
+        ລະບົບສ້າງ inbox ແບບ Website ໃໝ່ໃນ Chatwoot ໃຫ້ ແລ້ວຜູກກັບໂຄງການນີ້ໃຫ້ເລີຍ
+        ບໍ່ຕ້ອງເຂົ້າໄປເຮັດເອງໃນ Chatwoot
+      </p>
+
+      {!ready && (
+        <p className="mt-1.5 flex items-start gap-1.5 text-caption text-sla-risk">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          ຕ້ອງກອກ «ທີ່ຢູ່ເວັບ» ດ້ານເທິງກ່ອນ — Chatwoot ໃຊ້ຄ່ານັ້ນຕອນສ້າງ inbox
+        </p>
+      )}
+
+      {confirming ? (
+        <div className="mt-2 rounded border border-sla-risk/40 bg-surface px-3 py-2.5">
+          <p className="text-caption text-ink">
+            ກົດ «ຢືນຢັນ» ແລ້ວລະບົບຈະ <b>ສ້າງ inbox ໃໝ່ຂຶ້ນຈິງໃນ Chatwoot</b> ຂອງອົງກອນ
+            ເຊິ່ງທຸກທີມໃຊ້ຮ່ວມກັນ — ຍົກເລີກຈາກໜ້ານີ້ບໍ່ໄດ້ ຖ້າສ້າງຜິດ ຕ້ອງໃຫ້ຜູ້ດູແລ
+            ເຂົ້າໄປລຶບໃນ Chatwoot ເອງ
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button type="button" size="sm" loading={create.isPending} onClick={() => void run()}>
+              ຢືນຢັນ ສ້າງ inbox ໃນ Chatwoot
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={create.isPending}
+              onClick={() => setConfirming(false)}
+            >
+              ຍົກເລີກ
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="mt-2"
+          disabled={disabled || !ready || create.isPending}
+          onClick={() => setConfirming(true)}
+        >
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          ສ້າງ Inbox ໃນ Chatwoot ໃຫ້ອັດຕະໂນມັດ
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * ผูกโครงการกับ inbox ของ Chatwoot
  *
  * ปกติผู้ตั้งค่าจะกด "ດຶງຈາກ Chatwoot" แล้วเลือกจากรายการ เพราะการคัดลอกเลข
@@ -506,6 +619,9 @@ function ChatwootLink({
   onChangeInboxId,
   onChangeToken,
   onPick,
+  projectId,
+  websiteUrl,
+  onCreated,
   disabled,
   inboxIdError,
   tokenError,
@@ -523,6 +639,10 @@ function ChatwootLink({
   onChangeInboxId: (value: string) => void;
   onChangeToken: (value: string) => void;
   onPick: (inboxId: number, token: string | null) => void;
+  /** null = โครงการยังไม่ถูกบันทึก จึงยังสร้าง inbox ให้ไม่ได้ */
+  projectId: number | null;
+  websiteUrl: string;
+  onCreated: (project: SupportProject) => void;
   disabled: boolean;
   inboxIdError?: string | undefined;
   tokenError?: string | undefined;
@@ -562,6 +682,19 @@ function ChatwootLink({
         </Button>
         {loading && <span className="text-caption text-ink-3">ກຳລັງຕິດຕໍ່ Chatwoot...</span>}
       </div>
+
+      {/*
+        ทางเลือกที่สอง สำหรับเว็บใหม่ที่ยังไม่มี inbox ใน Chatwoot เลย
+        โผล่เฉพาะตอนที่ยังไม่ผูก — ผูกแล้วปุ่มนี้ไม่มีความหมายอีกต่อไป มีแต่จะชวนกดผิด
+      */}
+      {projectId !== null && inboxIdValue.trim() === '' && (
+        <AutoCreateInbox
+          projectId={projectId}
+          websiteUrl={websiteUrl}
+          disabled={disabled}
+          onCreated={onCreated}
+        />
+      )}
 
       {requested && failed && (
         <p role="alert" className="mb-3 rounded bg-sla-risk-bg px-3 py-2 text-caption text-ink-2">

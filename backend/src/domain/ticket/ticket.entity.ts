@@ -1,8 +1,14 @@
 import {
+  AWAITING_CONFIRMATION_STATUSES,
   computePriority,
+  isClockRunningStatus,
+  isPausedStatus,
+  isTerminalStatus,
+  WAITING_STATUSES,
   type Impact,
   type Priority,
   type TicketStatus,
+  type TicketType,
   type Urgency,
 } from '../../common/constants';
 import { ConflictError, DomainError, ValidationError } from '../../common/errors/domain-error';
@@ -30,13 +36,29 @@ export interface NewTicketProps {
   description: string;
   impact: Impact;
   urgency: Urgency;
-  ticketType?: 'incident' | 'service_request' | 'problem' | 'change';
+  /**
+   * เหตุขัดข้อง หรือ คำขอบริการ — ตัวเลือกเครื่องสถานะทั้งเครื่อง
+   *
+   * ⚠️ ไม่ใช่ป้ายกำกับอีกต่อไป ตั้งแต่เฟสนี้เป็นต้นไปค่านี้ตัดสินว่า
+   *    เรื่องใบนี้เดินตามตารางสถานะชุดไหน (ดู ALLOWED_TRANSITIONS)
+   *    เดิมประกาศรับ 'problem' | 'change' ด้วย ซึ่งเป็นค่าที่ CHECK
+   *    ck_ticket_type_valid ในฐานข้อมูลปฏิเสธมาตลอด — ตัดออกแล้ว
+   */
+  ticketType?: TicketType;
   channel?: string;
   departmentId?: number | null;
   catalogItemId?: number | null;
   serviceId?: number | null;
   sourceDevice?: string | null;
   assetTag?: string | null;
+  /**
+   * โครงการใน AIDC Support Hub ที่เรื่องนี้มาจาก — null = แจ้งในระบบตามปกติ
+   *
+   * เป็นข้อมูลอ้างอิงล้วน ๆ ไม่มีกฎธุรกิจข้อไหนขึ้นกับมัน (ผู้รับผิดชอบ ระดับ
+   * ความสำคัญ และ SLA ยังตัดสินจากบริษัทกับหมวดหมู่เหมือนเดิมทุกข้อ)
+   * ผู้เรียกเป็นผู้ตรวจว่าโครงการนั้นมีอยู่จริงและอยู่ในขอบเขตของเขา
+   */
+  supportProjectId?: number | null;
 }
 
 /** สถานะทั้งหมดของเรื่องหนึ่งเรื่อง รวมค่าที่มีเฉพาะเรื่องที่บันทึกแล้ว */
@@ -65,36 +87,112 @@ const MIN_SUBJECT_LENGTH = 5;
 const MAX_SUBJECT_LENGTH = 200;
 
 /**
- * สถานะไหนไปสถานะไหนได้บ้าง
+ * ── เครื่องสถานะสองเครื่อง ────────────────────────────────────────────────
  *
  * ลอกมาจากแผนภาพสถานะใน docs/02-data-model.md ตรง ๆ ทุกเส้น
  * เขียนเป็นตารางแทน if ซ้อนกัน เพื่อให้เทียบกับเอกสารได้ทีละบรรทัด
  * โดยไม่ต้องไล่ตรรกะ — ถ้าเอกสารเปลี่ยน จุดที่ต้องแก้มีที่เดียว
+ *
+ * ทำไมต้องแยกสองตาราง ไม่ใช่ตารางเดียวที่กว้างพอสำหรับทั้งคู่
+ *   เดิมทั้งสองชนิดใช้ตารางเดียวกัน แล้วยัด "รออนุมัติ" กับ "รอผู้ขาย" ลงไปใน
+ *   pending_user + pending_reason ผลคือคำถามอย่าง "คำขอบริการกี่ใบค้างรออนุมัติ"
+ *   ตอบไม่ได้ด้วย WHERE ธรรมดา ต้องรู้ด้วยว่าต้องดูคอลัมน์ที่สองประกอบ
+ *   และไม่มีอะไรกันเหตุขัดข้องไม่ให้ถูกตั้งเป็น "รออนุมัติ" ซึ่งไม่มีความหมาย
+ *
+ * ค่าที่ชนิดหนึ่งใช้ไม่ได้ ต้องมีคีย์อยู่ในตารางของมันเสมอ (เป็นอาเรย์ว่าง)
+ * ไม่ใช่หายไปเฉย ๆ — Record<TicketStatus, …> บังคับให้ครบทุกคีย์ ถ้าวันหนึ่ง
+ * มีคนเพิ่มสถานะใหม่ใน TICKET_STATUS ตัวตรวจชนิดจะฟ้องทั้งสองตารางทันที
  */
-const ALLOWED_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
-  // ไป pending_user ได้ตั้งแต่ยังไม่มอบหมาย สำหรับคำขอที่ต้องรออนุมัติก่อน
-  new: ['assigned', 'pending_user', 'cancelled'],
-  assigned: ['in_progress', 'pending_user', 'cancelled'],
-  in_progress: ['pending_user', 'resolved', 'cancelled'],
-  // ไป closed ตรง ๆ ได้ กรณีติดตาม 2 ครั้งแล้วไม่ตอบจนครบ 3 วันทำการ (G-09)
-  pending_user: ['in_progress', 'closed', 'cancelled'],
+
+/**
+ * เหตุขัดข้อง (incident) — "ของพัง ทำให้กลับมาใช้ได้"
+ *
+ * เส้นที่ต้องอธิบายเป็นพิเศษ
+ *   in_progress → assigned  โอนทีม / เปลี่ยนผู้รับผิดชอบ สถานะถอยกลับหนึ่งขั้น
+ *                           เพราะคนใหม่ยังไม่ได้เริ่มลงมือ (assignTo() เป็นคน
+ *                           เปลี่ยนตัวผู้รับผิดชอบ ส่วนเส้นนี้อนุญาต "สถานะ" ให้ถอย)
+ *   pending_user → closed   ติดตาม 2 ครั้งแล้วไม่ตอบจนครบ 3 วันทำการ (G-09)
+ *                           ⚠️ เส้นนี้ไม่มีในแผนภาพรอบนี้ของ SA แต่คงไว้โดยตั้งใจ
+ *                              เพราะมันคือกฎควบคุมที่ SLA 5.4 + SOP-01 ข้อ 9
+ *                              บังคับไว้ และมีอยู่ในระบบก่อนการแก้ครั้งนี้
+ *                              การลบทิ้งเงียบ ๆ = ปิดกลไกควบคุมโดยไม่มีใครสั่ง
+ *                              → รอ SA ยืนยันว่าจะคงไว้หรือตัดออก
+ */
+const INCIDENT_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
+  new: ['assigned', 'cancelled'],
+  assigned: ['in_progress', 'cancelled'],
+  in_progress: ['assigned', 'pending_user', 'pending_vendor', 'resolved', 'cancelled'],
+  pending_user: ['in_progress', 'closed'],
+  pending_vendor: ['in_progress'],
   resolved: ['closed', 'in_progress'],
   // เปิดซ้ำได้ภายใน 7 วันเท่านั้น — ดู assertReopenWindow
   closed: ['in_progress'],
   cancelled: [],
+  // ── ค่าของสายคำขอบริการ เหตุขัดข้องไม่ใช้ ──
+  pending_approval: [],
+  rejected: [],
+  fulfilled: [],
 };
 
-/** สถานะที่ถือว่าจบแล้ว นาฬิกา SLA หยุดเดิน */
-const TERMINAL_STATUSES: readonly TicketStatus[] = ['closed', 'cancelled'];
+/**
+ * คำขอบริการ (service_request) — "ขอให้ไอทีจัดหา/เปลี่ยน/ให้สิทธิ์"
+ *
+ * เส้นที่ต้องอธิบายเป็นพิเศษ
+ *   new → pending_approval  เมื่อรายการใน catalog ตั้ง requires_approval = true
+ *   new → assigned          เมื่อไม่ต้องอนุมัติ — มอบทีมตาม catalog ได้เลย
+ *   pending_approval → assigned  อนุมัติครบทุกขั้น **และนาฬิกา fulfillment เริ่มนับที่นี่**
+ *   pending_approval → rejected  ขั้นใดขั้นหนึ่งถูกปฏิเสธ (comment บังคับที่ระดับ DB)
+ *
+ * assigned → cancelled และ in_progress → cancelled มีเส้นเหมือนสายเหตุขัดข้อง
+ * (SA ยืนยันแล้วว่าที่แผนภาพเดิมไม่มีเส้นนี้เป็นจุดตกหล่น ไม่ใช่ตั้งใจ) — สิทธิ์
+ * ยกเลิกยังเป็นของเจ้าหน้าที่เท่านั้นที่จุดนี้ ผู้แจ้งเองยกเลิกได้แค่ก่อนมีคนรับ
+ * (ดู ownerMayWithdraw ใน actorMayTransition) เหมือนเดิมทุกประการ
+ */
+const SERVICE_REQUEST_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
+  new: ['pending_approval', 'assigned', 'cancelled'],
+  pending_approval: ['assigned', 'rejected', 'cancelled'],
+  rejected: [],
+  assigned: ['in_progress', 'cancelled'],
+  in_progress: ['pending_user', 'pending_vendor', 'fulfilled', 'cancelled'],
+  pending_user: ['in_progress'],
+  pending_vendor: ['in_progress'],
+  fulfilled: ['closed', 'in_progress'],
+  closed: ['in_progress'],
+  cancelled: [],
+  // ── ค่าของสายเหตุขัดข้อง คำขอบริการไม่ใช้ ──
+  resolved: [],
+};
+
+const TRANSITIONS_BY_TYPE: Record<TicketType, Record<TicketStatus, readonly TicketStatus[]>> = {
+  incident: INCIDENT_TRANSITIONS,
+  service_request: SERVICE_REQUEST_TRANSITIONS,
+};
+
+/**
+ * สถานะ "จบแล้ว" ของแต่ละสาย — ใช้บอกว่างานของเจ้าหน้าที่เสร็จแล้วหรือยัง
+ * resolved เป็นของเหตุขัดข้อง · fulfilled เป็นของคำขอบริการ
+ */
+export const COMPLETION_STATUS: Record<TicketType, TicketStatus> = {
+  incident: 'resolved',
+  service_request: 'fulfilled',
+};
 
 /**
  * สถานะที่มอบหมายผู้รับผิดชอบใหม่ไม่ได้
  *
- * resolved รวมอยู่ด้วยทั้งที่ยังไม่จบ เพราะงานของเจ้าหน้าที่เสร็จแล้ว
+ * resolved / fulfilled รวมอยู่ด้วยทั้งที่ยังไม่จบ เพราะงานของเจ้าหน้าที่เสร็จแล้ว
  * เหลือแค่รอผู้แจ้งยืนยัน — การย้ายเรื่องช่วงนี้ทำให้ KPI-3 (FCR) นับว่า
  * เปลี่ยนมือทั้งที่ไม่มีใครทำงานต่อจริง ถ้าต้องทำต่อให้เปิดคืนก่อน
+ *
+ * rejected อยู่ด้วยเพราะเป็นปลายทาง เหมือน closed / cancelled
  */
-const UNASSIGNABLE_STATUSES: readonly TicketStatus[] = ['resolved', 'closed', 'cancelled'];
+const UNASSIGNABLE_STATUSES: readonly TicketStatus[] = [
+  'resolved',
+  'fulfilled',
+  'closed',
+  'cancelled',
+  'rejected',
+];
 
 /**
  * เปิดซ้ำได้ภายในกี่วันหลังปิด
@@ -105,9 +203,32 @@ const UNASSIGNABLE_STATUSES: readonly TicketStatus[] = ['resolved', 'closed', 'c
  */
 const REOPEN_WINDOW_DAYS = 7;
 
+/**
+ * ตารางสถานะของเรื่องชนิดนี้
+ *
+ * ชนิดที่ไม่รู้จัก (ข้อมูลเก่าหรือค่าที่หลุด CHECK มาได้) ถอยไปใช้ตารางของ
+ * เหตุขัดข้อง ซึ่งเป็นค่า default ของคอลัมน์ ticket_type มาตั้งแต่ต้น
+ */
+export function transitionTableFor(
+  ticketType: TicketType | string | undefined,
+): Record<TicketStatus, readonly TicketStatus[]> {
+  return TRANSITIONS_BY_TYPE[ticketType as TicketType] ?? INCIDENT_TRANSITIONS;
+}
+
 /** สถานะที่ไปต่อได้จากสถานะนี้ตามตาราง — ยังไม่ดูว่าใครเป็นคนสั่ง */
-export function allowedTransitionsFrom(status: TicketStatus): readonly TicketStatus[] {
-  return ALLOWED_TRANSITIONS[status];
+export function allowedTransitionsFrom(
+  status: TicketStatus,
+  ticketType: TicketType | string | undefined = 'incident',
+): readonly TicketStatus[] {
+  return transitionTableFor(ticketType)[status] ?? [];
+}
+
+/** สถานะนี้ใช้กับเรื่องชนิดนี้ได้ไหม — ใช้ค่านี้ตอนทำตัวกรองบนหน้าจอ */
+export function statusAppliesTo(status: TicketStatus, ticketType: TicketType): boolean {
+  const table = transitionTableFor(ticketType);
+  if ((table[status] ?? []).length > 0) return true;
+  // ปลายทางมีอาเรย์ว่างเหมือนกับสถานะที่ชนิดนี้ไม่ใช้ จึงต้องดูขาเข้าประกอบ
+  return Object.values(table).some((targets) => targets.includes(status));
 }
 
 /** ยังอยู่ในช่วงที่เปิดซ้ำได้ไหม — เรื่องที่ยังไม่เคยปิดถือว่าอยู่ในช่วงเสมอ */
@@ -129,32 +250,53 @@ export interface TransitionActor {
 }
 
 /**
+ * รอบนี้คือการ "เปิดคืน" หรือไม่
+ *
+ * เปิดคืนได้จากสามสถานะ: resolved (เหตุขัดข้องที่แก้แล้ว) · fulfilled (คำขอที่ส่งมอบแล้ว)
+ * · closed (ปิดไปแล้วแต่ยังอยู่ในช่วง 7 วัน) — ทั้งสามใช้สูตรคืนเวลาเดียวกัน (S-03)
+ */
+export function isReopening(from: TicketStatus, to: TicketStatus): boolean {
+  return (
+    to === 'in_progress' &&
+    (from === 'closed' || (AWAITING_CONFIRMATION_STATUSES as readonly string[]).includes(from))
+  );
+}
+
+/**
  * ผู้สั่งคนนี้เปลี่ยนจาก from ไป to ได้ไหม
  *
  * ใช้ตัวเดียวกันทั้งตอนตัดสินคำสั่งจริง และตอนบอกหน้าจอว่าจะแสดงปุ่มอะไร
  * ถ้าเขียนแยกสองชุด วันหนึ่งจะมีปุ่มที่กดแล้วถูกปฏิเสธ หรือทางที่ทำได้แต่ไม่มีปุ่มให้กด
  *
  * ผู้แจ้งที่ไม่ใช่เจ้าหน้าที่ทำได้สามอย่างเท่านั้น
- *   - ยืนยันปิดเรื่องที่แก้แล้ว
- *   - เปิดเรื่องคืนเมื่อยังพบปัญหาเดิม
- *   - ถอนเรื่องที่ยังไม่มีใครรับ — มีคนรับแล้วต้องคุยกับเจ้าหน้าที่ ไม่ใช่ยกเลิกทิ้งเอง
+ *   - ยืนยันปิดเรื่องที่แก้แล้ว (resolved) หรือที่ส่งมอบแล้ว (fulfilled)
+ *   - เปิดเรื่องคืนเมื่อยังพบปัญหาเดิม หรือของที่ได้ไม่ครบ
+ *   - ถอนเรื่องที่ยังไม่มีใครรับ (new) หรือที่ยังค้างรออนุมัติอยู่ (pending_approval)
+ *     — มีคนรับแล้วต้องคุยกับเจ้าหน้าที่ ไม่ใช่ยกเลิกทิ้งเอง
  * การเปลี่ยนอื่นทั้งหมดเป็นงานของเจ้าหน้าที่
+ *
+ * ⚠️ `rejected` ไม่มีทางมาจากผู้แจ้ง — มันเป็นผลของการที่ "คนอื่น" พิจารณาแล้วไม่อนุมัติ
+ *    ผู้แจ้งที่อยากถอนเรื่องของตัวเองต้องใช้ cancelled ซึ่งอ่านย้อนหลังแล้วต่างกันชัดเจน
  */
 export function actorMayTransition(
   from: TicketStatus,
   to: TicketStatus,
   actor: TransitionActor,
+  ticketType: TicketType | string | undefined = 'incident',
 ): boolean {
-  if (!ALLOWED_TRANSITIONS[from].includes(to)) return false;
+  if (!allowedTransitionsFrom(from, ticketType).includes(to)) return false;
 
-  const reopening = (from === 'resolved' || from === 'closed') && to === 'in_progress';
-  if (reopening) return actor.canChangeStatus || (actor.isOwner && actor.canReopen);
+  if (isReopening(from, to)) return actor.canChangeStatus || (actor.isOwner && actor.canReopen);
 
   if (to === 'cancelled') {
-    return (actor.canChangeStatus && actor.canCancel) || (actor.isOwner && from === 'new');
+    const ownerMayWithdraw = from === 'new' || from === 'pending_approval';
+    return (actor.canChangeStatus && actor.canCancel) || (actor.isOwner && ownerMayWithdraw);
   }
 
-  if (from === 'resolved' && to === 'closed') return actor.canChangeStatus || actor.isOwner;
+  // ยืนยันปิดเรื่องที่งานเสร็จแล้ว — ผู้แจ้งทำได้เอง (พร้อมให้คะแนน CSAT)
+  if ((AWAITING_CONFIRMATION_STATUSES as readonly string[]).includes(from) && to === 'closed') {
+    return actor.canChangeStatus || actor.isOwner;
+  }
 
   return actor.canChangeStatus;
 }
@@ -310,12 +452,17 @@ export class TicketEntity {
     return this.props.priority === 'P1';
   }
 
-  get isTerminal(): boolean {
-    return TERMINAL_STATUSES.includes(this.props.status);
+  get ticketType(): TicketType {
+    return this.props.ticketType ?? 'incident';
   }
 
-  get isPending(): boolean {
-    return this.props.status === 'pending_user';
+  get isTerminal(): boolean {
+    return isTerminalStatus(this.props.status);
+  }
+
+  /** นาฬิกา SLA หยุดเดินอยู่ตอนนี้ไหม — ครอบคลุมทุกสถานะใน PAUSED_STATUSES */
+  get isPaused(): boolean {
+    return isPausedStatus(this.props.status);
   }
 
   get pendingStartedAt(): Date | null {
@@ -327,14 +474,34 @@ export class TicketEntity {
   }
 
   /**
-   * การเปลี่ยนไปสถานะนี้ทำให้ "เลิกพัก" หรือไม่
+   * การเปลี่ยนไปสถานะนี้ต้อง "คืนเวลาที่หยุดนับ" เข้ากำหนดแก้เสร็จหรือไม่
    *
    * ผู้เรียกต้องถามก่อนเปลี่ยนสถานะ เพราะการคำนวณว่าหยุดนาฬิกาไปกี่นาที
    * ต้องใช้ปฏิทินวันทำการซึ่งอยู่นอกชั้นโดเมน entity จึงบอกได้แค่ว่า
    * "ต้องคำนวณไหม" ส่วน "กี่นาที" เป็นหน้าที่ของ use case
+   *
+   * ⚠️ พักสองแบบคืนเวลาไม่เหมือนกัน — นี่คือจุดที่เคยเป็นบั๊กเงียบ
+   *
+   *   รอคนอื่น (pending_approval / pending_user)
+   *     คืนเสมอไม่ว่าจะออกทางไหน เพราะเวลาช่วงนั้นไม่ใช่ของทีมไอทีเลย
+   *     แม้จะออกไป closed ก็ยังต้องนับ — เพราะ KPI-3 (FCR) ใช้
+   *     pending_duration_minutes = 0 แทนความหมาย "ไม่เคยต้องรอใคร"
+   *     ถ้าไม่บวกตรงนี้ เรื่องที่ปิดเพราะผู้แจ้งเงียบจะถูกนับเป็นแก้จบในครั้งเดียว
+   *
+   *   งานเสร็จรอยืนยัน (resolved / fulfilled)
+   *     คืนเฉพาะตอนถูกเปิดคืนเท่านั้น ถ้าเรื่องปิดไปตามปกติ เวลาช่วงนี้
+   *     ไม่เคยมีความหมาย เพราะตัววัด SLA คือ resolved_at ไม่ใช่ closed_at
+   *     และถ้าบวกตอนปิด ทุกใบที่ปิดจะมี pending_duration_minutes > 0
+   *     แล้ว KPI-3 จะร่วงเป็นศูนย์ทั้งกระดาน
    */
-  willResumeFromPending(next: TicketStatus): boolean {
-    return this.isPending && next !== 'pending_user';
+  willResumeClock(next: TicketStatus): boolean {
+    if (!this.isPaused) return false;
+    if ((WAITING_STATUSES as readonly string[]).includes(this.props.status)) {
+      // ออกจากการรอคนอื่น — ยกเว้นย้ายไปรอคนอื่นต่อ ซึ่งยังไม่ได้เลิกรอ
+      return !isPausedStatus(next);
+    }
+    // resolved / fulfilled — คืนเวลาเฉพาะตอนที่นาฬิกากลับมาเดินจริง
+    return isClockRunningStatus(next);
   }
 
   /**
@@ -362,43 +529,66 @@ export class TicketEntity {
       );
     }
 
-    const allowed = ALLOWED_TRANSITIONS[this.props.status];
+    const allowed = allowedTransitionsFrom(this.props.status, this.ticketType);
     if (!allowed.includes(next)) {
       throw new ConflictError(
         'TICKET_INVALID_TRANSITION',
         `ປ່ຽນສະຖານະຈາກ "${this.props.status}" ໄປ "${next}" ບໍ່ໄດ້`,
-        { from: this.props.status, to: next, allowed },
+        { from: this.props.status, to: next, allowed, ticketType: this.ticketType },
       );
     }
 
     if (this.props.status === 'closed') this.assertReopenWindow(at);
 
     /*
-     * สะสมนาทีที่หยุดนาฬิกาก่อนเปลี่ยนสถานะ มิฉะนั้น isPending
+     * สะสมนาทีที่หยุดนาฬิกาก่อนเปลี่ยนสถานะ มิฉะนั้น isPaused
      * จะเป็นเท็จไปแล้วตอนที่ต้องใช้ค่านี้
      *
-     * การเปิดคืนจาก resolved / closed ใช้สูตรเดียวกับการเลิกพัก (S-03)
-     * ช่วงที่เรื่องค้างอยู่ในสถานะ "แก้แล้ว" ไม่ใช่เวลาที่เจ้าหน้าที่ถือเรื่องไว้
-     * ถ้านับรวม เรื่องที่ผู้แจ้งตีกลับหลังผ่านไปสองวันจะเกินกำหนดทันทีที่เปิดคืน
+     * การเปิดคืนจาก closed ใช้สูตรเดียวกับการเลิกพัก (S-03) — ช่วงที่เรื่อง
+     * ปิดไปแล้วไม่ใช่เวลาที่เจ้าหน้าที่ถือเรื่องไว้ ถ้านับรวม เรื่องที่ผู้แจ้ง
+     * ตีกลับหลังผ่านไปสองวันจะเกินกำหนดทันทีที่เปิดคืน
+     * (resolved / fulfilled → in_progress ถูก willResumeClock ครอบไว้แล้ว
+     *  เพราะทั้งคู่เป็นสถานะพัก closed ไม่ใช่ จึงต้องมีเงื่อนไขนี้เพิ่ม)
      */
-    const reopening =
-      (this.props.status === 'resolved' || this.props.status === 'closed') &&
-      next === 'in_progress';
-    if ((this.willResumeFromPending(next) || reopening) && options.pausedMinutesToAdd) {
+    const reopeningFromClosed = this.props.status === 'closed' && next === 'in_progress';
+    if ((this.willResumeClock(next) || reopeningFromClosed) && options.pausedMinutesToAdd) {
       this.props.pendingDurationMinutes += options.pausedMinutesToAdd;
     }
 
     this.props.status = next;
 
-    if (next === 'pending_user') {
-      this.props.pendingReason = options.pendingReason ?? null;
+    /*
+     * เวลาที่เริ่มพักต้องตั้งให้ "ทุก" สถานะที่หยุดนาฬิกา ไม่ใช่แค่ pending_user
+     *
+     * เดิมโค้ดตั้งให้เฉพาะ pending_user แล้วล้างทิ้งในทุกสถานะอื่น พอมี
+     * pending_approval เข้ามา นาฬิกาจะไม่มีวันหยุดเลยเพราะไม่มีจุดตั้งต้นให้หัก
+     * — เป็นบั๊กที่เห็นยากมาก เพราะทุกอย่างยังทำงานได้ ตัวเลขแค่ผิด
+     */
+    if (isPausedStatus(next)) {
       this.props.pendingStartedAt = at;
     } else {
-      this.props.pendingReason = null;
       this.props.pendingStartedAt = null;
     }
 
-    if (next === 'resolved') this.props.resolvedAt = at;
+    /*
+     * เหตุผลย่อยของการพัก ใช้ได้กับ pending_user อย่างเดียว
+     * สถานะอื่นบอกความหมายของตัวเองครบอยู่แล้ว (รออนุมัติ / รอผู้ขาย)
+     */
+    this.props.pendingReason = next === 'pending_user' ? (options.pendingReason ?? null) : null;
+
+    /*
+     * งานของเจ้าหน้าที่เสร็จเมื่อไร — เก็บลง resolved_at ทั้งสองสาย
+     *
+     * ⚠️ fulfilled ต้องเขียนคอลัมน์นี้ด้วย ห้ามปล่อยว่าง
+     *    KPI-1 วัดจาก `resolved_at <= resolution_due_at` ของใบที่ปิดในเดือนนั้น
+     *    ถ้าคำขอบริการที่ส่งมอบแล้วมี resolved_at เป็น null ทุกใบจะถูกนับว่า
+     *    "ไม่ทัน SLA" ตลอดกาล และตัวเลขที่รายงานผู้บริหารจะผิดทั้งคอลัมน์
+     *    ชื่อคอลัมน์อ่านแล้วชวนเข้าใจผิด แต่การเพิ่ม fulfilled_at อีกคอลัมน์
+     *    แปลว่าทุกคิวรีที่วัด SLA ต้องเขียน COALESCE ของสองคอลัมน์ตลอดไป
+     */
+    if ((AWAITING_CONFIRMATION_STATUSES as readonly string[]).includes(next)) {
+      this.props.resolvedAt = at;
+    }
 
     if (next === 'closed') {
       this.props.closedAt = at;

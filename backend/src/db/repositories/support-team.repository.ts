@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import { NotFoundError } from '../../common/errors/domain-error';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../client';
-import { DB } from '../db.module';
+import { DB } from '../db.token';
 import { appUser, auditLog, company, supportTeam, supportTeamMember } from '../schema';
 
 /** สมาชิกหนึ่งคนในทีม พร้อมข้อมูลที่หน้าจอต้องแสดง */

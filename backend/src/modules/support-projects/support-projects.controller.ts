@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBody,
   ApiCookieAuth,
@@ -95,6 +105,45 @@ export class SupportProjectsController {
     @Body() dto: CreateSupportProjectDto,
   ): Promise<SupportProjectDto> {
     return this.projects.create(scope, dto);
+  }
+
+  @Post(':id/chatwoot-inbox')
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'สร้าง inbox ใหม่ใน Chatwoot ให้โครงการนี้',
+    description: [
+      'ต้องมีสิทธิ์ `user.assign_role` และโครงการต้องอยู่ในขอบเขตบริษัทของผู้เรียก',
+      '',
+      'สร้าง inbox ชนิด Website (widget) ใน Chatwoot จากชื่อ ที่อยู่เว็บ และภาษาของโครงการ',
+      'แล้วบันทึก `chatwoot.inbox_id` กับ `chatwoot.website_token` ลงโครงการให้ในคำขอเดียว',
+      '',
+      '⚠️ **เขียนลงระบบ Chatwoot ที่ทีมใช้งานอยู่จริง** — inbox ที่สร้างโผล่ในแอปของ',
+      'เจ้าหน้าที่ทันที และลบทิ้งจากที่นี่ไม่ได้ ต้องเข้าไปลบในแอปของ Chatwoot เอง',
+      '',
+      '**สร้างใหม่อย่างเดียว ไม่ผูกซ้ำ** — โครงการที่มี inbox อยู่แล้วได้ `409 ALREADY_LINKED`',
+      'การเปลี่ยนไปใช้ inbox ที่มีอยู่แล้วยังทำผ่าน `PATCH /support-projects/{id}` เหมือนเดิม',
+      '',
+      '`website_url` ของโครงการเป็นค่าที่ Chatwoot บังคับ — ยังไม่ได้กรอกจะได้ `422`',
+      '',
+      'คำตอบคือโครงการที่อัปเดตแล้ว (`SupportProjectDto`) รูปเดียวกับ `GET /support-projects`',
+    ].join('\n'),
+  })
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiEnvelope(SupportProjectDto, { status: 201 })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'FORBIDDEN' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'ALREADY_LINKED' })
+  @ApiResponse({ status: 422, type: ErrorResponseDto, description: 'VALIDATION_ERROR — ยังไม่ได้ตั้ง website_url' })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'CHATWOOT_NOT_CONFIGURED · CHATWOOT_UNREACHABLE',
+  })
+  createChatwootInbox(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<SupportProjectDto> {
+    return this.projects.createChatwootInbox(scope, id);
   }
 
   @Patch(':id')
