@@ -27,7 +27,7 @@ export class CurrentUserDto {
   @ApiPropertyOptional({ example: 'ເຈົ້າໜ້າທີ່ສະໜັບສະໜູນໄອທີ' }) job_title?: string | null;
   @ApiPropertyOptional({ type: RefNamedDto }) department?: RefNamedDto | null;
 
-  @ApiProperty({ example: ['agent'], type: [String] })
+  @ApiProperty({ example: ['support_agent'], type: [String] })
   roles!: string[];
 
   @ApiProperty({

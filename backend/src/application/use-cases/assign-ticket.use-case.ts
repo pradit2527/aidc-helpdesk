@@ -5,7 +5,7 @@ import { ForbiddenError, ValidationError } from '../../common/errors/domain-erro
 import type { AccessScope } from '../../common/scope';
 import { SupportTeamRepository } from '../../db/repositories/support-team.repository';
 import { TicketRepository } from '../../db/repositories/ticket.repository';
-import { decideAssignment, TicketEntity } from '../../domain/ticket/ticket.entity';
+import { decideAssignment, maySelfAssign, TicketEntity } from '../../domain/ticket/ticket.entity';
 import { CLOCK, type Clock } from '../ports/clock.port';
 
 export interface AssignTicketInput {
@@ -34,13 +34,14 @@ export interface AssignTicketResult {
  * มอบหมายผู้รับผิดชอบ หรือรับงานเอง
  *
  * สิทธิ์แยกสองระดับ
- *   - รับเอง ใช้ ticket.assign_self (หรือ ticket.assign)
- *   - มอบให้คนอื่น ใช้ ticket.assign **และ** ต้องเป็นผู้ดูแล หรือเป็นหัวหน้าทีม
- *     ของคนที่รับ — การโยนงานให้คนอื่นเป็นอำนาจของหัวหน้าทีม ถ้าให้ทุกคนที่
- *     รับงานเองได้โยนงานได้ด้วย เรื่องยาก ๆ จะถูกส่งต่อวนไปเรื่อย ๆ
+ *   - รับเอง ใช้ ticket.assign_self (หรือ ticket.assign) — ทีม support ทุกคนถือ
+ *     แต่รับได้เฉพาะเรื่องที่ยังไม่มีผู้รับผิดชอบ (maySelfAssign)
+ *   - มอบให้คนอื่น ใช้ ticket.assign (บทบาท support_lead ขึ้นไป) **และ** ต้องเป็นผู้ดูแล
+ *     หรือเป็นหัวหน้าทีมของคนที่รับ — การโยนงานให้คนอื่นเป็นอำนาจของหัวหน้าทีม
+ *     ถ้าให้ทุกคนที่รับงานเองได้โยนงานได้ด้วย เรื่องยาก ๆ จะถูกส่งต่อวนไปเรื่อย ๆ
  *
- * ⚠️ ticket.assign เพียงอย่างเดียวไม่พอ เพราะในชุดสิทธิ์ตั้งต้นเจ้าหน้าที่ทุกคนถืออยู่
- *    ตัวที่แยกหัวหน้าออกจากลูกทีมคือ support_team_member.is_lead ไม่ใช่ permission
+ * ⚠️ ต้องผ่านสองชั้น: บทบาท (ticket.assign) และข้อมูลทีม (support_team_member.is_lead)
+ *    บทบาทบอกว่ามอบหมายเป็นไหม ข้อมูลทีมบอกว่ามอบให้ใครได้
  */
 @Injectable()
 export class AssignTicketUseCase {
@@ -61,6 +62,29 @@ export class AssignTicketUseCase {
     const self = input.assigneeId === scope.userId;
     if (self) scope.require('ticket.assign_self', 'ticket.assign');
     else scope.require('ticket.assign');
+
+    /*
+     * ทีม support กดรับได้เฉพาะเรื่องที่ยังว่าง — ตอบเรื่องนี้ก่อนตรวจสถานะเรื่อง
+     * เพราะเป็นความผิดของผู้สั่ง (ไม่มีอำนาจดึงงาน) ไม่ใช่ของสถานะเรื่อง
+     */
+    if (
+      self &&
+      !maySelfAssign(
+        {
+          userId: scope.userId,
+          canAssign: scope.has('ticket.assign'),
+          isAdminLevel: scope.isAdminLevel,
+          ledTeamIds: [...scope.ledTeamIds],
+        },
+        row.assigneeId,
+      )
+    ) {
+      throw new ForbiddenError(
+        'ALREADY_ASSIGNED',
+        'ເລື່ອງນີ້ມີຜູ້ຮັບຜິດຊອບແລ້ວ — ສະເພາະຫົວໜ້າທີມ ຫຼື ຜູ້ດູແລ ຈຶ່ງດຶງວຽກກັບມາໄດ້',
+        { ticketId: row.id, assigneeId: row.assigneeId },
+      );
+    }
 
     const entity = TicketEntity.rehydrate({
       id: row.id,

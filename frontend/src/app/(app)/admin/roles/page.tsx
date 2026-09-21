@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
+import { SIDE_LABEL_KEY, SIDE_ORDER, roleRank, roleSide } from '@/config/roles';
+import { useT } from '@/components/layout/preference-controls';
 import { cn } from '@/lib/cn';
 import { useHasRole } from '@/lib/session';
 import { usePermissions, useRoles } from '@/lib/queries/master-data';
@@ -62,7 +64,12 @@ function groupPermissions(
 export default function RolesPage(): React.JSX.Element {
   const rolesQuery = useRoles();
   const permissionsQuery = usePermissions();
-  const ROLES = rolesQuery.data ?? [];
+  const t = useT();
+  // เรียงตามฝั่งแล้วตามระดับ — API เรียงตาม id ซึ่งบทบาทที่เพิ่มทีหลังจะตกไปท้ายสุดของตาราง
+  const ROLES = React.useMemo(
+    () => [...(rolesQuery.data ?? [])].sort((a, b) => roleRank(a.code) - roleRank(b.code)),
+    [rolesQuery.data],
+  );
   const PERMISSION_GROUPS = React.useMemo(
     () => groupPermissions(permissionsQuery.data ?? []),
     [permissionsQuery.data],
@@ -127,18 +134,32 @@ export default function RolesPage(): React.JSX.Element {
         <CardHeader>
           <CardTitle>ບົດບາດ</CardTitle>
         </CardHeader>
-        <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <CardBody className="space-y-4">
           <QueryBoundary query={rolesQuery}>
-          {ROLES.map((role) => (
-            <div key={role.id} className="rounded border border-hair p-3">
-              <p className="text-body-sm font-semibold">{role.name_th}</p>
-              <p className="font-mono text-caption text-ink-3">{role.code}</p>
-              <p className="mt-1 text-caption text-ink-2">{role.description}</p>
-              <p className="tabular mt-2 text-caption text-ink-3">
-                {role.permissions.length} ສິດ · ຜູ້ໃຊ້ {role.user_count} ຄົນ
-              </p>
-            </div>
-          ))}
+            {/* แบ่งเป็นสองฝั่งชัดเจน: ผู้ใช้งาน / Helpdesk Support — ผู้บริหารระบบอยู่นอกสองฝั่งนี้ */}
+            {SIDE_ORDER.map((side) => {
+              const inSide = ROLES.filter((r) => (r.side ?? roleSide(r.code)) === side);
+              if (inSide.length === 0) return null;
+              return (
+                <section key={side} aria-label={t(SIDE_LABEL_KEY[side])}>
+                  <h3 className="mb-2 text-label font-semibold text-ink-2">
+                    {t(SIDE_LABEL_KEY[side])}
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {inSide.map((role) => (
+                      <div key={role.id} className="rounded border border-hair p-3">
+                        <p className="text-body-sm font-semibold">{role.name_th}</p>
+                        <p className="font-mono text-caption text-ink-3">{role.code}</p>
+                        <p className="mt-1 text-caption text-ink-2">{role.description}</p>
+                        <p className="tabular mt-2 text-caption text-ink-3">
+                          {role.permissions.length} ສິດ · ຜູ້ໃຊ້ {role.user_count} ຄົນ
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </QueryBoundary>
         </CardBody>
       </Card>

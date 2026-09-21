@@ -12,7 +12,7 @@
  */
 
 /** บทบาทที่ CLI สร้างให้ได้ — ต้องตรงกับ code ใน data/permissions.ts */
-export type SeedRoleCode = 'agent' | 'super_admin';
+export type SeedRoleCode = 'support_lead' | 'support_agent' | 'super_admin';
 
 export interface SupportTeamMemberSeed {
   /** ชื่อผู้ใช้สำหรับเข้าสู่ระบบ — ตัวพิมพ์เล็ก a-z 0-9 . _ - */
@@ -56,38 +56,53 @@ export const SUPPORT_TEAMS: readonly SupportTeamSeed[] = [
          *
          * super_admin เห็นทุกบริษัท ทุกเรื่อง รวมถึงเหตุความปลอดภัย (SOP-10)
          * และไม่มีขอบเขตบริษัทจำกัด — กว้างกว่าที่หัวหน้าทีมต้องใช้มาก
-         * ถ้าวันหนึ่งต้องการแค่ "มอบหมายงานให้ลูกทีมได้" เปลี่ยนเป็น agent
-         * ได้เลย ความเป็นหัวหน้าทีมมาจาก is_lead ไม่ได้มาจากบทบาทนี้
+         * ถ้าวันหนึ่งต้องการแค่ "มอบหมายงานให้ลูกทีมได้" เปลี่ยนเป็น support_lead
+         * ได้เลย (ต้องเป็น is_lead ของทีมด้วย — บทบาทให้อำนาจ ส่วน is_lead บอกว่าหัวหน้าของทีมไหน)
          */
         roleCode: 'super_admin',
+        isLead: true,
+      },
+      {
+        /*
+         * บัญชีหัวหน้าทีมตัวอย่างสำหรับบทบาท support_lead — ชื่อผู้ใช้เจ้าของระบบกำหนดเอง
+         *
+         * ต่างจากกอล์ฟที่เป็น super_admin: บัญชีนี้ได้เฉพาะสิทธิ์หัวหน้าทีม Helpdesk
+         * (รับงานเอง + มอบหมายให้สมาชิกในทีมนี้) ไม่มีสิทธิ์ผู้ดูแลระบบ จึงใช้ดูว่า
+         * "หัวหน้าทีมทั่วไป" เห็นและทำอะไรได้บ้างโดยไม่มีอำนาจผู้ดูแลมาปน
+         * ชื่อจริงยังไม่ทราบ — แก้ผ่านหน้าจัดการผู้ใช้ได้ (อย่าเปลี่ยน username ตอนใช้งานแล้ว)
+         */
+        username: 'support_lead',
+        fullName: 'Support Lead',
+        jobTitle: 'ຫົວໜ້າທີມ Helpdesk',
+        roleCode: 'support_lead',
         isLead: true,
       },
       {
         username: 'it.anon',
         fullName: 'ອານົນ',
         jobTitle: 'ເຈົ້າໜ້າທີ່ IT Support',
-        roleCode: 'agent',
+        roleCode: 'support_agent',
         isLead: false,
       },
       {
         username: 'it.park',
         fullName: 'ປາກ',
         jobTitle: 'ເຈົ້າໜ້າທີ່ IT Support',
-        roleCode: 'agent',
+        roleCode: 'support_agent',
         isLead: false,
       },
       {
         username: 'it.alex',
         fullName: 'ອາເລັກ',
         jobTitle: 'ເຈົ້າໜ້າທີ່ IT Support',
-        roleCode: 'agent',
+        roleCode: 'support_agent',
         isLead: false,
       },
       {
         username: 'it.boss',
         fullName: 'ບອສ',
         jobTitle: 'ເຈົ້າໜ້າທີ່ IT Support',
-        roleCode: 'agent',
+        roleCode: 'support_agent',
         isLead: false,
       },
     ],

@@ -26,6 +26,9 @@ import {
  * ไม่ใช่โครงสร้างองค์กร ไม่ใช่การแบ่งคิวงาน และไม่มีผลกับการมองเห็นข้อมูล
  * (ขอบเขตการมองเห็นยังเป็นเรื่องของ AccessScope เหมือนเดิมทุกประการ)
  *
+ * หัวหน้าทีมต้องมีสองอย่างพร้อมกัน: บทบาท support_lead (อำนาจมอบหมาย) และ is_lead ของทีมนั้น
+ * (ขอบเขตว่ามอบให้ใครได้) — เซิร์ฟเวอร์ปฏิเสธการตั้ง is_lead ให้คนที่ไม่มีบทบาทหัวหน้า
+ *
  * ⚠️ การแก้ทีมคือการแก้โครงสร้างอำนาจ จึงใช้ด่านเดียวกับการมอบบทบาท
  *    (user.assign_role) ไม่ใช่ ticket.assign ที่เจ้าหน้าที่ทุกคนถืออยู่แล้ว —
  *    ถ้าใช้ตัวหลัง เจ้าหน้าที่คนใดก็ตั้งตัวเองเป็นหัวหน้าทีมแล้วสั่งคนอื่นได้
@@ -56,11 +59,14 @@ export class SupportTeamsService {
     scope.require('user.assign_role');
 
     const rows = await this.tickets.ticketWorkerCandidates(scope);
+    // ป้ายว่าใครตั้งเป็นหัวหน้าได้ — คิวรีเดียวสำหรับทุกคน หน้าจอจะได้ไม่ให้เลือกคนที่ถูกปฏิเสธแน่
+    const capable = await this.teams.assignCapableIds(rows.map((r) => r.id));
     return rows.map((r) => ({
       id: r.id,
       full_name: r.fullName,
       username: r.username,
       company: { id: r.companyId, code: r.companyCode },
+      can_lead: capable.has(r.id),
     }));
   }
 
@@ -302,6 +308,25 @@ export class SupportTeamsService {
           field: 'member_ids',
           message: `ເລືອກໄດ້ສະເພາະຜູ້ທີ່ຮັບເລື່ອງໄດ້ ແລະ ຢູ່ໃນຂອບເຂດຂອງທ່ານ (${unknownMembers.join(', ')})`,
         });
+      }
+
+      /*
+       * หัวหน้าต้องถือบทบาทที่มอบหมายงานได้ (support_lead ขึ้นไป)
+       *
+       * ตรวจเฉพาะคนที่ผ่านข้อข้างบนแล้ว — id ที่ไม่รู้จักตอบข้อความเดียวพอ ไม่ต้องซ้ำอีกข้อความ
+       */
+      const checkable = leads.filter((id) => allowed.has(id));
+      if (checkable.length > 0) {
+        const capable = await this.teams.assignCapableIds(checkable);
+        const notLeadRole = checkable.filter((id) => !capable.has(id));
+        if (notLeadRole.length > 0) {
+          issues.push({
+            field: 'lead_ids',
+            message:
+              'ຫົວໜ້າທີມຕ້ອງມີບົດບາດ "ຫົວໜ້າທີມ Helpdesk" (support_lead) ກ່ອນ — ' +
+              `ໄປມອບບົດບາດທີ່ໜ້າຜູ້ໃຊ້ (${notLeadRole.join(', ')})`,
+          });
+        }
       }
     }
 

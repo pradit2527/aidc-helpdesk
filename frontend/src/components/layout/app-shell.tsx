@@ -28,7 +28,8 @@ import type { RoleCode } from '@/lib/types';
 /** คีย์คำแปลของแต่ละบทบาท — ใช้ร่วมกันทุกที่ที่ต้องแสดงชื่อบทบาท */
 const ROLE_LABEL_KEY: Record<RoleCode, MessageKey> = {
   end_user: 'role.end_user',
-  agent: 'role.agent',
+  support_lead: 'role.support_lead',
+  support_agent: 'role.support_agent',
   company_admin: 'role.company_admin',
   manager_viewer: 'role.manager_viewer',
   super_admin: 'role.super_admin',

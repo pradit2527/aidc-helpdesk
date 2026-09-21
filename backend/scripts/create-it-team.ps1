@@ -44,7 +44,7 @@ $ErrorActionPreference = 'Stop'
 # ── รายชื่อผู้ใช้ ────────────────────────────────────────────────────────
 # ต้องตรงกับ src/db/seed/data/support-teams.ts — เพิ่ม/ลบคนที่นั่นแล้วแก้ที่นี่ด้วย
 # (สคริปต์นี้แค่ถามรหัสผ่าน ส่วนชื่อจริง บทบาท และหัวหน้าทีมอยู่ในไฟล์ข้อมูลนั้น)
-$users = 'it.golf', 'it.anon', 'it.park', 'it.alex', 'it.boss'
+$users = 'it.golf', 'support_lead', 'it.anon', 'it.park', 'it.alex', 'it.boss'
 
 function ConvertTo-PlainText {
     param([Parameter(Mandatory = $true)][System.Security.SecureString]$Secure)

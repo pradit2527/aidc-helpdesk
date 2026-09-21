@@ -55,7 +55,7 @@ export default function KbArticlePage({
 }
 
 function ArticleView({ article }: { article: KbArticle }): React.JSX.Element {
-  const canEdit = useHasRole('agent', 'company_admin', 'super_admin');
+  const canEdit = useHasRole('support_lead', 'support_agent', 'company_admin', 'super_admin');
   const [voted, setVoted] = React.useState<'up' | 'down' | null>(null);
 
   return (

@@ -75,7 +75,7 @@ export class UsersController {
         full_name: { type: 'string', example: 'ດີໂມ COSI' },
         company_id: { type: 'number', example: 1 },
         department_id: { type: 'number', nullable: true },
-        role: { type: 'string', enum: ['end_user', 'agent', 'company_admin', 'manager_viewer', 'super_admin'] },
+        role: { type: 'string', enum: ['end_user', 'support_lead', 'support_agent', 'company_admin', 'manager_viewer', 'super_admin'] },
         password: { type: 'string', format: 'password' },
         email: { type: 'string', nullable: true },
         employee_code: { type: 'string', nullable: true },
@@ -248,7 +248,7 @@ export class UsersController {
             properties: {
               code: {
                 type: 'string',
-                enum: ['end_user', 'agent', 'company_admin', 'manager_viewer', 'super_admin'],
+                enum: ['end_user', 'support_lead', 'support_agent', 'company_admin', 'manager_viewer', 'super_admin'],
               },
               company_ids: { type: 'array', items: { type: 'number' } },
               expires_at: { type: 'string', nullable: true, description: 'ISO 8601' },

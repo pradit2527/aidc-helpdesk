@@ -10,6 +10,7 @@ import {
 } from '../../common/errors/domain-error';
 import {
   CLOCK_START_EVENT,
+  roleSide,
   SERVICE_GROUP,
   SERVICE_TIER,
   TARGET_MODE,
@@ -690,6 +691,8 @@ export class MasterDataService {
 
     return roles.map((r) => ({
       ...r,
+      // ฝั่งของบทบาท (user / support / admin) — หน้าจัดการสิทธิ์ใช้จัดกลุ่ม ไม่เก็บในฐานข้อมูล
+      side: roleSide(r.code),
       permissions: links.filter((l) => l.role_id === r.id).map((l) => l.code),
     }));
   }

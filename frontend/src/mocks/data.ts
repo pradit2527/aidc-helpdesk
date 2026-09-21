@@ -62,7 +62,7 @@ export const SESSION: SessionUser = {
   job_title: 'ເຈົ້າໜ້າທີ່ສະໜັບສະໜູນໄອທີ',
   company: { id: 7, code: 'AIDC-LOG', name_th: 'AIDC Logistic' },
   department: { id: 24, name: 'ໄອທີ' },
-  roles: ['agent', 'company_admin', 'super_admin'],
+  roles: ['support_lead', 'company_admin', 'super_admin'],
   scoped_companies: [
     { id: 7, code: 'AIDC-LOG' },
     { id: 2, code: 'AIDC-CON' },
@@ -464,9 +464,9 @@ export const NOTIFICATIONS: NotificationItem[] = [
 
 // ── ผู้ใช้ ─────────────────────────────────────────────────────────────
 export const USERS: AdminUser[] = [
-  { id: 88, username: 'phouvong.s', full_name: 'ພູວົງ ສີສຸກ', email: 'phouvong.s@aidctech.com.la', employee_code: 'LOG-0088', phone: '020 5555 0088', job_title: 'ເຈົ້າໜ້າທີ່ສະໜັບສະໜູນໄອທີ', company: { id: 7, code: 'AIDC-LOG' }, department: { id: 24, name: 'ໄອທີ' }, roles: ['agent', 'company_admin'], scoped_companies: [{ id: 7, code: 'AIDC-LOG' }, { id: 2, code: 'AIDC-CON' }], is_active: true, is_locked: false, must_change_password: false, last_login_at: at(-45) },
-  { id: 90, username: 'thanou.v', full_name: 'ທະນູ ວັດທະນາ', email: 'thanou.v@aidctech.com.la', employee_code: 'TECH-0090', phone: '020 5555 0090', job_title: 'ຜູ້ດູແລລະບົບເຄືອຂ່າຍ', company: { id: 5, code: 'AIDC-TECH' }, department: { id: 50, name: 'ໂຄງສ້າງພື້ນຖານ' }, roles: ['agent'], scoped_companies: [{ id: 5, code: 'AIDC-TECH' }], is_active: true, is_locked: false, must_change_password: false, last_login_at: at(-180) },
-  { id: 91, username: 'somying.c', full_name: 'ສົມຍິງ ຈັນທະວົງ', email: 'somying.c@aidctech.com.la', employee_code: 'CON-0091', phone: '020 5555 0091', job_title: 'ເຈົ້າໜ້າທີ່ Service Desk', company: { id: 2, code: 'AIDC-CON' }, department: { id: 11, name: 'ໄອທີ' }, roles: ['agent'], scoped_companies: [{ id: 2, code: 'AIDC-CON' }], is_active: true, is_locked: false, must_change_password: false, last_login_at: at(-2 * DAY) },
+  { id: 88, username: 'phouvong.s', full_name: 'ພູວົງ ສີສຸກ', email: 'phouvong.s@aidctech.com.la', employee_code: 'LOG-0088', phone: '020 5555 0088', job_title: 'ເຈົ້າໜ້າທີ່ສະໜັບສະໜູນໄອທີ', company: { id: 7, code: 'AIDC-LOG' }, department: { id: 24, name: 'ໄອທີ' }, roles: ['support_lead', 'company_admin'], scoped_companies: [{ id: 7, code: 'AIDC-LOG' }, { id: 2, code: 'AIDC-CON' }], is_active: true, is_locked: false, must_change_password: false, last_login_at: at(-45) },
+  { id: 90, username: 'thanou.v', full_name: 'ທະນູ ວັດທະນາ', email: 'thanou.v@aidctech.com.la', employee_code: 'TECH-0090', phone: '020 5555 0090', job_title: 'ຜູ້ດູແລລະບົບເຄືອຂ່າຍ', company: { id: 5, code: 'AIDC-TECH' }, department: { id: 50, name: 'ໂຄງສ້າງພື້ນຖານ' }, roles: ['support_agent'], scoped_companies: [{ id: 5, code: 'AIDC-TECH' }], is_active: true, is_locked: false, must_change_password: false, last_login_at: at(-180) },
+  { id: 91, username: 'somying.c', full_name: 'ສົມຍິງ ຈັນທະວົງ', email: 'somying.c@aidctech.com.la', employee_code: 'CON-0091', phone: '020 5555 0091', job_title: 'ເຈົ້າໜ້າທີ່ Service Desk', company: { id: 2, code: 'AIDC-CON' }, department: { id: 11, name: 'ໄອທີ' }, roles: ['support_agent'], scoped_companies: [{ id: 2, code: 'AIDC-CON' }], is_active: true, is_locked: false, must_change_password: false, last_login_at: at(-2 * DAY) },
   { id: 145, username: 'somchay.k', full_name: 'ສົມຊາຍ ກິດຕິວັດ', email: null, employee_code: 'LOG-0145', phone: '020 5555 0145', job_title: 'ຫົວໜ້າຄັງສິນຄ້າ', company: { id: 7, code: 'AIDC-LOG' }, department: { id: 22, name: 'ຄັງສິນຄ້າ' }, roles: ['end_user'], scoped_companies: [], is_active: true, is_locked: false, must_change_password: false, last_login_at: at(-20) },
   { id: 210, username: 'kanlaya.j', full_name: 'ກັນລະຍາ ຈະເລີນ', email: 'kanlaya.j@aidctech.com.la', employee_code: 'LOG-0210', phone: null, job_title: 'ນັກບັນຊີ', company: { id: 7, code: 'AIDC-LOG' }, department: { id: 30, name: 'ບັນຊີ ແລະ ການເງິນ' }, roles: ['end_user'], scoped_companies: [], is_active: true, is_locked: true, must_change_password: false, last_login_at: at(-6 * DAY) },
   { id: 260, username: 'boualy.p', full_name: 'ບົວລີ ພົມມະສອນ', email: 'boualy.p@aidctech.com.la', employee_code: 'HQ-0260', phone: '020 5555 0260', job_title: 'ຜູ້ຈັດການຝ່າຍ', company: { id: 1, code: 'AIDC-HQ' }, department: { id: 60, name: 'ບໍລິຫານ' }, roles: ['manager_viewer'], scoped_companies: [{ id: 1, code: 'AIDC-HQ' }], is_active: true, is_locked: false, must_change_password: false, last_login_at: at(-DAY) },
@@ -655,7 +655,8 @@ const MANAGER_VIEWER_CODES = ['ticket.create', 'ticket.read', 'ticket.view_histo
 
 export const ROLES: RoleWithPermissions[] = [
   { id: 1, code: 'end_user', name_th: 'ຜູ້ແຈ້ງ', description: 'ພະນັກງານທົ່ວໄປ ເຫັນສະເພາະເລື່ອງທີ່ຕົນແຈ້ງ', is_system: true, permissions: END_USER_CODES, user_count: 706 },
-  { id: 2, code: 'agent', name_th: 'ເຈົ້າໜ້າທີ່ support', description: 'ທີມ IT ເຫັນທຸກເລື່ອງໃນບໍລິສັດທີ່ຢູ່ໃນຂອບເຂດ', is_system: true, permissions: AGENT_CODES, user_count: 18 },
+  { id: 21, code: 'support_lead', side: 'support', name_th: 'ຫົວໜ້າທີມ Helpdesk', description: 'ຝັ່ງ Helpdesk — ຮັບວຽກເອງ ແລະ ມອບໝາຍວຽກໃຫ້ຄົນໃນທີມທີ່ຕົນເປັນຫົວໜ້າ', is_system: true, permissions: AGENT_CODES, user_count: 3 },
+  { id: 2, code: 'support_agent', side: 'support', name_th: 'ທີມ Helpdesk Support', description: 'ຝັ່ງ Helpdesk — ຮັບວຽກຈາກ ticket ແລະ ແຊັດໄດ້ ແຕ່ມອບໝາຍໃຫ້ຄົນອື່ນບໍ່ໄດ້', is_system: true, permissions: AGENT_CODES.filter((c) => c !== 'ticket.assign'), user_count: 15 },
   { id: 3, code: 'company_admin', name_th: 'ຜູ້ດູແລລະດັບບໍລິສັດ', description: 'ຫົວໜ້າ IT ຂອງແຕ່ລະບໍລິສັດ', is_system: true, permissions: COMPANY_ADMIN_CODES, user_count: 7 },
   { id: 4, code: 'manager_viewer', name_th: 'ຜູ້ບໍລິຫານ (ອ່ານຢ່າງດຽວ)', description: 'ອ່ານເລື່ອງແຈ້ງ ແລະ ລາຍງານ', is_system: true, permissions: MANAGER_VIEWER_CODES, user_count: 14 },
   // approval.decide ບໍ່ຖືກມອບຜ່ານ role ໃດເລີຍ ລວມທັງ super_admin

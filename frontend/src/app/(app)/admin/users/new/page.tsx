@@ -7,6 +7,7 @@ import * as React from 'react';
 import { toast } from 'sonner';
 
 import { ROLE_LABEL_KEY } from '@/components/layout/app-shell';
+import { ROLE_ORDER, ROLE_SIDE, SIDE_LABEL_KEY, SIDE_ORDER } from '@/config/roles';
 import { useT } from '@/components/layout/preference-controls';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,7 +29,6 @@ const PASSWORD_RULES: { label: string; test: (password: string) => boolean }[] =
   { label: 'ມີສັນຍາລັກ ເຊັ່ນ ! @ # $', test: (p) => /[^A-Za-z0-9]/.test(p) },
 ];
 
-const ROLE_ORDER: RoleCode[] = ['end_user', 'agent', 'company_admin', 'manager_viewer', 'super_admin'];
 
 /**
  * สุ่มรหัสผ่านที่ผ่านนโยบายแน่นอน — ใช้ crypto ของเบราว์เซอร์ ไม่ใช่ Math.random ที่เดาลำดับได้
@@ -242,11 +242,20 @@ export default function NewUserPage(): React.JSX.Element {
               hint={role === 'end_user' ? 'ແຈ້ງບັນຫາ ແລະ ຕິດຕາມເລື່ອງຂອງຕົນເອງ' : 'ປັບຂອບເຂດບໍລິສັດເພີ່ມໄດ້ທີ່ໜ້າລາຍລະອຽດຜູ້ໃຊ້'}
             >
               <Select value={role} onChange={(e) => setRole(e.target.value as RoleCode)} disabled={locked}>
-                {roleOptions.map((code) => (
-                  <option key={code} value={code}>
-                    {t(ROLE_LABEL_KEY[code])}
-                  </option>
-                ))}
+                {/* จัดกลุ่มตามฝั่ง: ผู้ใช้งาน / Helpdesk Support / ผู้บริหารระบบ */}
+                {SIDE_ORDER.map((side) => {
+                  const options = roleOptions.filter((code) => ROLE_SIDE[code] === side);
+                  if (options.length === 0) return null;
+                  return (
+                    <optgroup key={side} label={t(SIDE_LABEL_KEY[side])}>
+                      {options.map((code) => (
+                        <option key={code} value={code}>
+                          {t(ROLE_LABEL_KEY[code])}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </Select>
             </Field>
             <Field label="ຕຳແໜ່ງ" htmlFor="job_title" error={errors.job_title}>

@@ -54,6 +54,14 @@ export class SupportTeamCandidateDto {
   @ApiProperty({ example: 'ກ໋ອຟ ພົມມະຈັນ' }) full_name!: string;
   @ApiProperty({ example: 'it.golf' }) username!: string;
   @ApiProperty({ type: RefCompanyDto, description: 'บริษัทต้นสังกัด' }) company!: RefCompanyDto;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'ตั้งเป็นหัวหน้าทีมได้ — ถือบทบาทที่มี ticket.assign (support_lead ขึ้นไป) · ' +
+      'false = เป็นสมาชิกได้ แต่ตั้งเป็นหัวหน้าไม่ได้จนกว่าจะได้บทบาทหัวหน้าทีม Helpdesk',
+  })
+  can_lead!: boolean;
 }
 
 export class CreateSupportTeamDto {

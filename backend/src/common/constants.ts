@@ -212,14 +212,48 @@ export const KB_STATUS = ['draft', 'published', 'archived'] as const;
 export const NOTIFICATION_CHANNEL = ['in_app', 'email', 'teams', 'line', 'webpush'] as const;
 export const NOTIFICATION_STATUS = ['pending', 'sent', 'failed', 'skipped'] as const;
 
+/**
+ * บทบาททั้งหมด — แบ่งเป็นสองฝั่งชัดเจน (ROLE_SIDE)
+ *
+ *   ฝั่งผู้ใช้งาน   end_user
+ *   ฝั่ง Helpdesk   support_lead (หัวหน้าทีม) · support_agent (ทีม support)
+ *   ผู้บริหารระบบ   company_admin · manager_viewer · super_admin — ไม่ใช่สองฝั่งข้างบน
+ *
+ * support_agent คือ `agent` เดิมที่เปลี่ยนชื่อ (migration 0014 เปลี่ยนแถวเดิม
+ * ผู้ใช้ที่ถือ agent อยู่จึงตามมาเองโดยไม่ต้องมอบบทบาทใหม่)
+ */
 export const ROLE_CODE = [
   'end_user',
-  'agent',
+  'support_lead',
+  'support_agent',
   'company_admin',
   'manager_viewer',
   'super_admin',
 ] as const;
 export type RoleCode = (typeof ROLE_CODE)[number];
+
+/**
+ * ฝั่งของบทบาท
+ *   user    ผู้ใช้งาน — แจ้งปัญหาหรือแชทเข้ามา เห็นเฉพาะเรื่องของตน
+ *   support ทีม Helpdesk — ทำงานกับ ticket และแชท
+ *   admin   ผู้บริหารระบบ — ตั้งค่า/ดูภาพรวม ไม่ได้อยู่ในสองฝั่งข้างบน
+ */
+export const ROLE_SIDE_CODE = ['user', 'support', 'admin'] as const;
+export type RoleSide = (typeof ROLE_SIDE_CODE)[number];
+
+export const ROLE_SIDE: Readonly<Record<RoleCode, RoleSide>> = {
+  end_user: 'user',
+  support_lead: 'support',
+  support_agent: 'support',
+  company_admin: 'admin',
+  manager_viewer: 'admin',
+  super_admin: 'admin',
+};
+
+/** ฝั่งของบทบาทตามรหัส — รหัสที่ไม่รู้จักถือเป็นฝั่งผู้ใช้งาน (สิทธิ์น้อยที่สุด) */
+export function roleSide(code: string): RoleSide {
+  return (ROLE_SIDE as Record<string, RoleSide>)[code] ?? 'user';
+}
 
 /** ตำแหน่งในองค์กร — ไม่ใช่ role ของระบบ (05-… §5.1) */
 export const CONTACT_KEY = [

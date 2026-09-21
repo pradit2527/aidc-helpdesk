@@ -171,9 +171,14 @@ export interface ReadinessResponse {
   checks: ReadinessCheck[];
 }
 
-export function useReadiness(): UseQueryResult<ReadinessResponse, Error> {
+/**
+ * @param enabled false = ไม่ยิงเลย — เส้นทางนี้ต้องมี system.manage ซึ่งทีม Helpdesk ไม่มี
+ *                ยิงไปก็ได้ 403 แล้วโชว์ข้อความผิดพลาดบนหน้าที่เปิดได้ตามปกติ
+ */
+export function useReadiness(enabled = true): UseQueryResult<ReadinessResponse, Error> {
   return useQuery({
     queryKey: ['admin', 'readiness'],
     queryFn: () => api.get<ReadinessResponse>('/admin/readiness'),
+    enabled,
   });
 }

@@ -27,7 +27,7 @@ import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
-import { useSession } from '@/lib/session';
+import { useCan, useSession } from '@/lib/session';
 import { useReadiness } from '@/lib/queries/master-data';
 import type { RoleCode } from '@/lib/types';
 
@@ -56,11 +56,11 @@ const SECTIONS: { title: string; note?: string; links: AdminLink[] }[] = [
     title: 'ຄົນ ແລະ ສິດ',
     links: [
       { href: '/admin/users', label: 'ຈັດການຜູ້ໃຊ້', description: 'ສ້າງ ປິດການໃຊ້ງານ ຣີເຊັດລະຫັດ ແລະ ມອບບົດບາດ', icon: Users, roles: ['company_admin', 'super_admin'] },
-      { href: '/admin/roles', label: 'ບົດບາດ ແລະ ສິດ', description: 'ເມທຣິກ 53 ສິດ ຕໍ່ 5 ບົດບາດ', icon: ShieldCheck, roles: ['company_admin', 'super_admin'] },
+      { href: '/admin/roles', label: 'ບົດບາດ ແລະ ສິດ', description: 'ເມທຣິກ 53 ສິດ ຕໍ່ 6 ບົດບາດ ໃນສອງຝັ່ງ', icon: ShieldCheck, roles: ['company_admin', 'super_admin'] },
       { href: '/admin/departments', label: 'ຈັດການພະແນກ', description: 'ໂຄງສ້າງພະແນກຂອງແຕ່ລະບໍລິສັດ', icon: FolderTree, roles: ['company_admin', 'super_admin'] },
       /* เจ้าหน้าที่เห็นการ์ดนี้ด้วย เพราะหัวหน้าทีมคือ agent — เข้าไปดูทีมของตัวเองได้แบบอ่านอย่างเดียว
          การแก้ต้องใช้สิทธิ์ user.assign_role ซึ่งหน้านั้นตรวจอีกชั้นและ backend ตรวจซ้ำ */
-      { href: '/admin/teams', label: 'ທີມງານ IT', description: 'ສະມາຊິກທີມ ແລະ ຫົວໜ້າທີມທີ່ມອບໝາຍວຽກໄດ້', icon: UsersRound, roles: ['agent', 'company_admin', 'super_admin'] },
+      { href: '/admin/teams', label: 'ທີມງານ IT', description: 'ສະມາຊິກທີມ ແລະ ຫົວໜ້າທີມທີ່ມອບໝາຍວຽກໄດ້', icon: UsersRound, roles: ['support_lead', 'company_admin', 'super_admin'] },
       { href: '/admin/companies', label: 'ຈັດການບໍລິສັດ', description: 'ຂໍ້ມູນ 7 ບໍລິສັດໃນກຸ່ມ', icon: Building2, roles: ['super_admin'] },
     ],
   },
@@ -79,10 +79,10 @@ const SECTIONS: { title: string; note?: string; links: AdminLink[] }[] = [
     links: [
       { href: '/admin/catalog', label: 'ແຄັດຕາລັອກບໍລິການ', description: 'ຄຳຂໍບໍລິການ ພ້ອມເປົ້າໝາຍເວລາລາຍລາຍການ', icon: Package, roles: ['company_admin', 'super_admin'] },
       { href: '/admin/checklists', label: 'ແມ່ແບບລາຍການກວດ', description: 'ຂັ້ນຕອນຮັບພະນັກງານໃໝ່ ແລະ ລາອອກ ຕາມ SOP', icon: ClipboardCheck, roles: ['company_admin', 'super_admin'] },
-      { href: '/admin/services', label: 'ທະບຽນລະບົບງານ', description: 'ລະບົບງານ ເຫດຂັດຂ້ອງ ແລະ ໜ້າຕ່າງບຳລຸງຮັກສາ', icon: Server, roles: ['agent', 'company_admin', 'super_admin'] },
+      { href: '/admin/services', label: 'ທະບຽນລະບົບງານ', description: 'ລະບົບງານ ເຫດຂັດຂ້ອງ ແລະ ໜ້າຕ່າງບຳລຸງຮັກສາ', icon: Server, roles: ['support_lead', 'support_agent', 'company_admin', 'super_admin'] },
       /* เว็บของบริษัทที่ฝังปุ่มแชทไว้ — แชทที่เข้ามาไปโผล่ในกล่องแชทเดียวกับของทีมไอที */
       { href: '/admin/projects', label: 'ໂຄງການທີ່ຮັບຊັບພອດ', description: 'ເວັບທີ່ຝັງປຸ່ມແຊັດ ແລະ ສະຄຣິບຕິດຕັ້ງ', icon: Globe, roles: ['company_admin', 'super_admin'] },
-      { href: '/admin/problems', label: 'Problem ແລະ RCA', description: 'ສາເຫດຮາກ ແລະ ການປ້ອງກັນການເກີດຊ້ຳ', icon: Wrench, roles: ['agent', 'company_admin', 'super_admin'] },
+      { href: '/admin/problems', label: 'Problem ແລະ RCA', description: 'ສາເຫດຮາກ ແລະ ການປ້ອງກັນການເກີດຊ້ຳ', icon: Wrench, roles: ['support_lead', 'support_agent', 'company_admin', 'super_admin'] },
     ],
   },
   {
@@ -115,7 +115,9 @@ const STATUS_META = {
 
 export default function AdminHomePage(): React.JSX.Element {
   const { user } = useSession();
-  const readiness = useReadiness();
+  // ความพร้อมก่อนเปิดใช้งานเป็นเรื่องของผู้ดูแลระบบ — ทีม Helpdesk เปิดหน้านี้เพื่อเข้าลิงก์ที่ตนใช้เท่านั้น
+  const canSeeReadiness = useCan('system.manage');
+  const readiness = useReadiness(canSeeReadiness);
   const checks = readiness.data?.checks ?? [];
   const blocking = checks.filter((c) => c.status === 'blocking');
   const warnings = checks.filter((c) => c.status === 'warning');
@@ -127,7 +129,7 @@ export default function AdminHomePage(): React.JSX.Element {
         description="ທຸກສິ່ງທີ່ຕັ້ງຄ່າໄດ້ໃນລະບົບ ລວມຢູ່ໜ້ານີ້ບ່ອນດຽວ"
       />
 
-      {blocking.length > 0 && (
+      {canSeeReadiness && blocking.length > 0 && (
         <Alert
           tone="danger"
           title={`ຍັງຕັ້ງຄ່າບໍ່ຄົບ ${blocking.length} ຢ່າງ ທີ່ບລັອກການເປີດໃຊ້ງານຈິງ`}
@@ -137,6 +139,7 @@ export default function AdminHomePage(): React.JSX.Element {
         </Alert>
       )}
 
+      {canSeeReadiness && (
       <Card>
         <CardHeader>
           <CardTitle>ຄວາມພ້ອມກ່ອນເປີດໃຊ້ງານ</CardTitle>
@@ -185,6 +188,7 @@ export default function AdminHomePage(): React.JSX.Element {
           </QueryBoundary>
         </CardBody>
       </Card>
+      )}
 
       {SECTIONS.map((section) => {
         const links = section.links.filter((l) => l.roles.some((r) => user.roles.includes(r)));

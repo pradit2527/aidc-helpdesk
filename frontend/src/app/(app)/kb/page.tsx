@@ -29,7 +29,7 @@ const VISIBILITY_LABEL = {
  * เพราะภาษาลาวเขียนติดกันไม่มีช่องว่างคั่นคำ การตัดคำแบบปกติจึงใช้ไม่ได้
  */
 export default function KbPage(): React.JSX.Element {
-  const canWrite = useHasRole('agent', 'company_admin', 'super_admin');
+  const canWrite = useHasRole('support_lead', 'support_agent', 'company_admin', 'super_admin');
   const [q, setQ] = React.useState('');
   const [category, setCategory] = React.useState('');
 

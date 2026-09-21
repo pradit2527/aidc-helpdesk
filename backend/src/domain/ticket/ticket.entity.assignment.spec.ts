@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   decideAssignment,
   mayAssignToOthers,
+  maySelfAssign,
   type AssignmentActor,
   type AssignmentTarget,
 } from './ticket.entity';
@@ -115,5 +116,39 @@ describe('mayAssignToOthers — ปุ่มบนหน้าจอ', () => {
     expect(
       mayAssignToOthers({ canAssign: false, isAdminLevel: true, ledTeamIds: [TEAM_HELPDESK] }),
     ).toBe(false);
+  });
+});
+
+describe('maySelfAssign — ทีม support รับได้เฉพาะเรื่องที่ยังว่าง', () => {
+  // ทีม support (support_agent): ไม่ถือ ticket.assign
+  const supportAgent = actor({ userId: ANON, canAssign: false, ledTeamIds: [] });
+  // หัวหน้าทีม (support_lead) ที่เป็น is_lead ของทีมจริง
+  const lead = actor({ userId: GOLF, canAssign: true, ledTeamIds: [TEAM_HELPDESK] });
+  // ถือบทบาทหัวหน้าแต่ยังไม่ได้เป็น is_lead ของทีมใด
+  const leadWithoutTeam = actor({ userId: GOLF, canAssign: true, ledTeamIds: [] });
+  const admin = actor({ userId: ADMIN, canAssign: true, isAdminLevel: true });
+
+  it('เรื่องที่ยังไม่มีผู้รับผิดชอบ → ทุกคนกดรับได้', () => {
+    for (const a of [supportAgent, lead, leadWithoutTeam, admin]) {
+      expect(maySelfAssign(a, null)).toBe(true);
+    }
+  });
+
+  it('เรื่องที่เพื่อนร่วมทีมถืออยู่ → ทีม support รับทับไม่ได้', () => {
+    // ไม่งั้นหัวหน้ามอบงานให้คนหนึ่ง แล้วอีกคนกดรับดึงไปเองได้ = เลี่ยงข้อห้ามมอบหมาย
+    expect(maySelfAssign(supportAgent, OUTSIDER)).toBe(false);
+  });
+
+  it('หัวหน้าทีมและผู้ดูแลดึงงานที่คนอื่นถืออยู่กลับมาได้', () => {
+    expect(maySelfAssign(lead, ANON)).toBe(true);
+    expect(maySelfAssign(admin, ANON)).toBe(true);
+  });
+
+  it('ถือบทบาทหัวหน้าแต่ไม่ได้เป็นหัวหน้าทีมใด → ดึงงานคนอื่นไม่ได้ เหมือนทีม support', () => {
+    expect(maySelfAssign(leadWithoutTeam, ANON)).toBe(false);
+  });
+
+  it('เรื่องที่ตนถืออยู่แล้ว ผ่านด่านนี้ (การมอบซ้ำให้ตัวเองเป็นเรื่องของ entity)', () => {
+    expect(maySelfAssign(supportAgent, ANON)).toBe(true);
   });
 });

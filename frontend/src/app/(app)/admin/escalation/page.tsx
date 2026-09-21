@@ -107,7 +107,7 @@ export default function EscalationPage(): React.JSX.Element {
       placeholder: 'head_of_it,incident_manager',
       hint: `ຄັ່ນດ້ວຍ , — ໃຊ້ໄດ້: ${Object.keys(CONTACT_KEY).join(', ')}`,
     },
-    { kind: 'text', name: 'notify_roles', label: 'ບົດບາດທີ່ແຈ້ງເພີ່ມ', placeholder: 'agent,company_admin' },
+    { kind: 'text', name: 'notify_roles', label: 'ບົດບາດທີ່ແຈ້ງເພີ່ມ', placeholder: 'support_lead,company_admin' },
     { kind: 'number', name: 'repeat_interval_minutes', label: 'ແຈ້ງຊ້ຳທຸກ (ນາທີ)' },
     {
       kind: 'checkbox',

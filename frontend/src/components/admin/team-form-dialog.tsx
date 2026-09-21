@@ -272,8 +272,9 @@ export function TeamFormDialog({
 
             <PeoplePicker
               legend="ຫົວໜ້າທີມ"
-              hint="ຫົວໜ້າທີມມອບໝາຍວຽກໃຫ້ສະມາຊິກໄດ້ ແລະ ນັບເປັນສະມາຊິກໂດຍອັດຕະໂນມັດ"
+              hint="ຫົວໜ້າທີມມອບໝາຍວຽກໃຫ້ສະມາຊິກໄດ້ ແລະ ນັບເປັນສະມາຊິກໂດຍອັດຕະໂນມັດ — ຕ້ອງມີບົດບາດ “ຫົວໜ້າທີມ Helpdesk” ກ່ອນ"
               required
+              requireLeadRole
               candidates={candidates}
               loading={candidatesLoading}
               selectedIds={values.lead_ids}
@@ -351,6 +352,7 @@ function PeoplePicker({
   disabled,
   error,
   idPrefix,
+  requireLeadRole = false,
 }: {
   legend: string;
   hint: string;
@@ -365,6 +367,11 @@ function PeoplePicker({
   disabled: boolean;
   error?: string | undefined;
   idPrefix: string;
+  /**
+   * ตั้งเป็นหัวหน้าได้เฉพาะคนที่ถือบทบาทที่มอบหมายงานได้ (can_lead)
+   * คนที่ไม่มีบทบาทหัวหน้ายังแสดงอยู่แต่ติ๊กไม่ได้ — ซ่อนไปเลยจะทำให้ผู้ดูแลสงสัยว่าคนนั้นหายไปไหน
+   */
+  requireLeadRole?: boolean;
 }): React.JSX.Element {
   const [term, setTerm] = React.useState('');
   const searchId = `${idPrefix}-search`;
@@ -424,26 +431,35 @@ function PeoplePicker({
           shown.map((person) => {
             const locked = lockedIds.includes(person.id);
             const checked = selectedIds.includes(person.id) || locked;
+            // ถอดคนที่ติ๊กไว้แล้วออกได้เสมอ — ห้ามเฉพาะการเพิ่มคนที่ไม่มีบทบาทหัวหน้า
+            const noLeadRole = requireLeadRole && person.can_lead === false && !checked;
             return (
               <label
                 key={person.id}
                 className={cn(
                   'flex min-h-tap items-center gap-3 rounded px-2',
-                  locked ? 'cursor-not-allowed bg-subtle' : 'cursor-pointer hover:bg-subtle',
+                  locked || noLeadRole
+                    ? 'cursor-not-allowed bg-subtle'
+                    : 'cursor-pointer hover:bg-subtle',
+                  noLeadRole && 'opacity-60',
                 )}
               >
                 <input
                   type="checkbox"
                   className="h-4 w-4 flex-none rounded border-control"
                   checked={checked}
-                  disabled={disabled || locked}
+                  disabled={disabled || locked || noLeadRole}
                   onChange={() => onToggle(person.id)}
                 />
                 <span className="min-w-0 flex-1 truncate text-body-sm text-ink">
                   {person.full_name}
                 </span>
                 <span className="flex-none text-caption text-ink-3">
-                  {locked && lockedHint ? lockedHint : person.company.code}
+                  {locked && lockedHint
+                    ? lockedHint
+                    : noLeadRole
+                      ? 'ຍັງບໍ່ມີບົດບາດຫົວໜ້າທີມ'
+                      : person.company.code}
                 </span>
               </label>
             );

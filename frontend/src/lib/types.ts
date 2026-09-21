@@ -8,7 +8,16 @@
 
 import type { Priority, SlaStatus, TicketStatus } from '@/config/enums';
 
-export type RoleCode = 'end_user' | 'agent' | 'company_admin' | 'manager_viewer' | 'super_admin';
+export type RoleCode =
+  | 'end_user'
+  | 'support_lead'
+  | 'support_agent'
+  | 'company_admin'
+  | 'manager_viewer'
+  | 'super_admin';
+
+/** ฝั่งของบทบาท: ผู้ใช้งาน / Helpdesk support / ผู้บริหารระบบ (นอกสองฝั่งแรก) */
+export type RoleSide = 'user' | 'support' | 'admin';
 
 export interface CompanyRef {
   id: number;
@@ -350,6 +359,8 @@ export interface SupportTeamCandidate {
   full_name: string;
   username: string;
   company: { id: number; code: string };
+  /** ถือบทบาทที่มอบหมายงานได้ (support_lead ขึ้นไป) — false = ตั้งเป็นหัวหน้าทีมไม่ได้ */
+  can_lead?: boolean;
 }
 
 /**
@@ -429,6 +440,8 @@ export interface RoleWithPermissions {
   name_th: string;
   description: string;
   is_system: boolean;
+  /** ฝั่งของบทบาท — GET /roles ส่งมาให้ ไม่ได้เก็บในฐานข้อมูล */
+  side?: RoleSide;
   permissions: string[];
   user_count: number;
 }

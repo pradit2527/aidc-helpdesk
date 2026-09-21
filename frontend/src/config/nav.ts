@@ -54,14 +54,16 @@ export interface NavSection {
 
 const ALL_ROLES = [
   'end_user',
-  'agent',
+  'support_lead',
+  'support_agent',
   'company_admin',
   'manager_viewer',
   'super_admin',
 ] as const satisfies readonly RoleCode[];
 
 const STAFF_AND_VIEWER = [
-  'agent',
+  'support_lead',
+  'support_agent',
   'company_admin',
   'manager_viewer',
   'super_admin',
@@ -76,12 +78,13 @@ const EMPLOYEE_ONLY = ['end_user'] as const satisfies readonly RoleCode[];
 /*
  * ใครเปิดหน้าตั้งค่าได้บ้าง
  *
- * ⚠️ "เปิดดูได้" ไม่เท่ากับ "แก้ได้" — agent เปิดดูได้เพื่อใช้อ้างอิงระหว่าง
+ * ⚠️ "เปิดดูได้" ไม่เท่ากับ "แก้ได้" — ทีม support เปิดดูได้เพื่อใช้อ้างอิงระหว่าง
  *    ทำงาน (เช่นดูเวลาทำการหรือกฎยกระดับ) แต่ทุกช่องถูกปิดไว้
  *    การตัดสินว่าแก้ได้ไหมอยู่ที่ permission ฝั่ง backend ไม่ใช่ที่เมนูนี้
  */
 const SETTINGS_VIEWERS = [
-  'agent',
+  'support_lead',
+  'support_agent',
   'company_admin',
   'super_admin',
 ] as const satisfies readonly RoleCode[];
@@ -172,7 +175,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
        * รายงานเรื่องแจ้งแบบกรองได้ (บริษัท / แผนก / สถานะ / รายบุคคล)
        *
        * บทบาทชุดนี้คือชุดเดียวกับที่ถือ report.view ใน seed permissions
-       * (agent · company_admin · manager_viewer · super_admin) — พนักงานทั่วไปไม่มี
+       * (support_lead · support_agent · company_admin · manager_viewer · super_admin) — พนักงานทั่วไปไม่มี
        * backend ตรวจ report.view ซ้ำที่ GET /reports/tickets อีกชั้นอยู่แล้ว
        */
       {
@@ -208,7 +211,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
  */
 export const BOTTOM_NAV: Record<RoleCode, readonly string[]> = {
   end_user: ['/tickets/new', '/tickets/my', '/tickets/history', '/profile'],
-  agent: ['/queue', '/tickets', '/tickets/new', '/admin'],
+  support_lead: ['/queue', '/tickets', '/tickets/new', '/admin'],
+  support_agent: ['/queue', '/tickets', '/tickets/new', '/admin'],
   company_admin: ['/queue', '/tickets', '/dashboard', '/admin'],
   manager_viewer: ['/queue', '/tickets', '/dashboard', '/profile'],
   super_admin: ['/queue', '/tickets', '/dashboard', '/admin'],
@@ -217,7 +221,8 @@ export const BOTTOM_NAV: Record<RoleCode, readonly string[]> = {
 /** หน้าแรกหลังเข้าสู่ระบบ ต่างกันตาม role (หน้าจอ #3 ทางเข้าตามบทบาท) */
 export const LANDING_BY_ROLE: Record<RoleCode, string> = {
   end_user: '/tickets/my',
-  agent: '/queue',
+  support_lead: '/queue',
+  support_agent: '/queue',
   company_admin: '/dashboard',
   manager_viewer: '/dashboard',
   super_admin: '/dashboard',
@@ -227,7 +232,8 @@ export const LANDING_BY_ROLE: Record<RoleCode, string> = {
 const ROLE_RANK: RoleCode[] = [
   'super_admin',
   'company_admin',
-  'agent',
+  'support_lead',
+  'support_agent',
   'manager_viewer',
   'end_user',
 ];

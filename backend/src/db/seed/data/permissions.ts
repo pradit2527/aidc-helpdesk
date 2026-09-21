@@ -1,5 +1,5 @@
 /**
- * Permission 53 รายการ และ Role 5 บทบาท
+ * Permission 53 รายการ และ Role 6 บทบาท (สองฝั่ง: ผู้ใช้งาน / Helpdesk support)
  * ถอดมาจาก docs/04-rbac-sla.md v2.0 หัวข้อ 2 และ 7 แบบตรงตัว
  *
  * เมทริกซ์ในเอกสารใช้สัญลักษณ์ ✔ / S / O / ✘
@@ -90,7 +90,7 @@ export const PERMISSIONS: readonly PermissionSeed[] = [
 /**
  * approval.decide อยู่ในตาราง permission แต่ไม่เคยถูกมอบผ่าน role_permission
  * สิทธิ์นี้ตรวจที่ approval_request.approver_id ของแถวนั้นโดยตรง
- * เพราะผู้อนุมัติอาจเป็นหัวหน้าหน่วยงานที่ไม่ได้เป็น agent เลย
+ * เพราะผู้อนุมัติอาจเป็นหัวหน้าหน่วยงานที่ไม่ได้อยู่ทีม support เลย
  * (docs/04-rbac-sla.md §1.1 ข้อ 7 และ §7 หมายเหตุท้ายตาราง)
  */
 export const ROW_LEVEL_ONLY_PERMISSIONS: readonly string[] = ['approval.decide'];
@@ -123,13 +123,18 @@ const END_USER_PERMISSIONS = [
   'notification.manage_own',
 ];
 
-const AGENT_PERMISSIONS = [
-  // ทุกอย่างของ ticket ยกเว้นการลบ
+/**
+ * ทีม Helpdesk Support (support_agent) — รับงานจาก ticket และตอบแชทได้ แต่ "มอบหมายงานให้คนอื่นไม่ได้"
+ *
+ * ต่างจากหัวหน้าทีมที่สิทธิ์เดียวคือ ticket.assign — ที่เหลือเท่ากันทุกตัว
+ * (SUPPORT_LEAD_PERMISSIONS ต่อยอดจากรายการนี้ ไม่ได้เขียนซ้ำ จึงเพี้ยนจากกันไม่ได้)
+ */
+const SUPPORT_AGENT_PERMISSIONS = [
+  // ทุกอย่างของ ticket ยกเว้นการลบและการมอบหมายให้ผู้อื่น
   'ticket.create',
   'ticket.create_for_other',
   'ticket.read',
   'ticket.update',
-  'ticket.assign',
   'ticket.assign_self',
   'ticket.change_status',
   'ticket.close_own',
@@ -147,7 +152,7 @@ const AGENT_PERMISSIONS = [
   'checklist.update',
   'user.read',
   'user.update',
-  // นโยบาย 3.2 บังคับให้ปลดล็อกบัญชีผ่าน Service Desk ซึ่งคือ agent
+  // นโยบาย 3.2 บังคับให้ปลดล็อกบัญชีผ่าน Service Desk ซึ่งคือทีม support
   // และคำขอนี้มีเป้าหมาย 30 นาทีทำการ ถ้าต้องรอ company_admin จะไม่ทัน
   'user.reset_password',
   'sla.read',
@@ -163,6 +168,14 @@ const AGENT_PERMISSIONS = [
   'report.export',
   'notification.manage_own',
 ];
+
+/**
+ * หัวหน้าทีม Helpdesk (support_lead) = ทีม support + ticket.assign
+ *
+ * ticket.assign บอกได้แค่ "มอบหมายเป็นไหม" ส่วน "มอบให้ใครได้" ตัดสินจากทีมที่เป็นหัวหน้า
+ * (support_team_member.is_lead) — ต้องมีทั้งสองอย่าง: บทบาทนี้ + เป็นหัวหน้าของทีมนั้นจริง
+ */
+const SUPPORT_LEAD_PERMISSIONS = ['ticket.assign', ...SUPPORT_AGENT_PERMISSIONS];
 
 const COMPANY_ADMIN_PERMISSIONS = [
   'ticket.create',
@@ -229,18 +242,27 @@ const MANAGER_VIEWER_PERMISSIONS = [
 ];
 
 export const ROLES: readonly RoleSeed[] = [
+  // ── ຝັ່ງຜູ້ໃຊ້ງານ ──
   {
     code: 'end_user',
     nameTh: 'ຜູ້ແຈ້ງ',
-    description: 'ພະນັກງານທົ່ວໄປ ເຫັນສະເພາະເລື່ອງທີ່ຕົນແຈ້ງ',
+    description: 'ຝັ່ງຜູ້ໃຊ້ງານ — ແຈ້ງບັນຫາ ຫຼື ແຊັດເຂົ້າມາ ເຫັນສະເພາະເລື່ອງທີ່ຕົນແຈ້ງ',
     permissions: END_USER_PERMISSIONS,
   },
+  // ── ຝັ່ງ Helpdesk Support ──
   {
-    code: 'agent',
-    nameTh: 'ເຈົ້າໜ້າທີ່ support',
-    description: 'ທີມ IT ເຫັນທຸກເລື່ອງໃນບໍລິສັດທີ່ຢູ່ໃນຂອບເຂດ',
-    permissions: AGENT_PERMISSIONS,
+    code: 'support_lead',
+    nameTh: 'ຫົວໜ້າທີມ Helpdesk',
+    description: 'ຝັ່ງ Helpdesk — ຮັບວຽກເອງ ແລະ ມອບໝາຍວຽກໃຫ້ຄົນໃນທີມທີ່ຕົນເປັນຫົວໜ້າ',
+    permissions: SUPPORT_LEAD_PERMISSIONS,
   },
+  {
+    code: 'support_agent',
+    nameTh: 'ທີມ Helpdesk Support',
+    description: 'ຝັ່ງ Helpdesk — ຮັບວຽກຈາກ ticket ແລະ ແຊັດໄດ້ ແຕ່ມອບໝາຍໃຫ້ຄົນອື່ນບໍ່ໄດ້',
+    permissions: SUPPORT_AGENT_PERMISSIONS,
+  },
+  // ── ຜູ້ບໍລິຫານລະບົບ (ບໍ່ຢູ່ໃນສອງຝັ່ງຂ້າງເທິງ) ──
   {
     code: 'company_admin',
     nameTh: 'ຜູ້ດູແລລະດັບບໍລິສັດ',

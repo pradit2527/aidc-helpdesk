@@ -1,11 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, or, type SQL } from 'drizzle-orm';
 
 import { NotFoundError } from '../../common/errors/domain-error';
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../client';
 import { DB } from '../db.token';
-import { appUser, auditLog, company, supportTeam, supportTeamMember } from '../schema';
+import {
+  appUser,
+  auditLog,
+  company,
+  permission,
+  role,
+  rolePermission,
+  supportTeam,
+  supportTeamMember,
+  userRole,
+} from '../schema';
 
 /** สมาชิกหนึ่งคนในทีม พร้อมข้อมูลที่หน้าจอต้องแสดง */
 export interface TeamMemberRow {
@@ -49,6 +59,35 @@ export interface TeamWrite {
 @Injectable()
 export class SupportTeamRepository {
   constructor(@Inject(DB) private readonly db: Db) {}
+
+  /**
+   * ใครใน userIds ถือสิทธิ์ ticket.assign อยู่จริง (บทบาทที่ยังไม่หมดอายุ)
+   *
+   * ใช้ตอนตั้งหัวหน้าทีม: is_lead บอกว่าเป็นหัวหน้าของทีมไหน แต่ "อำนาจมอบหมาย" มาจากบทบาท
+   * (support_lead ขึ้นไป) — ตั้ง is_lead ให้คนที่ไม่มีบทบาทหัวหน้าจะได้หัวหน้าที่สั่งงานไม่ได้
+   * ซึ่งเป็นทีมที่ดูเหมือนมีหัวหน้าแต่ไม่มีใครมอบหมายงานได้จริง
+   *
+   * อ่านจาก role_permission ไม่ผูกกับชื่อบทบาท เพราะหน้าจัดการสิทธิ์แก้ได้ว่าบทบาทไหนถืออะไร
+   * super_admin ถือทุกสิทธิ์โดยไม่ต้องมีแถวใน role_permission จึงนับแยก
+   */
+  async assignCapableIds(userIds: readonly number[]): Promise<Set<number>> {
+    if (userIds.length === 0) return new Set();
+
+    const rows = await this.db
+      .selectDistinct({ userId: userRole.userId })
+      .from(userRole)
+      .innerJoin(role, eq(role.id, userRole.roleId))
+      .leftJoin(rolePermission, eq(rolePermission.roleId, role.id))
+      .leftJoin(permission, eq(permission.id, rolePermission.permissionId))
+      .where(
+        and(
+          inArray(userRole.userId, [...userIds]),
+          or(isNull(userRole.expiresAt), gt(userRole.expiresAt, new Date())),
+          or(eq(role.code, 'super_admin'), eq(permission.code, 'ticket.assign')),
+        ),
+      );
+    return new Set(rows.map((r) => r.userId));
+  }
 
   /**
    * ทีม (ที่ยังเปิดใช้งาน) ที่ผู้ใช้คนหนึ่งสังกัด

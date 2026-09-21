@@ -18,9 +18,16 @@ import { ApiError } from '@/lib/api';
 import { useCompanies, useDepartments } from '@/lib/queries/master-data';
 import { useUpdateUser, useUser } from '@/lib/queries/operations';
 import type { AdminUser } from '@/lib/types';
+import { ROLE_SIDE, SIDE_LABEL_KEY } from '@/config/roles';
 import type { RoleCode } from '@/lib/types';
 
-const ASSIGNABLE_ROLES: RoleCode[] = ['end_user', 'agent', 'company_admin', 'manager_viewer'];
+const ASSIGNABLE_ROLES: RoleCode[] = [
+  'end_user',
+  'support_lead',
+  'support_agent',
+  'company_admin',
+  'manager_viewer',
+];
 
 /**
  * รายละเอียดผู้ใช้ + มอบบทบาท + ขอบเขตบริษัท
@@ -110,9 +117,15 @@ function UserDetailView({ target }: { target: AdminUser }): React.JSX.Element {
             ທຸກຄົນມີບົດບາດ “ຜູ້ແຈ້ງ” ເປັນພື້ນຖານສະເໝີ ບົດບາດອື່ນເພີ່ມທັບລົງໄປ
             ສິດທີ່ໄດ້ຄືຜົນລວມຂອງທຸກບົດບາດ
           </p>
-          {roleOptions.map((code) => (
+          {roleOptions.map((code, i) => (
+            <React.Fragment key={code}>
+            {/* หัวข้อฝั่ง — โผล่เมื่อเริ่มฝั่งใหม่ ให้เห็นชัดว่าบทบาทไหนอยู่ฝั่งผู้ใช้งาน ฝั่ง Helpdesk หรือผู้บริหารระบบ */}
+            {(i === 0 || ROLE_SIDE[code] !== ROLE_SIDE[roleOptions[i - 1]!]) && (
+              <p className="pt-2 text-caption font-semibold text-ink-2">
+                {t(SIDE_LABEL_KEY[ROLE_SIDE[code]])}
+              </p>
+            )}
             <label
-              key={code}
               className="flex min-h-tap cursor-pointer items-center gap-3 rounded border border-hair px-3 hover:bg-subtle"
             >
               <input
@@ -131,6 +144,7 @@ function UserDetailView({ target }: { target: AdminUser }): React.JSX.Element {
                 <span className="ml-auto text-caption text-ink-3">ຖອນອອກບໍ່ໄດ້</span>
               )}
             </label>
+            </React.Fragment>
           ))}
 
           {!isSuperAdmin && (

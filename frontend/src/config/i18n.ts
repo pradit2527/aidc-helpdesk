@@ -154,10 +154,15 @@ export const MESSAGES = {
 
   // ── บทบาท ──
   'role.end_user': { lo: 'ຜູ້ແຈ້ງ', th: 'ผู้แจ้ง' },
-  'role.agent': { lo: 'ເຈົ້າໜ້າທີ່ support', th: 'เจ้าหน้าที่ support' },
+  'role.support_lead': { lo: 'ຫົວໜ້າທີມ Helpdesk', th: 'หัวหน้าทีม Helpdesk' },
+  'role.support_agent': { lo: 'ທີມ Helpdesk Support', th: 'ทีม Helpdesk Support' },
   'role.company_admin': { lo: 'ຜູ້ດູແລລະດັບບໍລິສັດ', th: 'ผู้ดูแลระดับบริษัท' },
   'role.manager_viewer': { lo: 'ຜູ້ບໍລິຫານ (ອ່ານຢ່າງດຽວ)', th: 'ผู้บริหาร (อ่านอย่างเดียว)' },
   'role.super_admin': { lo: 'ຜູ້ດູແລລະບົບ', th: 'ผู้ดูแลระบบ' },
+  // ── ฝั่งของบทบาท ──
+  'side.user': { lo: 'ຝັ່ງຜູ້ໃຊ້ງານ', th: 'ฝั่งผู้ใช้งาน' },
+  'side.support': { lo: 'ຝັ່ງ Helpdesk Support', th: 'ฝั่ง Helpdesk Support' },
+  'side.admin': { lo: 'ຜູ້ບໍລິຫານລະບົບ', th: 'ผู้บริหารระบบ' },
   /* ไม่ใช่ role ในตาราง role แต่แสดงคู่กันบนการ์ดผู้ใช้ — มาจาก led_teams ใน session */
   'role.teamLead': { lo: 'ຫົວໜ້າທີມ', th: 'หัวหน้าทีม' },
 
