@@ -7,6 +7,7 @@ import { clampPage, clampPageSize } from '../../common/http/pagination';
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
 import { TicketReportDto } from './dto/ticket-report.dto';
+import { IsoReportsService } from './iso-reports.service';
 import { ReportsService } from './reports.service';
 
 /**
@@ -48,7 +49,61 @@ function parseTicketType(raw: string | undefined): TicketType | undefined {
 @UseGuards(ScopeGuard)
 @ApiCookieAuth('cookie')
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    private readonly iso: IsoReportsService,
+  ) {}
+
+  @Get('service-performance')
+  @ApiOperation({
+    summary: 'รายงานผลการให้บริการประจำเดือน ตามโครง ISO/IEC 20000-1 §8.3.3 · §9.1',
+    description: [
+      'รวมทุกส่วนของรายงานรายเดือนในคำขอเดียว: หัวเอกสาร (เลขที่ SPR-YYYYMM · ช่วงเวลา · เอกสาร SLA ที่ใช้วัด) · ',
+      'สถานะภาพรวม · KPI เทียบเป้าและเทียบช่วงก่อนหน้า · SLA รายระดับ (ตอบรับ/แก้ไข) · ปริมาณงาน · ',
+      'เหตุร้ายแรงและเหตุความปลอดภัย · รายการเกินกำหนด · Problem/RCA · ความพร้อมใช้งานรายระบบ · CSAT · แผนปรับปรุง',
+      '',
+      '- ส่งเดือนเต็มตามเวลาเวียงจันทน์ (from = วันที่ 1 00:00+07:00, to = วันที่ 1 ของเดือนถัดไป) ' +
+        'แล้วช่วงเทียบจะเป็นเดือนก่อนหน้าทั้งเดือน · ช่วงอื่นเทียบกับช่วงยาวเท่ากันที่อยู่ก่อนหน้า',
+      '- ขอบเขตเดียวกับ GET /reports/tickets ทุกข้อ รวมข้อจำกัดเหตุความปลอดภัย (SOP-10)',
+      '- ตัวหารเป็นศูนย์คืน null ไม่ใช่ 0 หรือ 100',
+    ].join('\n'),
+  })
+  @ApiQuery({ name: 'from', required: false, description: 'ISO 8601 เช่น 2026-09-01T00:00:00+07:00' })
+  @ApiQuery({ name: 'to', required: false, description: 'ISO 8601 (ขอบเปิด) เช่น 2026-10-01T00:00:00+07:00' })
+  servicePerformance(
+    @CurrentScope() scope: AccessScope,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    scope.require('report.view', 'report.export');
+    return this.iso.servicePerformance(scope, this.reports.resolvePeriod(from, to));
+  }
+
+  @Get('team-kpi')
+  @ApiOperation({
+    summary: 'KPI รายบุคคลของทีมสนับสนุน — อิง SLA และคะแนนที่ผู้ใช้ให้',
+    description: [
+      'แต่ละคน: ตอบรับทันเวลา % · แก้ไขทันเวลา % · CSAT เฉลี่ย (จำนวนคะแนน · คะแนนต่ำ ≤ 2) · ',
+      'เปิดคืน % · งานค้างและเกินกำหนด ณ ตอนนี้ · คะแนนรวม 0–100 (น้ำหนักอยู่ใน `rules.weights`)',
+      '',
+      '- นับตามผู้รับผิดชอบปัจจุบันของเรื่อง',
+      '- ทีม support (`support_agent`) เห็นเฉพาะของตัวเอง (`visibility: self`) · ',
+      '  หัวหน้าทีม ผู้ดูแล และผู้บริหารเห็นทุกคนในขอบเขต (`visibility: team`)',
+      '- `enough_data: false` เมื่อแก้เสร็จน้อยกว่า `rules.min_sample` ใบ — ไม่ควรใช้จัดอันดับ',
+    ].join('\n'),
+  })
+  @ApiQuery({ name: 'from', required: false, description: 'ISO 8601' })
+  @ApiQuery({ name: 'to', required: false, description: 'ISO 8601 (ขอบเปิด)' })
+  @ApiQuery({ name: 'team_id', required: false, type: Number, description: 'เฉพาะสมาชิกทีมนี้' })
+  teamKpi(
+    @CurrentScope() scope: AccessScope,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('team_id') teamId?: string,
+  ) {
+    scope.require('report.view', 'report.export');
+    return this.iso.teamKpi(scope, this.reports.resolvePeriod(from, to), parseId(teamId));
+  }
 
   @Get('kpi')
   @ApiOperation({

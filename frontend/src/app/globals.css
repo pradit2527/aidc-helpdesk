@@ -1312,3 +1312,16 @@
   transition: opacity 0.16s ease;
 }
 .prio-card[aria-checked='true'] .prio-radio i { opacity: 1; }
+
+/*
+ * พิมพ์รายงาน (ISO/IEC 20000-1 ต้องเก็บรายงานเป็นเอกสารได้) — ใช้ "บันทึกเป็น PDF" ของเบราว์เซอร์
+ * ปุ่มแชทของ Chatwoot อยู่นอก React จึงซ่อนด้วยคลาสของมันเองที่นี่
+ */
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  body { background: #fff !important; }
+  .woot--bubble-holder,
+  .woot-widget-holder,
+  .woot-widget-bubble { display: none !important; }
+  .print-break-avoid { break-inside: avoid; }
+}

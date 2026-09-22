@@ -1,254 +1,169 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  BarChart3,
-  CalendarClock,
-  FileWarning,
-  Gauge,
-  KeyRound,
-  RefreshCcw,
-  Repeat,
-  TrendingUp,
-  Users,
-} from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowRight, Award, Building2, CheckCircle2, CircleDashed, FileText, Search } from 'lucide-react';
 import * as React from 'react';
 
+import { currentMonth, monthLabel, monthRange } from '@/components/reports/month-picker';
 import { Card, CardBody } from '@/components/ui/card';
-import { Alert, PageHeader } from '@/components/ui/misc';
+import { PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
-import { useKpiReport, type KpiItem } from '@/lib/queries/operations';
+import { formatNumber, formatPercent } from '@/lib/format';
+import { useServicePerformanceReport, type OverallStatus } from '@/lib/queries/iso-reports';
 
 /**
- * ศูนย์รายงาน — รวมรายงานตาม docs/04-rbac-sla.md §5.2
+ * ศูนย์รายงาน — เลือกรายงานจาก "คำถามที่อยากรู้" ไม่ใช่จากชื่อเทคนิค
  *
- * รายงานที่มาจากเอกสารควบคุมกับที่ทีมเพิ่มเองแยกกลุ่มกันชัดเจน
- * เพราะสองกลุ่มนี้แก้ได้ไม่เหมือนกัน — กลุ่มแรกผูกกับเอกสารที่ CEO อนุมัติ
+ * เดิมหน้านี้มีการ์ดสิบใบ (หกใบเป็นรายงานที่ยังไม่ได้ทำ) พร้อมเลขข้อของ ISO ทุกกลุ่ม
+ * ผู้ใช้ต้องอ่านทั้งหน้าก่อนรู้ว่าจะกดอะไร — ตอนนี้เหลือสรุปเดือนนี้หนึ่งแถบกับรายงานที่ใช้ได้จริงสี่ใบ
+ *
+ * การจัดตามมาตรฐาน ISO/IEC 20000-1 ยังอยู่ครบ แต่ย้ายไปอยู่ในตัวรายงานประจำเดือน
+ * (หัวเอกสาร หัวข้อตอนพิมพ์ และช่องลงนาม) ซึ่งเป็นที่ที่ผู้ตรวจต้องการเห็นจริง
  */
-const CONTROLLED_REPORTS = [
+
+const REPORTS: {
+  href: string;
+  question: string;
+  title: string;
+  body: string;
+  who: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  {
+    href: '/reports/service-performance',
+    question: 'ເດືອນນີ້ບໍລິການໄອທີໄດ້ຕາມເປົ້າບໍ່?',
+    title: 'ລາຍງານປະຈຳເດືອນ',
+    body: 'ຜ່ານ ຫຼື ບໍ່ຜ່ານເປົ້າ ມີຫຍັງຕ້ອງຈັດການ ທຽບກັບເດືອນກ່ອນ · ພິມເປັນເອກະສານຕາມ ISO ໄດ້',
+    who: 'ສຳລັບຜູ້ບໍລິຫານ ແລະ ຫົວໜ້າໄອທີ',
+    icon: FileText,
+  },
+  {
+    href: '/reports/team-kpi',
+    question: 'ໃຜໃນທີມເຮັດວຽກໄດ້ຕາມເປົ້າ?',
+    title: 'KPI ທີມ Support',
+    body: 'ຄະແນນລາຍບຸກຄົນ ຈາກການຕອບຮັບ ແລະ ແກ້ໄຂທັນເວລາ ແລະ ຄະແນນທີ່ຜູ້ໃຊ້ໃຫ້',
+    who: 'ສຳລັບຫົວໜ້າທີມ',
+    icon: Award,
+  },
   {
     href: '/reports/sla-compliance',
-    title: 'ລາຍງານ SLA ລາຍເດືອນ',
-    description: '%SLA ແຍກຕາມບໍລິສັດ × ລະດັບ ພ້ອມສົ່ງອອກ',
-    meta: 'ລາຍເດືອນ · ຜູ້ບໍລິຫານ · SLA 7.2',
-    icon: Gauge,
-    ready: true,
+    question: 'ບໍລິສັດໃດແກ້ໄຂທັນເວລາ?',
+    title: 'SLA ແຍກຕາມບໍລິສັດ',
+    body: 'ອັດຕາແກ້ໄຂທັນເວລາ ແຍກຕາມບໍລິສັດ ແລະ ລະດັບຄວາມສຳຄັນ ພ້ອມສົ່ງອອກ',
+    who: 'ສຳລັບຜູ້ບໍລິຫານ',
+    icon: Building2,
   },
-  {
-    href: '/reports/aged-backlog',
-    title: 'ລາຍງານເລື່ອງຄ້າງ ແລະ ເກີນກຳນົດ',
-    description: 'ລາຍການທີ່ເກີນກຳນົດ ພ້ອມຈຳນວນມື້ທີ່ຄ້າງ',
-    meta: 'ລາຍອາທິດ · SLA 7.1',
-    icon: FileWarning,
-    ready: false,
-  },
-  {
-    href: '/reports/rca',
-    title: 'ລາຍງານ RCA',
-    description: 'ສາເຫດຮາກ ຜົນກະທົບ ແລະ ມາດຕະການປ້ອງກັນການເກີດຊ້ຳ',
-    meta: 'ພາຍໃນ 5 ມື້ເຮັດວຽກຫຼັງເຫດ P1 · SLA 7.2',
-    icon: FileWarning,
-    ready: false,
-  },
-  {
-    href: '/reports/uptime',
-    title: 'ລາຍງານຄວາມພ້ອມໃຊ້ງານ',
-    description: 'ຕໍ່ລະບົບ ແລະ ຕໍ່ tier ທຽບກັບເປົ້າໝາຍ',
-    meta: 'ລາຍເດືອນ · SLA 5.2',
-    icon: TrendingUp,
-    ready: false,
-  },
-  {
-    href: '/reports/access-expiry',
-    title: 'ລາຍງານສິດທີ່ໃກ້ໝົດອາຍຸ',
-    description: 'ບົດບາດ ແລະ ສິດຊົ່ວຄາວທີ່ໃກ້ໝົດອາຍຸ',
-    meta: 'ລາຍອາທິດ · SOP-03 ຂໍ້ 6',
-    icon: KeyRound,
-    ready: false,
-  },
-];
-
-const TEAM_REPORTS = [
-  /*
-   * รายงานเรื่องแจ้งแบบกรองได้ — มาแทนการ์ด "พาระวຽก" เดิมที่ยังไม่ได้ทำ
-   * เพราะครอบคลุมสิ่งเดียวกัน (เปิด / ปิด / เกินกำหนด แยกตามผู้รับผิดชอบ)
-   * และเพิ่มตัวกรองบริษัท แผนก สถานะ ช่วงเวลา และรายบุคคลเข้าไปด้วย
-   */
   {
     href: '/reports/tickets',
+    question: 'ຢາກຊອກເລື່ອງແຈ້ງຕາມເງື່ອນໄຂ?',
     title: 'ລາຍງານເລື່ອງແຈ້ງ',
-    description: 'ກັ່ນຕອງຕາມບໍລິສັດ ພະແນກ ສະຖານະ ຊ່ວງເວລາ ແລະ ລາຍບຸກຄົນ · ແຍກຕາມຜູ້ຮັບຜິດຊອບ ພ້ອມ CSV',
-    meta: 'ທຸກເວລາ · ຜູ້ດູແລ ແລະ ຜູ້ບໍລິຫານ',
-    icon: Users,
-    ready: true,
-  },
-  {
-    href: '/reports/category-trend',
-    title: 'ແນວໂນ້ມໝວດໝູ່',
-    description: 'ໝວດໝູ່ທີ່ແຈ້ງເຂົ້າຫຼາຍ 10 ອັນດັບ',
-    meta: 'ລາຍເດືອນ',
-    icon: BarChart3,
-    ready: false,
-  },
-  {
-    href: '/reports/reopen-rate',
-    title: 'ອັດຕາການເປີດເລື່ອງຄືນ',
-    description: '% ເລື່ອງທີ່ຖືກເປີດຄືນຫຼັງປິດໄປແລ້ວ',
-    meta: 'ລາຍເດືອນ',
-    icon: Repeat,
-    ready: false,
-  },
-  {
-    href: '/reports/response-time',
-    title: 'ເວລາຕອບຮັບຄັ້ງທຳອິດ',
-    description: 'ແຍກຕາມລະດັບສະເໝີ ເພາະ P1 ນັບປະຕິທິນ P2–P4 ນັບເວລາເຮັດວຽກ',
-    meta: 'ລາຍເດືອນ · KPI-2',
-    icon: CalendarClock,
-    ready: false,
+    body: 'ກັ່ນຕອງຕາມບໍລິສັດ ພະແນກ ສະຖານະ ຊ່ວງເວລາ ຫຼື ລາຍບຸກຄົນ ແລ້ວສົ່ງອອກເປັນ CSV',
+    who: 'ສຳລັບທຸກຄົນທີ່ເບິ່ງລາຍງານໄດ້',
+    icon: Search,
   },
 ];
 
-/** ค่าที่วัดได้จริงของ KPI หนึ่งตัว พร้อมสถานะเทียบเป้า */
-function KpiTile({ kpi }: { kpi: KpiItem }): React.JSX.Element {
-  const unit = kpi.unit === 'percent' ? '%' : kpi.unit === 'minutes' ? ' ນທ.' : '';
-
-  return (
-    <div className="rounded border border-hair p-3">
-      <p className="text-caption text-ink-3">
-        {kpi.code} · {kpi.name}
-      </p>
-      <p
-        className={cn(
-          'tabular mt-1 text-h3',
-          kpi.meets_target === true && 'text-sla-ok',
-          kpi.meets_target === false && 'text-sla-breach',
-        )}
-      >
-        {/*
-          value เป็น null เมื่อตัวหารเป็นศูนย์ — แสดงว่า "ยังไม่มีข้อมูล"
-          ไม่ใช่ 0 หรือ 100 เพราะทั้งสองค่านั้นอ่านแล้วเข้าใจผิดคนละทาง
-        */}
-        {kpi.value === null ? <span className="text-body text-ink-3">ຍັງບໍ່ມີຂໍ້ມູນ</span> : `${kpi.value}${unit}`}
-      </p>
-      <p className="mt-0.5 text-caption text-ink-3">
-        ເປົ້າ {kpi.direction === 'higher' ? '≥' : '≤'} {kpi.target}
-        {unit} · ຖານ {kpi.denominator} ລາຍການ
-      </p>
-      {kpi.note && <p className="mt-1 text-caption text-ink-3">{kpi.note}</p>}
-    </div>
-  );
-}
+const VERDICT: Record<OverallStatus, { text: string; cls: string; Icon: typeof CheckCircle2 }> = {
+  on_target: { text: 'ຜ່ານເປົ້າໝາຍ', cls: 'text-sla-ok', Icon: CheckCircle2 },
+  at_risk: { text: 'ມີບາງຕົວຊີ້ວັດຕ່ຳກວ່າເປົ້າ', cls: 'text-sla-risk', Icon: AlertTriangle },
+  off_target: { text: 'ຕ່ຳກວ່າເປົ້າໝາຍ', cls: 'text-sla-breach', Icon: AlertOctagon },
+  no_data: { text: 'ຍັງບໍ່ມີຂໍ້ມູນພໍວັດ', cls: 'text-sla-paused', Icon: CircleDashed },
+};
 
 export default function ReportsPage(): React.JSX.Element {
-  const kpi = useKpiReport();
-
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader title="ສູນລາຍງານ" description="ລາຍງານທັງໝົດທີ່ລະບົບອອກໃຫ້ໄດ້" />
-
-      <section>
-        <h2 className="mb-2 text-h3">KPI ເດືອນນີ້</h2>
-        <QueryBoundary query={kpi}>
-          {kpi.data && (
-            <>
-              {kpi.data.sip_required && (
-                <div className="mb-3">
-                  <Alert tone="warning" title="ຕ້ອງຈັດທຳແຜນປັບປຸງບໍລິການ (SIP)">
-                    {kpi.data.sip_reason}
-                  </Alert>
+    <div className="flex flex-col gap-6">
+      <PageHeader title="ລາຍງານ" description="ເລືອກລາຍງານຕາມສິ່ງທີ່ຢາກຮູ້" />
+      <MonthGlance />
+      <div className="grid gap-4 md:grid-cols-2">
+        {REPORTS.map((r) => (
+          <Link key={r.href} href={r.href} className="group block">
+            <Card className="h-full transition-colors group-hover:border-primary">
+              <CardBody className="flex h-full flex-col gap-3">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-10 w-10 flex-none place-items-center rounded-lg bg-primary-subtle text-primary">
+                    <r.icon className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-h3 text-ink">{r.question}</p>
+                    <p className="mt-0.5 text-body-sm font-semibold text-primary">{r.title}</p>
+                  </div>
+                  <ArrowRight
+                    className="mt-1 h-5 w-5 flex-none text-ink-3 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+                    aria-hidden="true"
+                  />
                 </div>
-              )}
-              <Card>
-                <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {kpi.data.items.map((item) => (
-                    <KpiTile key={item.code} kpi={item} />
-                  ))}
-                </CardBody>
-              </Card>
-              <p className="mt-2 text-caption text-ink-3">
-                ຊ່ວງ {kpi.data.period.label} · KPI-2 ແຍກຕາມລະດັບຄວາມສຳຄັນ ຈຶ່ງບໍ່ຢູ່ໃນຕາຕະລາງນີ້
-                — P1 ນັບນາທີປະຕິທິນ ສ່ວນ P2–P4 ນັບນາທີເຮັດວຽກ ສະເລ່ຍລວມກັນບໍ່ໄດ້
-              </p>
-            </>
-          )}
-        </QueryBoundary>
-      </section>
-
-      <section>
-        <h2 className="mb-2 text-h3">ລາຍງານຕາມເອກະສານຄວບຄຸມ</h2>
-        <p className="mb-3 text-body-sm text-ink-2">
-          ຄ່າ ແລະ ຮູບແບບຂອງລາຍງານກຸ່ມນີ້ຜູກກັບ AIDC-IT-SLA-001 ການແກ້ຕ້ອງຜ່ານການອະນຸມັດເອກະສານກ່ອນ
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {CONTROLLED_REPORTS.map((report) => (
-            <ReportCard key={report.href} {...report} />
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-2 text-h3">ລາຍງານທີ່ທີມເພີ່ມເອງ</h2>
-        <p className="mb-3 text-body-sm text-ink-2">
-          ບໍ່ໄດ້ມາຈາກເອກະສານຄວບຄຸມ ປັບປ່ຽນໄດ້ຕາມການໃຊ້ງານຈິງ
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {TEAM_REPORTS.map((report) => (
-            <ReportCard key={report.href} {...report} />
-          ))}
-        </div>
-      </section>
+                <p className="text-body-sm text-ink-2">{r.body}</p>
+                <p className="mt-auto text-caption text-ink-3">{r.who}</p>
+              </CardBody>
+            </Card>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ReportCard({
-  href,
-  title,
-  description,
-  meta,
-  icon: Icon,
-  ready,
-}: {
-  href: string;
-  title: string;
-  description: string;
-  meta: string;
-  icon: React.ComponentType<{ className?: string }>;
-  ready: boolean;
-}): React.JSX.Element {
-  const inner = (
-    <CardBody className="flex h-full flex-col">
-      <div className="flex items-start gap-3">
-        <span className="grid h-9 w-9 flex-none place-items-center rounded bg-primary-subtle text-primary">
-          <Icon className="h-5 w-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-body font-semibold text-ink">{title}</span>
-          <span className="mt-0.5 block text-body-sm text-ink-2">{description}</span>
-        </span>
-      </div>
-      <p className="mt-3 text-caption text-ink-3">{meta}</p>
-      {!ready && (
-        <p className="mt-2 inline-flex items-center gap-1.5 text-caption text-ink-3">
-          <RefreshCcw className="h-3.5 w-3.5" aria-hidden="true" />
-          ຢູ່ໃນແຜນພັດທະນາ
-        </p>
-      )}
-    </CardBody>
-  );
-
-  if (!ready) {
-    return (
-      <Card className="h-full opacity-70" aria-disabled="true">
-        {inner}
-      </Card>
-    );
-  }
+/** สรุปเดือนนี้บรรทัดเดียว — ข้อมูลชุดเดียวกับรายงานประจำเดือน (react-query ใช้แคชร่วมกัน) */
+function MonthGlance(): React.JSX.Element {
+  const month = currentMonth();
+  const { from, to } = monthRange(month);
+  const query = useServicePerformanceReport(from, to);
+  const d = query.data;
+  const kpi1 = d?.kpi.items.find((k) => k.code === 'KPI-1') ?? null;
+  const verdict = d ? VERDICT[d.summary.status] : null;
 
   return (
-    <Link href={href} className="block h-full">
-      <Card className="h-full transition-colors hover:border-primary">{inner}</Card>
-    </Link>
+    <QueryBoundary query={query}>
+      {d && verdict && (
+        <Card>
+          <CardBody className="grid gap-4 lg:grid-cols-[1.2fr_2fr] lg:items-center">
+            <div className="flex items-center gap-3">
+              <verdict.Icon className={cn('h-8 w-8 flex-none', verdict.cls)} aria-hidden="true" />
+              <div>
+                <p className="text-caption text-ink-3">{monthLabel(month)} (ເດືອນນີ້)</p>
+                <p className={cn('text-h2', verdict.cls)}>{verdict.text}</p>
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Glance
+                label="ແກ້ໄຂທັນເວລາ"
+                value={kpi1?.value == null ? '—' : formatPercent(kpi1.value)}
+                bad={kpi1?.meets_target === false}
+                sub={`ເປົ້າ ${kpi1?.target ?? 95}%`}
+              />
+              <Glance
+                label="ຄວາມພໍໃຈ"
+                value={d.csat.avg === null ? '—' : `${d.csat.avg.toFixed(1)} / 5`}
+                bad={d.csat.avg !== null && d.csat.avg < d.csat.target}
+                sub={`ເປົ້າ ${d.csat.target}`}
+              />
+              <Glance
+                label="ເລື່ອງໃໝ່"
+                value={formatNumber(d.volume.created.incident + d.volume.created.service_request)}
+                sub={`ແກ້ໄຂແລ້ວ ${formatNumber(d.volume.resolved.incident + d.volume.resolved.service_request)}`}
+              />
+              <Glance
+                label="ຄ້າງເກີນກຳນົດ"
+                value={formatNumber(d.volume.backlog.reduce((s, r) => s + r.overdue, 0))}
+                bad={d.volume.backlog.some((r) => r.overdue > 0)}
+                sub={`ຈາກ ${formatNumber(d.volume.backlog.reduce((s, r) => s + r.open, 0))} ທີ່ຄ້າງ`}
+              />
+            </dl>
+          </CardBody>
+        </Card>
+      )}
+    </QueryBoundary>
+  );
+}
+
+function Glance({ label, value, sub, bad = false }: { label: string; value: string; sub: string; bad?: boolean }): React.JSX.Element {
+  return (
+    <div>
+      <dt className="text-caption text-ink-3">{label}</dt>
+      <dd className={cn('tabular text-h2', bad ? 'text-sla-breach' : 'text-ink')}>{value}</dd>
+      <dd className="text-caption text-ink-3">{sub}</dd>
+    </div>
   );
 }

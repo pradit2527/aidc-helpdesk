@@ -9,7 +9,7 @@
 
 export const TIMEZONE = 'Asia/Vientiane';
 
-const LAO_MONTHS = [
+export const LAO_MONTHS = [
   'ມັງກອນ',
   'ກຸມພາ',
   'ມີນາ',

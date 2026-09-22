@@ -4,6 +4,7 @@ import { Download } from 'lucide-react';
 import * as React from 'react';
 
 import { PriorityBadge } from '@/components/common/badges';
+import { currentMonth, MonthPicker, monthRange } from '@/components/reports/month-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle, StatCard } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -26,20 +27,15 @@ const TARGET_PERCENT = 95;
  * มิฉะนั้นตัวเลขสวยขึ้นได้ด้วยการตั้งข้อยกเว้นเยอะ ๆ โดยไม่มีใครเห็น
  */
 export default function SlaCompliancePage(): React.JSX.Element {
-  const [month, setMonth] = React.useState('2026-08');
+  const [month, setMonth] = React.useState(currentMonth);
   const [company, setCompany] = React.useState('');
 
   const companies = useCompanies();
 
   /*
-   * แปลงเดือนที่เลือกเป็นช่วงเวลาเต็มเดือน
-   *
-   * ใช้วันที่ 1 ของเดือนถัดไปเป็นขอบบน แทนการเดาว่าเดือนนี้มีกี่วัน
-   * — Date จัดการเดือนที่มี 28/30/31 วันและปีอธิกสุรทินให้เอง
+   * ขอบเดือนตามเวลาเวียงจันทน์ (+07:00) — เดิมใช้ UTC ซึ่งดึงงาน 7 ชั่วโมงแรกของวันที่ 1 ไปอยู่เดือนก่อน
    */
-  const [year, mon] = month.split('-').map(Number);
-  const from = new Date(Date.UTC(year ?? 2026, (mon ?? 1) - 1, 1)).toISOString();
-  const to = new Date(Date.UTC(year ?? 2026, mon ?? 1, 1)).toISOString();
+  const { from, to } = monthRange(month);
 
   const query = useSlaComplianceReport(from, to);
   const report = query.data;
@@ -148,16 +144,7 @@ export default function SlaCompliancePage(): React.JSX.Element {
         <CardHeader>
           <CardTitle>ຜົນຕາມບໍລິສັດ ແລະ ລະດັບ</CardTitle>
           <div className="flex flex-wrap gap-2">
-            <Select
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              aria-label="ເລືອກເດືອນ"
-              className="w-auto"
-            >
-              <option value="2026-08">ສິງຫາ 2569</option>
-              <option value="2026-07">ກໍລະກົດ 2569</option>
-              <option value="2026-06">ມິຖຸນາ 2569</option>
-            </Select>
+            <MonthPicker value={month} onChange={setMonth} />
             <Select
               value={company}
               onChange={(e) => setCompany(e.target.value)}

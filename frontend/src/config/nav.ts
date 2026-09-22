@@ -184,11 +184,16 @@ export const NAV_SECTIONS: readonly NavSection[] = [
        * backend ตรวจ report.view ซ้ำที่ GET /reports/tickets อีกชั้นอยู่แล้ว
        */
       {
-        href: '/reports/tickets',
+        /*
+         * ชี้ไปที่ศูนย์รายงาน (จัดกลุ่มตาม ISO/IEC 20000-1) ไม่ใช่รายงานเรื่องแจ้งตัวเดียว
+         * matchPrefix ให้เมนูยังไฮไลต์อยู่เมื่อเปิดรายงานย่อย เช่น /reports/team-kpi
+         */
+        href: '/reports',
         labelKey: 'nav.ticketReport',
         shortKey: 'navShort.ticketReport',
         icon: BarChart3,
         roles: STAFF_AND_VIEWER,
+        matchPrefix: true,
       },
       /*
        * ตั้งค่าระบบเป็น "หน้าเดียว 10 แท็บ" ตามต้นแบบ ไม่ใช่ 16 หน้าแยกกัน
@@ -301,6 +306,8 @@ export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
   '/reports': 'nav.reports',
   '/reports/sla-compliance': 'page.slaReport',
   '/reports/tickets': 'nav.ticketReport',
+  '/reports/service-performance': 'page.servicePerformance',
+  '/reports/team-kpi': 'page.teamKpi',
   '/kb': 'nav.kb',
   '/kb/new': 'page.newArticle',
   '/notifications': 'nav.notifications',

@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b border-hair bg-page/95 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-hair bg-page/95 backdrop-blur print:hidden">
           <div className="flex h-[64px] items-center gap-2 px-4 lg:h-[72px] lg:px-8">
             <button
               type="button"
@@ -133,7 +133,7 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
           </div>
         </header>
 
-        <main id="main" className="flex-1 px-4 pb-24 pt-6 lg:px-8 lg:pb-10">
+        <main id="main" className="flex-1 px-4 pb-24 pt-6 lg:px-8 lg:pb-10 print:p-0">
           {children}
         </main>
       </div>
@@ -142,7 +142,7 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
       <Link
         href="/tickets/new"
         aria-label={t('action.newTicket')}
-        className="fixed bottom-[76px] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-dialog sm:hidden"
+        className="fixed bottom-[76px] right-4 z-40 grid h-14 w-14 print:hidden place-items-center rounded-full bg-primary text-white shadow-dialog sm:hidden"
         /* globals.css ยกปุ่มแชท Chatwoot ขึ้นเหนือปุ่มนี้ โดยหาจาก attribute นี้ */
         data-mobile-fab
       >
@@ -156,7 +156,7 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
         บนจอ 375px แล้วทั้งหน้าเลื่อนซ้ายขวาได้
       */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t border-hair bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 print:hidden grid auto-cols-fr grid-flow-col border-t border-hair bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
         aria-label={t('action.mainMenu')}
         /* globals.css ยกปุ่มแชท Chatwoot ขึ้นเหนือแถบนี้ โดยหาจาก attribute นี้ */
         data-mobile-nav
@@ -216,7 +216,7 @@ function Sidebar({
         ทำให้เห็นทีละ 6-7 รายการและไม่รู้ว่ายังมีอะไรอยู่ข้างล่างอีก
       */
       className={cn(
-        'app-sidebar sticky top-0 h-screen w-[264px] flex-none flex-col overflow-y-auto',
+        'app-sidebar sticky top-0 h-screen w-[264px] flex-none flex-col overflow-y-auto print:hidden',
         className,
       )}
     >

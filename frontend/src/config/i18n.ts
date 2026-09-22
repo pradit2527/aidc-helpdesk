@@ -276,6 +276,8 @@ export const MESSAGES = {
   'page.kbEdit': { lo: 'ແກ້ໄຂບົດຄວາມ', th: 'แก้ไขบทความ' },
   'page.userDetail': { lo: 'ລາຍລະອຽດຜູ້ໃຊ້', th: 'รายละเอียดผู้ใช้' },
   'page.slaReport': { lo: 'ລາຍງານ SLA ລາຍເດືອນ', th: 'รายงาน SLA รายเดือน' },
+  'page.servicePerformance': { lo: 'ລາຍງານຜົນການໃຫ້ບໍລິການປະຈຳເດືອນ', th: 'รายงานผลการให้บริการประจำเดือน' },
+  'page.teamKpi': { lo: 'KPI ທີມ Support', th: 'KPI ทีม Support' },
   'page.importUsers': { lo: 'ນຳເຂົ້າຜູ້ໃຊ້ຈາກໄຟລ໌', th: 'นำเข้าผู้ใช้จากไฟล์' },
   'page.newUser': { lo: 'ສ້າງຜູ້ໃຊ້ໃໝ່', th: 'สร้างผู้ใช้ใหม่' },
   'page.newArticle': { lo: 'ຂຽນບົດຄວາມໃໝ່', th: 'เขียนบทความใหม่' },

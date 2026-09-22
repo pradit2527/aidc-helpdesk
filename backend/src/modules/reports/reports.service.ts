@@ -64,7 +64,7 @@ const assignee = alias(appUser, 'assignee');
  * เรื่องยังไม่จบและยังต้องมีคนตามต่อ — ต่างจาก resolved / fulfilled ซึ่งงาน
  * ของทีมจบแล้ว เหลือแค่รอผู้แจ้งยืนยัน
  */
-const OPEN_STATUSES: readonly TicketStatus[] = [
+export const OPEN_STATUSES: readonly TicketStatus[] = [
   ...CLOCK_RUNNING_STATUSES,
   ...WAITING_STATUSES,
 ];
@@ -85,7 +85,7 @@ const RUNNING_STATUSES: readonly TicketStatus[] = CLOCK_RUNNING_STATUSES;
  * ถ้าใส่แค่ resolved คำขอบริการทุกใบจะหายไปจากตัวหาร แล้ว % ทัน SLA
  * จะกลายเป็นตัวเลขของเฉพาะเหตุขัดข้องโดยที่หัวข้อไม่ได้บอกไว้
  */
-const DONE_STATUSES: readonly TicketStatus[] = ['resolved', 'fulfilled', 'closed'];
+export const DONE_STATUSES: readonly TicketStatus[] = ['resolved', 'fulfilled', 'closed'];
 
 /**
  * เงื่อนไข "เกินกำหนดแก้ไข" ที่ใช้ทั้งในยอดรวม ทุกมิติ และคอลัมน์ในรายการ
@@ -99,7 +99,7 @@ const DONE_STATUSES: readonly TicketStatus[] = ['resolved', 'fulfilled', 'closed
  *   3. ยังเปิดอยู่ นาฬิกายังเดิน และเลยกำหนดแล้ว ณ ตอนที่เรียก
  * และต้องไม่มี sla_exclusion_code — เหตุยกเว้นตาม SLA ภาคผนวก ก.2 ไม่ถือว่าผิด SLA
  */
-const RESOLUTION_BREACHED: SQL = sql`(
+export const RESOLUTION_BREACHED: SQL = sql`(
   ${ticket.slaExclusionCode} IS NULL AND (
     ${ticket.isResolutionBreached} = true
     OR (
@@ -116,11 +116,11 @@ const RESOLUTION_BREACHED: SQL = sql`(
   )
 )`;
 
-const IS_OPEN: SQL = sql`${ticket.status} IN ${OPEN_STATUSES}`;
-const IS_DONE: SQL = sql`${ticket.status} IN ${DONE_STATUSES}`;
+export const IS_OPEN: SQL = sql`${ticket.status} IN ${OPEN_STATUSES}`;
+export const IS_DONE: SQL = sql`${ticket.status} IN ${DONE_STATUSES}`;
 
 /** นับเฉพาะแถวที่เข้าเงื่อนไข · ::int เพื่อให้ได้ number ไม่ใช่สตริงของ bigint */
-function countWhere(condition: SQL): SQL<number> {
+export function countWhere(condition: SQL): SQL<number> {
   return sql<number>`count(*) FILTER (WHERE ${condition})::int`;
 }
 
@@ -663,8 +663,10 @@ export class ReportsService {
    *
    * ⚠️ ถ้า TicketRepository.baseWhere เปลี่ยน ต้องเปลี่ยนที่นี่ด้วย
    *    รายงานที่เห็นมากกว่าหน้ารายการคือการรั่วข้อมูลข้ามบริษัทแบบหนึ่ง
+   *
+   * public เพราะรายงานตาม ISO (iso-reports.service.ts) ต้องใช้ขอบเขตชุดเดียวกันนี้
    */
-  private ticketScopeWhere(scope: AccessScope, requestedCompanyId: number | undefined): SQL {
+  ticketScopeWhere(scope: AccessScope, requestedCompanyId: number | undefined): SQL {
     const parts: SQL[] = [isNull(ticket.deletedAt) as SQL];
 
     const visible = scope.visibleCompanyIds(requestedCompanyId ? [requestedCompanyId] : null);
