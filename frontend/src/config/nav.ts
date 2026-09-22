@@ -94,6 +94,18 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     titleKey: null,
     items: [
       /*
+       * แดชบอร์ดอยู่บนสุดของเมนู — ภาพรวมคือสิ่งแรกที่เจ้าหน้าที่/ผู้บริหารต้องเห็น
+       * (พนักงานทั่วไปไม่มีเมนูนี้ จึงเริ่มที่ "แจ้งเรื่องใหม่" เหมือนเดิม)
+       */
+      {
+        href: '/dashboard',
+        labelKey: 'nav.dashboard',
+        shortKey: 'navShort.dashboard',
+        icon: Gauge,
+        roles: STAFF_AND_VIEWER,
+      },
+
+      /*
        * ── พนักงานทั่วไป: 3 เมนู ──
        *
        * ต้นแบบแยกงานของพนักงานเป็นสามอย่างชัด ๆ คือ "แจ้ง" "ติดตามที่ยังไม่ปิด"
@@ -163,13 +175,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         shortKey: 'navShort.chats',
         icon: MessagesSquare,
         roles: SETTINGS_VIEWERS,
-      },
-      {
-        href: '/dashboard',
-        labelKey: 'nav.dashboard',
-        shortKey: 'navShort.dashboard',
-        icon: Gauge,
-        roles: STAFF_AND_VIEWER,
       },
       /*
        * รายงานเรื่องแจ้งแบบกรองได้ (บริษัท / แผนก / สถานะ / รายบุคคล)

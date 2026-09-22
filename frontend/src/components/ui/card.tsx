@@ -70,12 +70,15 @@ export function StatCard({
   hint,
   tone = 'default',
   icon: Icon,
+  emphasized = false,
 }: {
   label: string;
   value: string | number;
   hint?: string | undefined;
   tone?: 'default' | 'breach' | 'risk' | 'ok' | undefined;
   icon?: React.ComponentType<{ className?: string }> | undefined;
+  /** กรอบสีตามโทน — ใช้กับตัวเลขที่ต้องดึงสายตา (เช่น เกินกำหนดที่มากกว่า 0) ไม่ใช่ทุกใบ */
+  emphasized?: boolean | undefined;
 }): React.JSX.Element {
   const toneClass = {
     default: 'text-ink',
@@ -85,7 +88,13 @@ export function StatCard({
   }[tone];
 
   return (
-    <Card className="p-4 lg:p-5">
+    <Card
+      className={cn(
+        'p-4 lg:p-5',
+        emphasized && tone === 'breach' && 'border-sla-breach',
+        emphasized && tone === 'risk' && 'border-sla-risk',
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <span className="text-body-sm text-ink-2">{label}</span>
         {Icon && <Icon className={cn('h-5 w-5 flex-none', toneClass)} />}
