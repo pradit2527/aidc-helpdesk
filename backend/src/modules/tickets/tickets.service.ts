@@ -270,6 +270,20 @@ export class TicketsService {
         seq: a.seq,
         approver_type: a.approverType,
         approver_name: a.approverName,
+        /*
+         * null = ยังหาตัวผู้อนุมัติไม่ได้ (เช่นยังไม่ได้ตั้งผู้ติดต่อ head_of_it / tier2_group)
+         * หน้าจอต้องรับค่า null ได้ — เคยทำให้หน้ารายละเอียดพังทั้งหน้า
+         */
+        approver: a.approverId === null ? null : { id: a.approverId, full_name: a.approverName ?? '' },
+        /*
+         * กติกาเดียวกับ POST /approvals/{id}/decide: ต้องเป็นผู้อนุมัติของขั้นนี้ ขั้นนี้ต้องเป็นขั้นที่เปิดอยู่
+         * (ขั้นแรกสุดที่ยังรอ) และห้ามอนุมัติคำขอของตัวเอง — endpoint ยังตรวจซ้ำเสมอ
+         */
+        can_decide:
+          a.status === 'pending' &&
+          a.approverId === scope.userId &&
+          row.requesterId !== scope.userId &&
+          a.id === approvals.find((x) => x.status === 'pending')?.id,
         status: a.status,
         comment: a.comment,
         requested_at: a.requestedAt?.toISOString() ?? null,

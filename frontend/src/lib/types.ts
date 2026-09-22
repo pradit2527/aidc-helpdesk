@@ -189,7 +189,10 @@ export interface TicketHistoryEntry {
 export interface ApprovalStep {
   id: number;
   seq: number;
-  approver: UserRef;
+  /** ตำแหน่งผู้อนุมัติ เช่น line_manager · head_of_it — ใช้แสดงเมื่อยังหาตัวคนไม่ได้ */
+  approver_type?: string;
+  /** null = ยังหาตัวผู้อนุมัติไม่ได้ (ยังไม่ได้ตั้งผู้ติดต่อของตำแหน่งนั้น) */
+  approver: UserRef | null;
   status: 'pending' | 'approved' | 'rejected' | 'skipped';
   comment: string | null;
   decided_at: string | null;

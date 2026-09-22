@@ -150,19 +150,25 @@ export class ServiceCatalogRepository {
     /*
      * หาคนของแต่ละชนิดเท่าที่หาได้
      *
-     * สองชนิดที่ระบบหาเองได้ตอนนี้
+     * สามชนิดที่ระบบหาเองได้ตอนนี้
      *   line_manager  หัวหน้าสายงานของผู้แจ้ง (app_user.manager_id)
-     *   head_of_it    ผู้รับการยกระดับที่ตั้งไว้ในทะเบียน escalation_contact
+     *   head_of_it    ผู้ที่ตั้งไว้ในทะเบียน escalation_contact ตำแหน่ง head_of_it
+     *   tier2_review  ผู้ที่ตั้งไว้ในทะเบียนเดียวกัน ตำแหน่ง tier2_group
+     *                 (เดิมคืน null เสมอ — คำขอซอฟต์แวร์นอกบัญชีจึงค้างที่ขั้นแรกตลอดไป)
      *
-     * ที่เหลือ (system_owner / budget_owner / tier2_review / cab) คืน null
+     * ที่เหลือ (system_owner / budget_owner / cab) คืน null
      * ตามที่ตารางออกแบบไว้ — "ยังหาผู้อนุมัติไม่ได้ ต้องแจ้ง company_admin ให้กำหนดคน"
      * การเดาคนให้ชนิดเหล่านี้อันตรายกว่าการปล่อยว่าง เพราะมันคือการมอบอำนาจ
-     * อนุมัติงบหรืออนุมัติสิทธิ์ให้คนที่องค์กรไม่ได้แต่งตั้ง
+     * อนุมัติงบหรืออนุมัติสิทธิ์ให้คนที่องค์กรไม่ได้แต่งตั้ง — ทะเบียน escalation_contact
+     * คือการแต่งตั้งที่ผู้ดูแลตั้งเอง จึงไม่ใช่การเดา
      */
-    const [lineManagerId, headOfItId] = await Promise.all([
+    const [lineManagerId, headOfItId, tier2Id] = await Promise.all([
       wanted.includes('line_manager') ? this.managerOf(input.requesterId) : Promise.resolve(null),
       wanted.includes('head_of_it')
         ? this.escalationContactFor(input.companyId, 'head_of_it')
+        : Promise.resolve(null),
+      wanted.includes('tier2_review')
+        ? this.escalationContactFor(input.companyId, 'tier2_group')
         : Promise.resolve(null),
     ]);
 
@@ -174,7 +180,9 @@ export class ServiceCatalogRepository {
           ? lineManagerId
           : approverType === 'head_of_it'
             ? headOfItId
-            : null,
+            : approverType === 'tier2_review'
+              ? tier2Id
+              : null,
     }));
   }
 

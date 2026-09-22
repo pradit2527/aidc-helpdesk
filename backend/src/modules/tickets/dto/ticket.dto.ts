@@ -407,6 +407,14 @@ export class TicketApprovalDto {
   @ApiProperty({ example: 1, description: 'ลำดับขั้นการอนุมัติ' }) seq!: number;
   @ApiProperty({ example: 'line_manager' }) approver_type!: string;
   @ApiPropertyOptional({ example: 'ສົມຈິດ ພົມມະຈັນ', nullable: true }) approver_name!: string | null;
+  @ApiPropertyOptional({
+    example: { id: 88, full_name: 'ສົມຈິດ ພົມມະຈັນ' },
+    nullable: true,
+    description: 'null = ຍັງຫາຜູ້ອະນຸມັດບໍ່ໄດ້ (ຍັງບໍ່ໄດ້ຕັ້ງຜູ້ຕິດຕໍ່ຂອງຕຳແໜ່ງນັ້ນ)',
+  })
+  approver!: { id: number; full_name: string } | null;
+  @ApiProperty({ example: false, description: 'ຜູ້ເອີ້ນກົດອະນຸມັດ/ປະຕິເສດຂັ້ນນີ້ໄດ້ຕອນນີ້ບໍ່' })
+  can_decide!: boolean;
   @ApiProperty({ example: 'pending' }) status!: string;
   @ApiPropertyOptional({ example: null, nullable: true }) comment!: string | null;
   @ApiPropertyOptional({ example: null, nullable: true }) requested_at!: string | null;

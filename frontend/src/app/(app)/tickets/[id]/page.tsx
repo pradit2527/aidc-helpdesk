@@ -141,7 +141,7 @@ function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Eleme
           tone="warning"
           title={
             approvalStep
-              ? `ລໍຖ້າ ${approvalStep.approver.full_name} ອະນຸມັດ`
+              ? `ລໍຖ້າ ${approverDisplayName(approvalStep)} ອະນຸມັດ`
               : 'ລໍຖ້າການອະນຸມັດ'
           }
         >
@@ -221,10 +221,11 @@ function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Eleme
 
         <div className="flex flex-col gap-4">
           <ActionPanel ticket={ticket} />
+          {/* ประวัติสถานะอยู่ถัดจากแผงดำเนินการ — เจ้าหน้าที่ต้องเห็นว่าเรื่องผ่านอะไรมาแล้วก่อนลงมือ */}
+          <HistoryPanel ticket={ticket} />
           <DetailsPanel ticket={ticket} />
           <SlaPanel ticket={ticket} />
           <RequesterTicketsPanel ticket={ticket} />
-          <HistoryPanel ticket={ticket} />
         </div>
       </div>
     </>
@@ -521,6 +522,23 @@ function currentApprovalStep(ticket: TicketDetail): ApprovalStep | null {
   return [...ticket.approvals].sort((a, b) => a.seq - b.seq).find((s) => s.status === 'pending') ?? null;
 }
 
+/** ชื่อตำแหน่งผู้อนุมัติ — ใช้เมื่อระบบยังหาตัวคนของตำแหน่งนั้นไม่ได้ */
+const APPROVER_TYPE_LABEL: Record<string, string> = {
+  line_manager: 'ຫົວໜ້າສາຍງານ',
+  system_owner: 'ເຈົ້າຂອງລະບົບ',
+  head_of_it: 'ຫົວໜ້າໄອທີ',
+  budget_owner: 'ຜູ້ຮັບຜິດຊອບງົບປະມານ',
+  tier2_review: 'ທີມ Tier 2',
+  cab: 'ຄະນະກຳມະການ CAB',
+};
+
+/** ชื่อที่แสดงของผู้อนุมัติ — ไม่มีตัวคนก็ยังต้องบอกได้ว่ารอตำแหน่งไหนอยู่ */
+function approverDisplayName(step: ApprovalStep): string {
+  if (step.approver) return step.approver.full_name;
+  const role = step.approver_type ? (APPROVER_TYPE_LABEL[step.approver_type] ?? step.approver_type) : 'ຜູ້ອະນຸມັດ';
+  return `${role} (ຍັງບໍ່ໄດ້ກຳນົດຕົວຜູ້ອະນຸມັດ)`;
+}
+
 function Approvals({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   const { user } = useSession();
   const step = currentApprovalStep(ticket);
@@ -533,7 +551,7 @@ function Approvals({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
    * ซึ่งเป็นการตัดสิน "จะวาดปุ่มไหม" เท่านั้น ไม่ใช่การให้สิทธิ์ —
    * POST /approvals/{id}/decide ตรวจซ้ำและปฏิเสธคนที่ไม่ใช่ผู้อนุมัติของขั้นนั้นอยู่แล้ว
    */
-  const canDecide = step !== null && waiting && (step.can_decide ?? step.approver.id === user.id);
+  const canDecide = step !== null && waiting && (step.can_decide ?? step.approver?.id === user.id);
 
   return (
     <div className="space-y-3">
@@ -544,9 +562,14 @@ function Approvals({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
 
       {/* ผู้ที่ไม่ใช่ผู้อนุมัติต้องรู้ว่า "รออยู่ที่ใคร" ไม่ใช่เห็นแค่ป้ายสถานะเฉย ๆ */}
       {waiting && step && !canDecide && (
-        <Alert tone="warning" title={`ລໍຖ້າ ${step.approver.full_name} ພິຈາລະນາ`}>
+        <Alert tone="warning" title={`ລໍຖ້າ ${approverDisplayName(step)} ພິຈາລະນາ`}>
           ຂັ້ນທີ {step.seq} ຈາກທັງໝົດ {ticket.approvals.length} ຂັ້ນ ·
           ທີມງານຈະເລີ່ມດຳເນີນການໄດ້ຫຼັງຜ່ານການອະນຸມັດຄົບທຸກຂັ້ນ
+          {!step.approver && (
+            <span className="mt-1 block">
+              ຂັ້ນນີ້ຍັງບໍ່ມີຕົວຜູ້ອະນຸມັດ — ຜູ້ດູແລລະບົບຕ້ອງຕັ້ງຜູ້ຕິດຕໍ່ຂອງຕຳແໜ່ງນີ້ກ່ອນ ຈຶ່ງຈະອະນຸມັດໄດ້
+            </span>
+          )}
         </Alert>
       )}
 
@@ -563,7 +586,9 @@ function Approvals({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
               {entry.seq}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-body-sm font-semibold">{entry.approver.full_name}</span>
+              <span className={cn('block text-body-sm font-semibold', !entry.approver && 'text-ink-3')}>
+                {approverDisplayName(entry)}
+              </span>
               {entry.comment && <span className="block text-caption text-ink-2">{entry.comment}</span>}
             </span>
             <span

@@ -156,6 +156,7 @@ export class TicketDetailRepository {
         requestedAt: approvalRequest.requestedAt,
         decidedAt: approvalRequest.decidedAt,
         dueAt: approvalRequest.dueAt,
+        approverId: approvalRequest.approverId,
         approverName: approver.fullName,
         deciderName: decider.fullName,
       })
