@@ -147,6 +147,13 @@ function UserDetailView({ target }: { target: AdminUser }): React.JSX.Element {
             </React.Fragment>
           ))}
 
+          {roles.includes('support_lead') && (
+            <p className="rounded border border-hair bg-subtle px-3 py-2 text-caption text-ink-2">
+              ບົດບາດຫົວໜ້າທີມໃຫ້ອຳນາດມອບໝາຍ ແຕ່ຈະມອບໝາຍໃຫ້ໃຜໄດ້ ຂຶ້ນກັບທີມທີ່ເປັນຫົວໜ້າ —
+              ຫຼັງບັນທຶກແລ້ວ ໄປທີ່ໜ້າ “ທີມງານ IT” ເພື່ອຕັ້ງເປັນຫົວໜ້າຂອງທີມ
+            </p>
+          )}
+
           {!isSuperAdmin && (
             <p className="pt-1 text-caption text-ink-3">
               ບົດບາດ “ຜູ້ດູແລລະບົບ” ມອບໄດ້ໂດຍຜູ້ດູແລລະບົບເທົ່ານັ້ນ

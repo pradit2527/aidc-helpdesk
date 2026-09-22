@@ -752,6 +752,22 @@ function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
         */}
         {can.assign && <AssignPanel ticket={ticket} />}
 
+        {/*
+          ถือบทบาทหัวหน้าทีมแต่ยังไม่ได้ถูกตั้งเป็นหัวหน้าของทีมใด — แผงมอบหมายจึงไม่ขึ้น
+          ถ้าไม่บอก จะดูเหมือนบทบาทเสีย ทั้งที่ขาดแค่การตั้งหัวหน้าที่หน้าทีมงาน
+          (ผู้ดูแลไม่ติดเงื่อนไขนี้ — มอบหมายให้ใครก็ได้ จึงไม่แสดง)
+        */}
+        {!can.assign &&
+          !nothingAvailable &&
+          user.permissions.includes('ticket.assign') &&
+          !user.permissions.includes('user.assign_role') &&
+          user.led_teams.length === 0 && (
+            <p className="rounded border border-hair bg-subtle px-3 py-2 text-caption text-ink-2">
+              ທ່ານມີບົດບາດຫົວໜ້າທີມ ແຕ່ຍັງບໍ່ໄດ້ຖືກຕັ້ງເປັນຫົວໜ້າຂອງທີມໃດ — ຂໍໃຫ້ຜູ້ດູແລຕັ້ງໃຫ້ທີ່ໜ້າ
+              “ທີມງານ IT” ຈຶ່ງຈະມອບໝາຍວຽກໃຫ້ຄົນໃນທີມໄດ້
+            </p>
+          )}
+
         {can.change_status && <StatusChanger ticket={ticket} />}
 
         {can.change_priority && (

@@ -239,7 +239,13 @@ export default function NewUserPage(): React.JSX.Element {
               htmlFor="role"
               required
               error={errors.role}
-              hint={role === 'end_user' ? 'ແຈ້ງບັນຫາ ແລະ ຕິດຕາມເລື່ອງຂອງຕົນເອງ' : 'ປັບຂອບເຂດບໍລິສັດເພີ່ມໄດ້ທີ່ໜ້າລາຍລະອຽດຜູ້ໃຊ້'}
+              hint={
+                role === 'end_user'
+                  ? 'ແຈ້ງບັນຫາ ແລະ ຕິດຕາມເລື່ອງຂອງຕົນເອງ'
+                  : role === 'support_lead'
+                    ? 'ຫຼັງສ້າງແລ້ວ ໄປທີ່ໜ້າ “ທີມງານ IT” ເພື່ອຕັ້ງເປັນຫົວໜ້າຂອງທີມ — ບໍ່ດັ່ງນັ້ນຈະມອບໝາຍວຽກໃຫ້ໃຜບໍ່ໄດ້'
+                    : 'ປັບຂອບເຂດບໍລິສັດເພີ່ມໄດ້ທີ່ໜ້າລາຍລະອຽດຜູ້ໃຊ້'
+              }
             >
               <Select value={role} onChange={(e) => setRole(e.target.value as RoleCode)} disabled={locked}>
                 {/* จัดกลุ่มตามฝั่ง: ผู้ใช้งาน / Helpdesk Support / ผู้บริหารระบบ */}
