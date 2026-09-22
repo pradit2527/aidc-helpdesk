@@ -69,6 +69,14 @@ export function readSuperworkConfig(env: NodeJS.ProcessEnv = process.env): Super
 export function describeMissing(config: SuperworkConfig): string[] {
   const missing: string[] = [];
   if (!config.apiKey) missing.push('SUPERWORK_API_KEY');
+  /*
+   * คีย์ไปอยู่ใน header X-API-Key ซึ่งรับได้แค่ ASCII ที่พิมพ์ได้ ไม่มีช่องว่าง
+   * ข้อความตัวอย่างภาษาลาว/ไทยที่ถูกวางลง .env ทั้งก้อนเคยค้างอยู่จริง —
+   * ถ้าไม่จับตรงนี้ ทุกคำขอจะล้มด้วย "Invalid character in header content" ซึ่งไม่บอกอะไรเลย
+   */
+  else if (!/^[\x21-\x7e]+$/.test(config.apiKey)) {
+    missing.push('SUPERWORK_API_KEY (ຍັງເປັນຂໍ້ຄວາມຕົວຢ່າງ ບໍ່ແມ່ນຄີຈິງ)');
+  }
   if (!config.activityId) missing.push('SUPERWORK_ACTIVITY_ID');
   if (!config.cardId) missing.push('SUPERWORK_CARD_ID');
   if (config.memberIds.length === 0) missing.push('SUPERWORK_MEMBER_IDS');
