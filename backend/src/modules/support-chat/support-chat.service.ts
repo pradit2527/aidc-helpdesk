@@ -23,6 +23,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { TicketsService, toTicketListItem } from '../tickets/tickets.service';
 import { chatFilePath, writeChatFile } from './chat-file-store';
 import { CHAT_MAX_FILE_BYTES, decodeUploadName, detectChatFile } from './chat-file-type';
+import { chatRatingState, RATING_BLOCK_MESSAGE, ratingMessage } from './chat-rating';
 import { clampSubject, renderTranscript, resolveTicketDefaults } from './chat-ticket';
 import { ChatwootSyncService } from './chatwoot-sync.service';
 import { visitorName } from './chatwoot-widget';
@@ -30,6 +31,7 @@ import {
   SUPPORT_CHAT_MAX_BODY,
   type ConvertChatToTicketDto,
   type ConvertChatToTicketResponseDto,
+  type RateChatDto,
   type SendChatMessageDto,
   type SendChatMessageResponseDto,
   type SupportChatSummaryDto,
@@ -307,6 +309,37 @@ export class SupportChatService {
     };
   }
 
+  /**
+   * ผู้ถามให้คะแนนเรื่องที่ห้องนี้ยกระดับไป (POST /support-chat/{id}/rating)
+   *
+   * คะแนนลงที่ ticket คอลัมน์เดียวกับการยืนยันปิดบนหน้าเรื่อง จึงนับเข้า KPI-4 และ KPI ทีม
+   * เหมือนเรื่องที่แจ้งผ่านฟอร์มทุกประการ แล้วลงข้อความในห้องให้ทีมไอทีเห็นคะแนนทันที
+   *
+   * ไม่ต้องตรวจว่าห้องเปิดอยู่ — ทีมไอทีมักปิดห้องไปพร้อมกับตอนแก้เรื่องเสร็จ
+   * ถ้าบังคับให้ห้องเปิด ผู้ถามส่วนใหญ่จะไม่มีโอกาสให้คะแนนเลย
+   */
+  async rate(scope: AccessScope, id: number, dto: RateChatDto): Promise<SupportChatThreadDto> {
+    const { row, side } = await this.access(scope, id);
+    if (side !== 'requester') {
+      throw new ForbiddenError('FORBIDDEN', RATING_BLOCK_MESSAGE.not_requester);
+    }
+    if (row.ticketId === null) {
+      throw new ConflictError('RATING_UNAVAILABLE', 'ແຊັດນີ້ຍັງບໍ່ໄດ້ສ້າງເປັນເລື່ອງແຈ້ງ');
+    }
+
+    await this.tickets.rateFromChat(scope, row.ticketId, dto.score);
+
+    const message = await this.chats.addMessage({
+      chatId: row.id,
+      senderId: null,
+      body: ratingMessage(dto.score),
+      isSystem: true,
+      readSide: 'requester',
+    });
+    this.publish(await this.mustFind(row.id), message, 'requester');
+    return this.thread(await this.mustFind(row.id), 'requester');
+  }
+
   /** บทสนทนาในห้องที่ถอดเป็นรายละเอียดของเรื่อง — ใช้เมื่อผู้เรียกไม่ได้เขียนมาเอง */
   private async transcriptOf(row: SupportChatRow): Promise<string> {
     const messages = await this.chats.messages(row.id);
@@ -424,11 +457,36 @@ export class SupportChatService {
   }
 
   private async thread(row: SupportChatRow, side: ChatSide): Promise<SupportChatThreadDto> {
-    const messages = await this.chats.messages(row.id);
+    const [messages, ticket] = await Promise.all([
+      this.chats.messages(row.id),
+      row.ticketId === null ? null : this.chats.ticketBrief(row.ticketId),
+    ]);
     const last = messages.at(-1);
     return {
       ...this.summary(row, side, last ? toLastMessage(row.id, last) : null),
       messages: messages.map((message) => toMessageDto(row, message)),
+      ticket: ticket
+        ? {
+            id: ticket.id,
+            ticket_no: ticket.ticketNo,
+            status: ticket.status,
+            satisfaction_score: ticket.satisfactionScore,
+            /*
+             * side 'requester' มีได้เฉพาะห้อง Helpdesk ที่ผู้เรียกเป็นเจ้าของห้อง (ดู access())
+             * และต้องเป็นผู้แจ้งของเรื่องด้วย — ห้องกับเรื่องเป็นคนเดียวกันเสมอเมื่อยกระดับ
+             * แต่เช็คซ้ำไว้ ถ้าวันหนึ่งมีคนเปลี่ยนผู้แจ้งของเรื่อง การ์ดต้องไม่ไปขึ้นผิดคน
+             */
+            can_rate:
+              side === 'requester' &&
+              chatRatingState({
+                status: ticket.status,
+                satisfactionScore: ticket.satisfactionScore,
+                closedAt: ticket.closedAt,
+                isRequester: ticket.requesterId === row.requesterId,
+                now: new Date(),
+              }).canRate,
+          }
+        : null,
     };
   }
 

@@ -111,8 +111,20 @@ export interface SupportChatSummary {
   closed_at: string | null;
 }
 
+/** เรื่องที่ห้องนี้ยกระดับไป — ห้องแชทใช้ตัดสินว่าจะขึ้นการ์ดให้คะแนนไหม */
+export interface ChatLinkedTicket {
+  id: number;
+  ticket_no: string;
+  status: string;
+  satisfaction_score: number | null;
+  /** backend ตัดสินให้แล้ว (ผู้แจ้งเท่านั้น · เรื่องเสร็จแล้ว · ยังไม่เคยให้) — หน้าจอห้ามเดาเอง */
+  can_rate: boolean;
+}
+
 export interface SupportChatThread extends SupportChatSummary {
   messages: SupportChatMessage[];
+  /** optional บนสาย — API รุ่นก่อนหน้าไม่มีช่องนี้ */
+  ticket?: ChatLinkedTicket | null;
 }
 
 export interface SendChatMessageResult {
@@ -208,6 +220,16 @@ export function appendChatMessage(
 
   qc.setQueryData<SupportChatThread | null>(chatKeys.mine(), (old) => apply(old) ?? null);
   qc.setQueryData<SupportChatThread>(chatKeys.thread(message.chat_id), (old) => apply(old) ?? undefined);
+
+  /*
+   * ข้อความระบบ = สถานะของเรื่องที่ผูกไว้เพิ่งเปลี่ยน (แก้เสร็จ ปิด ให้คะแนนแล้ว)
+   * ข้อมูลเรื่องในห้อง (ticket.can_rate) ไม่ได้มากับข้อความ จึงดึงห้องใหม่
+   * ไม่งั้นการ์ดให้คะแนนจะไม่ขึ้นจนกว่าตาข่ายกันพลาดจะดึงรอบถัดไป (สูงสุด 45 วินาที)
+   */
+  if (message.is_system) {
+    void qc.invalidateQueries({ queryKey: chatKeys.mine() });
+    void qc.invalidateQueries({ queryKey: chatKeys.thread(message.chat_id) });
+  }
 }
 
 function toFormData(input: ChatFileInput): FormData {
@@ -413,6 +435,35 @@ export function useConvertChatToTicket(chatId: number) {
       if (error instanceof ApiError && error.status === 409) {
         void qc.invalidateQueries({ queryKey: chatKeys.thread(chatId) });
         void qc.invalidateQueries({ queryKey: chatKeys.inboxAll() });
+      }
+    },
+  });
+}
+
+/**
+ * ผู้ถามให้คะแนนเรื่องที่ห้องนี้ยกระดับไป
+ *
+ * เรื่องที่รอยืนยันจะปิดไปพร้อมคะแนน — ล้าง cache ของเรื่องด้วย
+ * ไม่งั้นหน้ารายการ/หน้าประวัติยังโชว์ปุ่ม "ยืนยันปิด" ของเรื่องที่ปิดไปแล้ว
+ */
+export function useRateChat(chatId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (score: number) =>
+      api.post<SupportChatThread>(`/support-chat/${chatId}/rating`, { score }),
+    onSuccess: (thread) => {
+      qc.setQueryData<SupportChatThread | null>(chatKeys.mine(), (old) =>
+        old && old.id === thread.id ? thread : old,
+      );
+      qc.setQueryData<SupportChatThread>(chatKeys.thread(chatId), thread);
+      void qc.invalidateQueries({ queryKey: ticketKeys.all });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (error) => {
+      // 409 = ให้ไปแล้วจากอีกแท็บ หรือเรื่องขยับสถานะไปแล้ว — ดึงห้องใหม่ให้การ์ดตรงความจริง
+      if (error instanceof ApiError && error.status === 409) {
+        void qc.invalidateQueries({ queryKey: chatKeys.mine() });
+        void qc.invalidateQueries({ queryKey: chatKeys.thread(chatId) });
       }
     },
   });

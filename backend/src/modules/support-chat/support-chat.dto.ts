@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 import { IMPACT, URGENCY, type Impact, type Urgency } from '../../common/constants';
 import { SUPPORT_CHAT_ORIGIN } from '../../db/schema/support-chat';
@@ -174,9 +174,35 @@ export class SupportChatSummaryDto {
   @ApiProperty({ nullable: true, type: String }) closed_at!: string | null;
 }
 
+/** เรื่องที่ห้องนี้ยกระดับไป — พอให้ห้องแชทขึ้นการ์ดให้คะแนน */
+export class ChatLinkedTicketDto {
+  @ApiProperty({ example: 31 }) id!: number;
+  @ApiProperty({ example: 'AIDC-IT-202609-0031' }) ticket_no!: string;
+  @ApiProperty({ example: 'resolved' }) status!: string;
+  @ApiProperty({ nullable: true, type: Number, example: null, description: '1–5 · null = ยังไม่ได้ให้คะแนน' })
+  satisfaction_score!: number | null;
+  @ApiProperty({
+    description:
+      'ผู้เรียกให้คะแนนได้ตอนนี้ไหม — true เฉพาะผู้แจ้งของเรื่อง เมื่อเรื่องแก้เสร็จแล้ว ' +
+      'หรือปิดไปไม่เกิน 7 วัน และยังไม่เคยให้คะแนน',
+  })
+  can_rate!: boolean;
+}
+
 export class SupportChatThreadDto extends SupportChatSummaryDto {
   @ApiProperty({ type: [SupportChatMessageDto], description: 'เก่าไปใหม่ สูงสุด 300 ข้อความล่าสุด' })
   messages!: SupportChatMessageDto[];
+
+  @ApiProperty({ type: ChatLinkedTicketDto, nullable: true, description: 'null = ห้องนี้ยังไม่ได้ยกระดับเป็นเรื่อง' })
+  ticket!: ChatLinkedTicketDto | null;
+}
+
+export class RateChatDto {
+  @ApiProperty({ minimum: 1, maximum: 5, example: 5 })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  score!: number;
 }
 
 export class SendChatMessageResponseDto {

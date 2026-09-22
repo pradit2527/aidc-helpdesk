@@ -663,6 +663,13 @@ export class TicketRepository implements Partial<ITicketRepository> {
           ...(change.satisfactionScore !== undefined
             ? { satisfactionScore: change.satisfactionScore, csatRespondedAt: change.at }
             : {}),
+          /*
+           * เวลาที่ผู้แจ้งได้รับคำถามความพึงพอใจครั้งแรก = เรื่องแก้เสร็จ/ปิด (ครั้งแรกเท่านั้น)
+           * ตัวหารของ Response Rate ใน KPI-4 — ก่อนหน้านี้ไม่มีใครเขียนค่านี้เลย รายงานจึงว่างตลอด
+           */
+          ...(['resolved', 'fulfilled', 'closed'].includes(change.to)
+            ? { csatSentAt: sql`coalesce(${ticket.csatSentAt}, ${change.at.toISOString()}::timestamptz)` }
+            : {}),
           // บวกในฐานข้อมูล ไม่ใช่อ่านมาบวกแล้วเขียนกลับ — สองคนเปิดคืนพร้อมกันต้องได้ +2
           ...(change.reopened ? { reopenCount: sql`${ticket.reopenCount} + 1` } : {}),
           ...(change.selfAssigned ? { assigneeId: change.actorId } : {}),
@@ -917,6 +924,52 @@ export class TicketRepository implements Partial<ITicketRepository> {
     });
 
     return true;
+  }
+
+  /**
+   * เก็บคะแนนให้เรื่องที่ปิดไปแล้ว (ปิดอัตโนมัติ หรือเจ้าหน้าที่ปิด) — ไม่เปลี่ยนสถานะ
+   *
+   * เงื่อนไขอยู่ใน WHERE ไม่ใช่อ่านมาเช็คก่อน — กดสองแท็บพร้อมกันต้องได้คะแนนเดียว
+   * @returns false เมื่อมีคะแนนอยู่แล้ว หรือเรื่องไม่ได้อยู่ในสถานะปิด
+   */
+  async recordSatisfaction(input: {
+    ticketId: number;
+    companyId: number;
+    actorId: number;
+    score: number;
+    at: Date;
+  }): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const updated = await tx
+        .update(ticket)
+        .set({
+          satisfactionScore: input.score,
+          csatRespondedAt: input.at,
+          csatSentAt: sql`coalesce(${ticket.csatSentAt}, ${ticket.closedAt})`,
+          updatedAt: input.at,
+        })
+        .where(
+          and(
+            eq(ticket.id, input.ticketId),
+            eq(ticket.status, 'closed'),
+            isNull(ticket.satisfactionScore),
+            isNull(ticket.deletedAt),
+          ),
+        )
+        .returning({ id: ticket.id });
+      if (updated.length === 0) return false;
+
+      await tx.insert(auditLog).values({
+        actorId: input.actorId,
+        companyId: input.companyId,
+        action: 'ticket.rated',
+        entityType: 'ticket',
+        entityId: input.ticketId,
+        oldValue: { satisfaction_score: null },
+        newValue: { satisfaction_score: input.score, via: 'chat' },
+      });
+      return true;
+    });
   }
 
   /** ข้อมูลย่อของเรื่องที่ผูกไว้ — พอสำหรับชิปบนหน้าจอ ไม่ต้องอ่านทั้งใบ */

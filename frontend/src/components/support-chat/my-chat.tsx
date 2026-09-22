@@ -4,6 +4,7 @@ import { Headphones } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
+import { ChatRatingCard } from '@/components/support-chat/chat-rating-card';
 import { ChatThread } from '@/components/support-chat/chat-thread';
 import { ApiError } from '@/lib/api';
 import {
@@ -74,6 +75,9 @@ export function MyChat({ active, autoFocus = false }: { active: boolean; autoFoc
       sending={send.isPending || sendFile.isPending}
       autoFocus={autoFocus}
       placeholder="ພິມບັນຫາ ຫຼື ຄຳຖາມ... (Enter ເພື່ອສົ່ງ)"
+      banner={
+        thread?.ticket?.can_rate ? <ChatRatingCard chatId={thread.id} ticket={thread.ticket} /> : undefined
+      }
       composerNotice={
         thread?.status === 'closed'
           ? 'ແຊັດກ່ອນໜ້າຖືກປິດແລ້ວ — ພິມຂໍ້ຄວາມໃໝ່ເພື່ອເລີ່ມແຊັດຄັ້ງໃໝ່'

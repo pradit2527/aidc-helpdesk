@@ -19,13 +19,14 @@ import { TicketRepository, type TicketRow } from '../../db/repositories/ticket.r
 import { TicketWriteRepository } from '../../db/repositories/ticket-write.repository';
 import { SupportTeamRepository } from '../../db/repositories/support-team.repository';
 import { TicketChatNotifier } from '../support-chat/ticket-chat-notifier.service';
+import { chatRatingState, RATING_BLOCK_MESSAGE } from '../support-chat/chat-rating';
 import {
   actorMayTransition,
   allowedTransitionsFrom,
   isWithinReopenWindow,
   mayAssignToOthers,
 } from '../../domain/ticket/ticket.entity';
-import { ForbiddenError, ValidationError } from '../../common/errors/domain-error';
+import { ConflictError, ForbiddenError, ValidationError } from '../../common/errors/domain-error';
 import {
   AssignTicketDto,
   ChangePriorityDto,
@@ -390,6 +391,44 @@ export class TicketsService {
       resolutionNote: dto.resolution_note,
     });
     return ticket;
+  }
+
+  /**
+   * ผู้แจ้งให้คะแนนจากห้องแชท (ดูกฎที่ support-chat/chat-rating.ts)
+   *
+   * เรื่องที่รอยืนยัน → ไปเส้นเดียวกับปุ่ม "ยืนยันปิด" บนหน้าเรื่องทุกประการ
+   *   (ChangeTicketStatusUseCase ตรวจสิทธิ์ผู้แจ้งซ้ำ เขียนประวัติ audit และแจ้งทุกฝ่าย)
+   * เรื่องที่ปิดไปแล้ว → เก็บแค่คะแนน สถานะไม่เปลี่ยน
+   */
+  async rateFromChat(scope: AccessScope, id: number, score: number): Promise<void> {
+    const row = await this.tickets.findById(scope, id);
+    const state = chatRatingState({
+      status: row.status,
+      satisfactionScore: row.satisfactionScore,
+      closedAt: row.closedAt,
+      isRequester: row.requesterId === scope.userId,
+      now: new Date(),
+    });
+    if (!state.canRate) {
+      const reason = state.reason ?? 'not_done';
+      if (reason === 'not_requester') throw new ForbiddenError('FORBIDDEN', RATING_BLOCK_MESSAGE[reason]);
+      throw new ConflictError(reason === 'already_rated' ? 'ALREADY_RATED' : 'RATING_UNAVAILABLE', RATING_BLOCK_MESSAGE[reason]);
+    }
+
+    if (state.closesTicket) {
+      await this.changeStatus(scope, id, { to_status: 'closed', satisfaction_score: score });
+      return;
+    }
+
+    const saved = await this.tickets.recordSatisfaction({
+      ticketId: id,
+      companyId: row.companyId,
+      actorId: scope.userId,
+      score,
+      at: new Date(),
+    });
+    if (!saved) throw new ConflictError('ALREADY_RATED', RATING_BLOCK_MESSAGE.already_rated);
+    this.announce(await this.detail(scope, id), scope.userId, 'status');
   }
 
   /**

@@ -64,6 +64,7 @@ export function ChatThread({
   sending,
   composerDisabled = false,
   composerNotice,
+  banner,
   emptyState,
   autoFocus = false,
   placeholder = 'ພິມຂໍ້ຄວາມ... (Enter ເພື່ອສົ່ງ · Shift+Enter ຂຶ້ນແຖວໃໝ່)',
@@ -75,6 +76,8 @@ export function ChatThread({
   sending: boolean;
   composerDisabled?: boolean;
   composerNotice?: React.ReactNode;
+  /** การ์ดที่ติดอยู่เหนือช่องพิมพ์ ไม่เลื่อนหายไปกับข้อความ — เช่นการ์ดให้คะแนน */
+  banner?: React.ReactNode;
   emptyState?: React.ReactNode;
   autoFocus?: boolean;
   placeholder?: string;
@@ -156,6 +159,8 @@ export function ChatThread({
           </ol>
         )}
       </div>
+
+      {banner && <div className="flex-none border-t border-hair">{banner}</div>}
 
       {composerNotice && (
         <p className="flex-none border-t border-hair bg-subtle px-4 py-2 text-caption text-ink-2">{composerNotice}</p>

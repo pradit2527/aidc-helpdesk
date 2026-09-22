@@ -11,6 +11,7 @@ import {
   supportChat,
   supportChatMessage,
   supportProject,
+  ticket,
 } from '../schema';
 
 export type ChatSide = 'requester' | 'staff';
@@ -528,6 +529,33 @@ export class SupportChatRepository {
     const [row] = await this.selectChat()
       .where(eq(supportChat.ticketId, ticketId))
       .orderBy(desc(supportChat.id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * สถานะย่อของเรื่องที่ห้องผูกไว้ — พอให้ห้องแชทตัดสินว่าจะขึ้นการ์ดให้คะแนนไหม
+   * ไม่กรองขอบเขตบริษัท: ผู้เรียกผ่าน access() ของห้องมาแล้ว และไม่คืนเนื้อหาของเรื่อง
+   */
+  async ticketBrief(ticketId: number): Promise<{
+    id: number;
+    ticketNo: string;
+    status: string;
+    requesterId: number;
+    satisfactionScore: number | null;
+    closedAt: Date | null;
+  } | null> {
+    const [row] = await this.db
+      .select({
+        id: ticket.id,
+        ticketNo: ticket.ticketNo,
+        status: ticket.status,
+        requesterId: ticket.requesterId,
+        satisfactionScore: ticket.satisfactionScore,
+        closedAt: ticket.closedAt,
+      })
+      .from(ticket)
+      .where(and(eq(ticket.id, ticketId), isNull(ticket.deletedAt)))
       .limit(1);
     return row ?? null;
   }

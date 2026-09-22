@@ -33,6 +33,7 @@ import {
   ChatInboxQueryDto,
   ConvertChatToTicketDto,
   ConvertChatToTicketResponseDto,
+  RateChatDto,
   SendChatFileDto,
   SendChatMessageDto,
   SendChatMessageResponseDto,
@@ -290,6 +291,31 @@ export class SupportChatController {
     @Body() dto: ConvertChatToTicketDto,
   ): Promise<ConvertChatToTicketResponseDto> {
     return this.chats.convertToTicket(scope, id, dto);
+  }
+
+  @Post(':id/rating')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'ให้คะแนนความพึงพอใจจากห้องแชท',
+    description: [
+      'ผู้ถามเจ้าของห้องเท่านั้น และต้องเป็นผู้แจ้งของเรื่องที่ห้องนี้ยกระดับไป',
+      '',
+      '- เรื่องแก้เสร็จ/ส่งมอบแล้ว (`resolved` / `fulfilled`) → เรื่องปิดพร้อมคะแนน (เหมือนยืนยันปิดบนหน้าเรื่อง)',
+      '- เรื่องปิดแล้วไม่เกิน 7 วัน → เก็บคะแนนอย่างเดียว',
+      '',
+      'ให้ได้ครั้งเดียว · ลงข้อความระบบในห้องให้ทีมไอทีเห็นคะแนน · คืนห้องทั้งห้องที่อัปเดตแล้ว',
+    ].join('\n'),
+  })
+  @ApiBody({ type: RateChatDto })
+  @ApiResponse({ status: 200, type: SupportChatThreadDto })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'FORBIDDEN — ไม่ใช่ผู้แจ้ง' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'ALREADY_RATED · RATING_UNAVAILABLE' })
+  rate(
+    @CurrentScope() scope: AccessScope,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RateChatDto,
+  ): Promise<SupportChatThreadDto> {
+    return this.chats.rate(scope, id, dto);
   }
 
   @Post(':id/close')
