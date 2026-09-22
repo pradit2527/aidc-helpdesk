@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronRight, Eye, EyeOff, Lock, Moon, ShieldCheck, Sun, User } from 'lucide-react';
+import { Eye, EyeOff, Lock, Moon, ShieldCheck, Sun } from 'lucide-react';
 import * as React from 'react';
 
 import { landingPath } from '@/config/nav';
@@ -51,28 +51,6 @@ const STATS = [
   { value: '7', label: 'ບໍລິສັດໃນເຄືອ' },
   { value: '5,240', label: 'ຜູ້ໃຊ້ງານ' },
   { value: '99.94%', label: 'Uptime ລະບົບ Critical' },
-];
-
-/** บัญชีตัวอย่างสำหรับทดสอบสิทธิ์แต่ละระดับ — ชุดเดียวกับต้นแบบ */
-const ACCOUNTS = [
-  {
-    initials: 'ກຈ',
-    name: 'ກົມລະຊົນ ຈະເລີນວັດ',
-    mail: 'kamolchanok.j@aidc-group.com',
-    group: 'AIDC-All-Employees',
-  },
-  {
-    initials: 'ນສ',
-    name: 'ນັດທະພົນ ສຸກເກສົມ',
-    mail: 'nattapon.s@aidc-group.com',
-    group: 'AIDC-Support-Agent-HQ',
-  },
-  {
-    initials: 'ພທ',
-    name: 'ພີລະພົນ ທະນະກິດ',
-    mail: 'peerapol.t@aidc-group.com',
-    group: 'AIDC-Central-IT-Admin',
-  },
 ];
 
 export default function LoginPage(): React.JSX.Element {
@@ -417,95 +395,10 @@ export default function LoginPage(): React.JSX.Element {
             ເຂົ້າສູ່ລະບົບດ້ວຍ Active Directory (SSO)
           </button>
 
-          <details
-            className="disc mt-4"
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
-          >
-            <summary>
-              <User
-                className="h-4 w-4 flex-none"
-                style={{ color: 'var(--text-muted)' }}
-                aria-hidden="true"
-              />
-              <span>ບັນຊີທີ່ຈົດຈຳໄວ້ເທິງອຸປະກອນນີ້</span>
-              <span
-                className="tabular px-1.5 text-[11.5px] font-semibold"
-                style={{
-                  background: 'var(--bg-subtle)',
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border)',
-                  fontFamily: 'var(--font-archivo)',
-                }}
-              >
-                {ACCOUNTS.length}
-              </span>
-              <ChevronRight className="chev h-4 w-4" aria-hidden="true" />
-            </summary>
-            <ul className="flex flex-col gap-px" style={{ background: 'var(--border)' }}>
-              {ACCOUNTS.map((account) => (
-                <li key={account.mail}>
-                  <button
-                    type="button"
-                    onClick={() => setUsername(account.mail.split('@')[0] ?? '')}
-                    className="group flex min-h-tap w-full items-center gap-3.5 p-3.5 text-left transition-colors hover:brightness-95"
-                    style={{ background: 'var(--bg-surface)' }}
-                  >
-                    <span
-                      className="grid h-10 w-10 flex-none place-items-center text-[13.5px] font-bold"
-                      style={{ background: 'var(--text-primary)', color: 'var(--bg-page)' }}
-                    >
-                      {account.initials}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13.5px] font-semibold">
-                        {account.name}
-                      </span>
-                      <span
-                        className="block truncate text-[11.5px]"
-                        style={{ color: 'var(--text-muted)' }}
-                      >
-                        {account.mail}
-                      </span>
-                      <span
-                        className="eyebrow mt-1 block truncate"
-                        style={{ color: 'var(--text-muted)' }}
-                      >
-                        {account.group}
-                      </span>
-                    </span>
-                    <ChevronRight
-                      className="h-4 w-4 flex-none transition-colors"
-                      style={{ color: 'var(--text-muted)' }}
-                      aria-hidden="true"
-                    />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </details>
-
           <p className="mt-4 text-[11.5px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
             ຕ້ອງຢືນຢັນ MFA ຜ່ານແອັບຢືນຢັນຕົວຕົນພາຍໃນ 60 ວິນາທີ · ບັນຫາການເຂົ້າລະບົບ
             ເບິ່ງຄູ່ມືໃນຄັງຄວາມຮູ້ ຫຼື ຕິດຕໍ່ IT Hotline (ຮັບສາຍພາຍໃນ 3 ນາທີ ສຳລັບເຫດ P1/P2)
           </p>
-
-          {/*
-            เดิมกล่องนี้บอกให้ใช้รหัส demo1234 กับบัญชีในรายการ "บัญชีที่จดจำไว้"
-            ซึ่งใช้ได้ตอนที่หน้านี้ยังเป็นข้อมูลจำลอง
-
-            ตอนนี้ต่อฐานข้อมูลจริงแล้ว บัญชีเหล่านั้นไม่มีอยู่จริงสักบัญชี
-            การบอกรหัสที่ล็อกอินไม่ได้ทำให้ผู้ใช้ลองซ้ำจนสับสน
-            จึงบอกตรง ๆ ว่าต้องใช้บัญชีที่ผู้ดูแลสร้างให้
-          */}
-          <div className="devnote mt-4">
-            <span className="eyebrow" style={{ color: 'var(--primary-hover)' }}>
-              ຂໍ້ມູນຈິງ
-            </span>
-            <p className="mt-1">
-              ໃຊ້ບັນຊີທີ່ຜູ້ດູແລລະບົບສ້າງໃຫ້ — ລາຍຊື່ໃນ “ບັນຊີທີ່ຈົດຈຳໄວ້” ດ້ານເທິງ
-              ເປັນຕົວຢ່າງໜ້າຕາເທົ່ານັ້ນ ຍັງເຂົ້າສູ່ລະບົບບໍ່ໄດ້
-            </p>
-          </div>
 
           <div
             className="mt-7 flex items-center justify-between gap-3 pt-5"
