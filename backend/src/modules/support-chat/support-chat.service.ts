@@ -23,6 +23,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { TicketsService, toTicketListItem } from '../tickets/tickets.service';
 import { chatFilePath, writeChatFile } from './chat-file-store';
 import { CHAT_MAX_FILE_BYTES, decodeUploadName, detectChatFile } from './chat-file-type';
+import { CHAT_GREETING } from './chat-greeting';
 import { chatRatingState, RATING_BLOCK_MESSAGE, ratingMessage } from './chat-rating';
 import { clampSubject, renderTranscript, resolveTicketDefaults } from './chat-ticket';
 import { ChatwootSyncService } from './chatwoot-sync.service';
@@ -363,12 +364,44 @@ export class SupportChatService {
     body: string,
     attachment: StoredChatAttachment | null,
   ): Promise<SendChatMessageResponseDto> {
-    const chatId = await this.chats.ensureOpen(scope.homeCompanyId, scope.userId);
+    const { id: chatId, created } = await this.chats.ensureOpen(scope.homeCompanyId, scope.userId);
     const message = await this.saveMessage(
       { chatId, senderId: scope.userId, body, readSide: 'requester' },
       attachment,
     );
-    return this.publish(await this.mustFind(chatId), message, 'requester');
+    const result = this.publish(await this.mustFind(chatId), message, 'requester');
+
+    /*
+     * ห้องที่เพิ่งเปิดได้ข้อความแนะนำวิธีแจ้งเรื่องต่อท้ายทันที
+     *
+     * ต่อ "หลัง" ข้อความของผู้ถามเสมอ ไม่ใช่ตอนสร้างห้อง — ถ้าเขียนตอนสร้าง
+     * ข้อความจะไปอยู่เหนือสิ่งที่ผู้ใช้เพิ่งพิมพ์ อ่านแล้วเหมือนระบบตอบก่อนที่เขาจะถาม
+     *
+     * ล้มเหลวแล้วไม่โยนต่อ — ข้อความของผู้ใช้บันทึกไปแล้ว การทักทายพลาดหนึ่งครั้ง
+     * ไม่คุ้มกับการตอบ error ให้คนที่ส่งข้อความสำเร็จ
+     */
+    if (created) await this.greet(chatId);
+    return result;
+  }
+
+  /** ส่งข้อความแนะนำอัตโนมัติเข้าห้อง แล้วดันออกไปให้ทุกฝั่งเห็นสด */
+  private async greet(chatId: number): Promise<void> {
+    try {
+      const message = await this.chats.addMessage({
+        chatId,
+        senderId: null,
+        body: CHAT_GREETING,
+        isSystem: true,
+        quiet: true,
+      });
+      const row = await this.mustFind(chatId);
+      this.realtime.chatMessage(
+        { chatId: row.id, companyId: row.companyId, requesterId: row.requesterId },
+        toMessageDto(row, message),
+      );
+    } catch (error) {
+      this.logger.warn(`ส่งข้อความต้อนรับเข้าห้อง #${chatId} ไม่สำเร็จ: ${String(error)}`);
+    }
   }
 
   private async postToChat(

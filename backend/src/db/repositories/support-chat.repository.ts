@@ -276,20 +276,24 @@ export class SupportChatRepository {
    *
    * กดส่งสองแท็บพร้อมกันได้ — unique index บางส่วนกันห้องซ้อน แถวที่ชนจะไม่ถูกสร้าง
    * แล้วอ่านห้องที่อีกคำขอเพิ่งสร้างแทน ไม่ต้องล็อกเอง
+   *
+   * @returns id ของห้อง และบอกว่าห้องนี้เพิ่งถูกสร้างในคำขอนี้หรือไม่
+   *          ธง created มาจาก RETURNING ของ insert จึงเชื่อถือได้แม้สองแท็บชนกัน
+   *          (ฝั่งที่แพ้ได้ created = false) ผู้เรียกใช้ธงนี้ตัดสินว่าจะทักทายไหม
    */
-  async ensureOpen(companyId: number, requesterId: number): Promise<number> {
+  async ensureOpen(companyId: number, requesterId: number): Promise<{ id: number; created: boolean }> {
     const existing = await this.openIdOf(requesterId);
-    if (existing !== null) return existing;
+    if (existing !== null) return { id: existing, created: false };
 
     const [created] = await this.db
       .insert(supportChat)
       .values({ companyId, requesterId })
       .onConflictDoNothing()
       .returning({ id: supportChat.id });
-    if (created) return created.id;
+    if (created) return { id: created.id, created: true };
 
     const again = await this.openIdOf(requesterId);
-    if (again !== null) return again;
+    if (again !== null) return { id: again, created: false };
 
     /*
      * ไม่มีห้อง Helpdesk ที่เปิดอยู่ แต่แถวใหม่ถูกปฏิเสธ = ห้องจาก widget
@@ -316,11 +320,11 @@ export class SupportChatRepository {
       .values({ companyId, requesterId })
       .onConflictDoNothing()
       .returning({ id: supportChat.id });
-    if (retried) return retried.id;
+    if (retried) return { id: retried.id, created: true };
 
     const last = await this.openIdOf(requesterId);
     if (last === null) throw new Error('สร้างห้องแชทไม่สำเร็จ');
-    return last;
+    return { id: last, created: false };
   }
 
   private async openIdOf(requesterId: number): Promise<number | null> {
@@ -352,6 +356,14 @@ export class SupportChatRepository {
     chatwootMessageId?: number;
     /** ผู้เข้าชมเว็บเป็นคนพิมพ์ (ห้องจาก widget เท่านั้น) */
     fromContact?: boolean;
+    /**
+     * เขียนข้อความลงห้องโดยไม่แตะ "ข้อความล่าสุด" ของห้อง
+     *
+     * ใช้กับข้อความแนะนำอัตโนมัติเท่านั้น — ถ้าปล่อยให้ดันตามปกติ ทุกห้องที่เพิ่งเปิด
+     * จะขึ้นข้อความเดียวกันหมดในกล่องแชทของทีมไอที แทนที่จะเป็นคำถามของผู้ใช้
+     * เจ้าหน้าที่จึงกวาดตาดูรายการแล้วแยกไม่ออกว่าห้องไหนเรื่องอะไร
+     */
+    quiet?: boolean;
   }): Promise<SupportChatMessageRow> {
     const isSystem = input.isSystem ?? false;
     const fromContact = input.fromContact ?? false;
@@ -382,15 +394,20 @@ export class SupportChatRepository {
       if (!message) throw new Error('บันทึกข้อความไม่สำเร็จ');
 
       const at = message.createdAt;
-      const patch: Partial<typeof supportChat.$inferInsert> = { lastMessageAt: at };
-      /*
-       * ข้อความจาก Chatwoot มี sender_id เป็น null — last_message_by จึงเป็น null ด้วย
-       * ซึ่งฝั่งผู้ใช้อ่านว่า "อีกฝ่ายตอบล่าสุด" ถูกต้อง (ข้อความระบบไม่แตะค่านี้เลย)
-       */
-      if (!isSystem) patch.lastMessageBy = input.senderId;
+      const patch: Partial<typeof supportChat.$inferInsert> = {};
+      if (input.quiet !== true) {
+        patch.lastMessageAt = at;
+        /*
+         * ข้อความจาก Chatwoot มี sender_id เป็น null — last_message_by จึงเป็น null ด้วย
+         * ซึ่งฝั่งผู้ใช้อ่านว่า "อีกฝ่ายตอบล่าสุด" ถูกต้อง (ข้อความระบบไม่แตะค่านี้เลย)
+         */
+        if (!isSystem) patch.lastMessageBy = input.senderId;
+      }
       if (input.readSide === 'requester') patch.requesterReadAt = at;
       if (input.readSide === 'staff') patch.staffReadAt = at;
-      await tx.update(supportChat).set(patch).where(eq(supportChat.id, input.chatId));
+      if (Object.keys(patch).length > 0) {
+        await tx.update(supportChat).set(patch).where(eq(supportChat.id, input.chatId));
+      }
 
       let senderName: string | null = null;
       if (input.senderId !== null) {

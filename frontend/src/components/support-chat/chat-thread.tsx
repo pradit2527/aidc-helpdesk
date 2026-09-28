@@ -245,8 +245,62 @@ export function ChatThread({
   );
 }
 
+/**
+ * ข้อความแชทที่ลิงก์กดได้
+ *
+ * ข้อความอัตโนมัติมีลิงก์ไปหน้าแจ้งเรื่อง ถ้าปล่อยเป็นข้อความเปล่าผู้ใช้ต้องคัดลอกไปวางเอง
+ * รับเฉพาะ http/https — รูปแบบอื่น (javascript:, data:) ไม่ถูกทำเป็นลิงก์เลย
+ */
+const URL_IN_TEXT = /https?:\/\/[^\s<>"')]+/g;
+
+function ChatText({ text }: { text: string }): React.JSX.Element {
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+
+  for (const match of text.matchAll(URL_IN_TEXT)) {
+    const start = match.index ?? 0;
+    if (start > cursor) nodes.push(text.slice(cursor, start));
+    // จุด/จุลภาคท้ายประโยคไม่ใช่ส่วนหนึ่งของลิงก์ ตัดออกแล้วปล่อยเป็นข้อความธรรมดา
+    const href = match[0].replace(/[.,;:!?]+$/, '');
+    nodes.push(
+      <a
+        key={start}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="break-all underline underline-offset-2"
+      >
+        {href}
+      </a>,
+    );
+    cursor = start + href.length;
+  }
+
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return <>{nodes}</>;
+}
+
 function MessageItem({ message, own }: { message: SupportChatMessage; own: boolean }): React.JSX.Element {
   if (message.is_system) {
+    /*
+     * ข้อความระบบมีสองแบบ และต้องแสดงคนละอย่าง
+     *   บรรทัดเดียว = ป้ายบอกสถานะ ("ທີມໄອທີປິດແຊັດນີ້ແລ້ວ") วางกลางจอตัวเล็กพอ
+     *   หลายบรรทัด = ข้อความแนะนำอัตโนมัติ ถ้าบีบเป็นตัวเล็กกลางจอจะอ่านไม่ออก
+     *                และลิงก์ในนั้นก็จะกดไม่ถูก จึงใส่กรอบเป็นการ์ดชิดซ้ายแทน
+     */
+    if (/\r?\n/.test(message.body)) {
+      return (
+        <li className="w-full max-w-[85%] self-center">
+          <div className="whitespace-pre-wrap break-words rounded-lg border border-hair bg-subtle px-3.5 py-2.5 text-body-sm text-ink-2">
+            <ChatText text={message.body} />
+          </div>
+          <span className="mt-1 block text-center text-caption tabular text-ink-3">
+            {formatChatTime(message.created_at)}
+          </span>
+        </li>
+      );
+    }
+
     return (
       <li className="self-center px-3 text-center text-caption text-ink-3">
         {message.body}
@@ -271,7 +325,7 @@ function MessageItem({ message, own }: { message: SupportChatMessage; own: boole
             own ? 'bg-primary text-[color:var(--on-accent)]' : 'border border-hair bg-surface text-ink',
           )}
         >
-          {message.body}
+          <ChatText text={message.body} />
         </div>
       )}
       <span className="px-1 text-caption tabular text-ink-3">{formatChatTime(message.created_at)}</span>

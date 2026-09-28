@@ -18,6 +18,7 @@ import { readChatwootWidgetConfig } from '../../integrations/chatwoot/chatwoot-w
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { chatFilePath, writeChatFile } from './chat-file-store';
 import { CHAT_MAX_FILE_BYTES, detectChatFile } from './chat-file-type';
+import { CHAT_GREETING, shouldGreetWidget } from './chat-greeting';
 import {
   classifyMessage,
   isImportable,
@@ -323,6 +324,33 @@ export class ChatwootSyncService implements OnModuleInit, OnModuleDestroy {
     });
 
     await this.linkRequesterIfVerified(upserted.id, contact.verified, contact.email);
+
+    /*
+     * ผู้เข้าชมที่เพิ่งเปิดบทสนทนาได้ข้อความแนะนำวิธีแจ้งเรื่องเหมือนกับแชทใน Helpdesk
+     * ตัว isPushableToVisitor เป็นคนส่งออกไปให้ในรอบซิงก์ถัดไป ที่นี่แค่เขียนลงห้อง
+     */
+    if (
+      shouldGreetWidget(
+        {
+          created: upserted.created,
+          status: upserted.status,
+          lastActivityAt: conversation.last_activity_at,
+        },
+        new Date(),
+      )
+    ) {
+      const row = await this.chats.findById(upserted.id);
+      if (row) {
+        const message = await this.chats.addMessage({
+          chatId: row.id,
+          senderId: null,
+          body: CHAT_GREETING,
+          isSystem: true,
+          quiet: true,
+        });
+        this.publishToInbox(row, message);
+      }
+    }
 
     /*
      * Chatwoot ปิดบทสนทนาไปแล้วแต่ห้องเรายังเปิด — ปิดตามพร้อมข้อความระบบ
