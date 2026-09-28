@@ -39,7 +39,11 @@ import { cn } from '@/lib/cn';
 import { formatFileSize, formatMinutes } from '@/lib/format';
 import { masterKeys, useActiveCategories, useCatalogItems } from '@/lib/queries/master-data';
 import { useUsers } from '@/lib/queries/operations';
-import { useCreateTicket, useUploadAttachments, type CreateTicketInput } from '@/lib/queries/tickets';
+import {
+  useCreateTicket,
+  useUploadAttachments,
+  type CreateTicketInput,
+} from '@/lib/queries/tickets';
 import { useCan, useSession } from '@/lib/session';
 import type {
   Department,
@@ -211,7 +215,11 @@ export default function NewTicketPage(): React.JSX.Element {
 
   const categories = useActiveCategories();
   const catalogItems = useCatalogItems();
-  const departments = useOptionalMaster<Department>('departments', '/departments', canReadDepartments);
+  const departments = useOptionalMaster<Department>(
+    'departments',
+    '/departments',
+    canReadDepartments,
+  );
   const services = useOptionalMaster<ServiceRecord>('services', '/services', canReadServices);
   const slaPolicies = useOptionalMaster<SlaPolicy>('sla-policies', '/sla-policies', canReadSla);
 
@@ -244,7 +252,9 @@ export default function NewTicketPage(): React.JSX.Element {
     .filter((c) => c.parent_id === null)
     .sort((a, b) => a.sort_order - b.sort_order);
   const subcategories = typedCategories
-    .filter((c) => form.parent_category_id !== '' && String(c.parent_id) === form.parent_category_id)
+    .filter(
+      (c) => form.parent_category_id !== '' && String(c.parent_id) === form.parent_category_id,
+    )
     .sort((a, b) => a.sort_order - b.sort_order);
   // นับเฉพาะหมวดย่อยที่ประเภทนี้ใช้ได้ ไม่งั้นป้าย "3 ໝວດຍ່ອຍ" จะไม่ตรงกับที่เปิดออกมาเห็น
   const childCount = new Map<number, number>();
@@ -288,14 +298,17 @@ export default function NewTicketPage(): React.JSX.Element {
       toast.info(`ໝວດໝູ່ທີ່ເລືອກໄວ້ໃຊ້ກັບ «${TICKET_TYPE[next]}» ບໍ່ໄດ້ ກະລຸນາເລືອກໃໝ່`);
     }
   }
-  const selectedParent = parentCategories.find((c) => String(c.id) === form.parent_category_id) ?? null;
+  const selectedParent =
+    parentCategories.find((c) => String(c.id) === form.parent_category_id) ?? null;
   const selectedSub = subcategories.find((c) => String(c.id) === form.subcategory_id) ?? null;
   // หมวดที่ไม่มีหมวดย่อยเลือกเป็นปลายทางได้เอง ไม่บังคับให้เลือกช่องที่ว่างเปล่า
   const categoryId =
-    form.subcategory_id || (form.parent_category_id && subcategories.length === 0 ? form.parent_category_id : '');
+    form.subcategory_id ||
+    (form.parent_category_id && subcategories.length === 0 ? form.parent_category_id : '');
 
   const activeCatalog = forCompany(catalogItems.data ?? []).filter((item) => item.is_active);
-  const selectedCatalog = activeCatalog.find((item) => String(item.id) === form.catalog_item_id) ?? null;
+  const selectedCatalog =
+    activeCatalog.find((item) => String(item.id) === form.catalog_item_id) ?? null;
   const departmentOptions = forCompany(departments.data ?? []).filter((d) => d.is_active);
   const serviceOptions = forCompany(services.data ?? []).filter((s) => s.is_active);
   const selectedService = serviceOptions.find((s) => String(s.id) === form.service_id) ?? null;
@@ -326,7 +339,11 @@ export default function NewTicketPage(): React.JSX.Element {
   function applyCategoryDefaults(id: string): void {
     const category = allCategories.find((c) => String(c.id) === id);
     if (category) {
-      setForm((prev) => ({ ...prev, impact: category.default_impact, urgency: category.default_urgency }));
+      setForm((prev) => ({
+        ...prev,
+        impact: category.default_impact,
+        urgency: category.default_urgency,
+      }));
     }
   }
 
@@ -400,9 +417,7 @@ export default function NewTicketPage(): React.JSX.Element {
   const missing = checks.filter((c) => !c.ok);
   const done = checks.length - missing.length;
 
-  const dirty =
-    files.length > 0 ||
-    JSON.stringify(form) !== JSON.stringify(initialForm(user));
+  const dirty = files.length > 0 || JSON.stringify(form) !== JSON.stringify(initialForm(user));
 
   function resetForm(): void {
     if (dirty && !window.confirm('ລ້າງຂໍ້ມູນທີ່ກອກໄວ້ທັງໝົດບໍ?')) return;
@@ -434,7 +449,9 @@ export default function NewTicketPage(): React.JSX.Element {
       setErrors(Object.fromEntries(missing.map((c) => [c.key, c.message])));
       toast.error(`ຍັງກອກບໍ່ຄົບ ${missing.length} ຊ່ອງ`);
       // โฟกัสไปช่องแรกที่ผิด ไม่ให้ผู้ใช้ต้องไล่หาเองบนฟอร์มยาว
-      requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+      );
       return;
     }
 
@@ -492,7 +509,7 @@ export default function NewTicketPage(): React.JSX.Element {
   const typeMeta = TYPE_CARDS.find((t) => t.value === form.ticket_type);
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-[1600px]">
       <PageHeader
         title="ເປີດ Ticket ໃໝ່"
         description="ແບບຟອມແຈ້ງເຫດຂັດຂ້ອງ ແລະ ຄຳຂໍບໍລິການ — ກອກຂໍ້ມູນໃຫ້ຄົບ ລະບົບຈະຄຳນວນລະດັບຄວາມສຳຄັນ ແລະ ກຳນົດເວລາຕາມ SLA ໃຫ້ອັດຕະໂນມັດ"
@@ -511,18 +528,32 @@ export default function NewTicketPage(): React.JSX.Element {
           จอใหญ่วางสรุปเป็นคอลัมน์ขวาที่ตามเลื่อน ส่วนปุ่มส่งกลับไปอยู่ใต้ฟอร์ม
         */}
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5">
-          <div className="flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-1">
-            <div className="flex gap-3 rounded border border-hair border-l-4 border-l-primary bg-surface px-4 py-3">
-              <Info className="mt-0.5 h-5 w-5 flex-none text-primary" aria-hidden="true" />
-              <div className="text-body-sm text-ink-2">
-                <p className="font-semibold text-ink">ຂໍ້ມູນທີ່ກອກຈະຖືກບັນທຶກເປັນຫຼັກຖານຕາມລະບົບບໍລິຫານຄຸນນະພາບ</p>
-                ທຸກຊ່ອງໃນແບບຟອມນີ້ຖືກຈັດເກັບເປັນເອກະສານ (Documented Information) ຕາມ ISO/IEC 20000-1:2018 ຂໍ້ 7.5
-                ແລະ ສອບກັບໄດ້ຕາມ ISO 9001:2015 ຂໍ້ 8.5.2
-              </div>
-            </div>
+          <div className="flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-1 lg:pb-28">
+            {/*
+              ข้อความอ้างอิงมาตรฐานเป็นบรรทัดเดียว ไม่ใช่ย่อหน้าสามบรรทัด
+              เนื้อหาเท่าเดิมทุกคำ แต่ผู้กรอกอ่านผ่านครั้งเดียวแล้วไม่ต้องอ่านอีก
+              การให้มันกินพื้นที่สามบรรทัดบนสุดของทุกครั้งที่เปิดหน้า คือดันฟอร์มจริงลงไปเปล่า ๆ
+            */}
+            <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 rounded border border-l-4 border-hair border-l-primary bg-surface px-3.5 py-2 text-caption text-ink-2">
+              <Info
+                className="h-3.5 w-3.5 flex-none translate-y-0.5 text-primary"
+                aria-hidden="true"
+              />
+              <span className="font-semibold text-ink">
+                ຂໍ້ມູນທີ່ກອກຈະຖືກບັນທຶກເປັນຫຼັກຖານຕາມລະບົບບໍລິຫານຄຸນນະພາບ
+              </span>
+              <span>
+                ຈັດເກັບເປັນເອກະສານ (Documented Information) ຕາມ ISO/IEC 20000-1:2018 ຂໍ້ 7.5 ແລະ
+                ສອບກັບໄດ້ຕາມ ISO 9001:2015 ຂໍ້ 8.5.2
+              </span>
+            </p>
 
             {/* ── 1 ผู้แจ้ง ───────────────────────────────────────── */}
-            <Section step={1} title="ຂໍ້ມູນຜູ້ແຈ້ງ ແລະ ຜູ້ໄດ້ຮັບຜົນກະທົບ" hint="ດຶງຈາກບັນຊີຜູ້ໃຊ້ທີ່ເຂົ້າສູ່ລະບົບ">
+            <Section
+              step={1}
+              title="ຂໍ້ມູນຜູ້ແຈ້ງ ແລະ ຜູ້ໄດ້ຮັບຜົນກະທົບ"
+              hint="ດຶງຈາກບັນຊີຜູ້ໃຊ້ທີ່ເຂົ້າສູ່ລະບົບ"
+            >
               <div className="space-y-1.5">
                 <p className="text-label text-ink">ຜູ້ແຈ້ງເລື່ອງ (Reported by)</p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-dashed border-control bg-subtle px-3 py-2.5">
@@ -531,17 +562,23 @@ export default function NewTicketPage(): React.JSX.Element {
                   <span className="min-w-0 text-caption text-ink-2 [overflow-wrap:anywhere]">
                     {[user.email, user.username, user.job_title].filter(Boolean).join(' · ')}
                   </span>
-                  <span className="ml-auto inline-flex items-center gap-1 rounded-sm border border-primary/40 bg-primary-subtle px-2 py-0.5 text-caption font-semibold text-primary">
+                  <span className="border-primary/40 ml-auto inline-flex items-center gap-1 rounded-sm border bg-primary-subtle px-2 py-0.5 text-caption font-semibold text-primary">
                     <Lock className="h-3 w-3" aria-hidden="true" />
                     ອ່ານຢ່າງດຽວ
                   </span>
                 </div>
                 <p className="text-caption text-ink-3">
-                  ຂໍ້ມູນຜູ້ແຈ້ງຜູກກັບບັນຊີທີ່ເຂົ້າສູ່ລະບົບ ແກ້ໄຂບໍ່ໄດ້ ເພື່ອຮັກສາຄວາມຖືກຕ້ອງຂອງຫຼັກຖານ
+                  ຂໍ້ມູນຜູ້ແຈ້ງຜູກກັບບັນຊີທີ່ເຂົ້າສູ່ລະບົບ ແກ້ໄຂບໍ່ໄດ້
+                  ເພື່ອຮັກສາຄວາມຖືກຕ້ອງຂອງຫຼັກຖານ
                 </p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              {/*
+                สามคอลัมน์เมื่อจอกว้างพอ (2xl = 1536px ขึ้นไป หักแถบเมนูซ้ายแล้วเหลือราว 1,240px)
+                ต่ำกว่านั้นยังเป็นสองคอลัมน์เหมือนเดิม — ช่อง select ที่แคบกว่า 270px อ่านค่าที่เลือกไม่ออก
+                ผลคือหกช่องของหมวดนี้เหลือสองแถวแทนสามแถว
+              */}
+              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 <Field label="ບໍລິສັດໃນເຄືອ" htmlFor="company_id" required>
                   <Select
                     value={form.company_id}
@@ -570,7 +607,10 @@ export default function NewTicketPage(): React.JSX.Element {
 
                 {canReadDepartments ? (
                   <Field label="ພະແນກ / ໜ່ວຍງານ" htmlFor="department_id">
-                    <Select value={form.department_id} onChange={(e) => set('department_id', e.target.value)}>
+                    <Select
+                      value={form.department_id}
+                      onChange={(e) => set('department_id', e.target.value)}
+                    >
                       <option value="">— ເລືອກພະແນກ —</option>
                       {departmentOptions.map((d) => (
                         <option key={d.id} value={d.id}>
@@ -618,14 +658,18 @@ export default function NewTicketPage(): React.JSX.Element {
               </div>
 
               {canCreateForOther && canReadUsers && (
-                <div className="rounded border border-hair bg-subtle/60 px-3 py-3">
+                <div className="bg-subtle/60 rounded border border-hair px-3 py-3">
                   <label className="flex cursor-pointer items-start gap-3">
                     <input
                       type="checkbox"
                       role="switch"
                       checked={form.on_behalf}
                       onChange={(e) => {
-                        setForm((prev) => ({ ...prev, on_behalf: e.target.checked, requester_id: '' }));
+                        setForm((prev) => ({
+                          ...prev,
+                          on_behalf: e.target.checked,
+                          requester_id: '',
+                        }));
                         setErrors((prev) => {
                           const next = { ...prev };
                           delete next.requester_id;
@@ -635,9 +679,12 @@ export default function NewTicketPage(): React.JSX.Element {
                       className="mt-1 h-5 w-5 flex-none accent-[var(--primary)]"
                     />
                     <span>
-                      <span className="block text-body-sm font-semibold text-ink">ແຈ້ງແທນຜູ້ອື່ນ (On behalf of)</span>
+                      <span className="block text-body-sm font-semibold text-ink">
+                        ແຈ້ງແທນຜູ້ອື່ນ (On behalf of)
+                      </span>
                       <span className="block text-caption text-ink-2">
-                        ໃຊ້ເມື່ອແຈ້ງແທນເພື່ອນຮ່ວມງານທີ່ແຈ້ງເອງບໍ່ໄດ້ ລະບົບຈະບັນທຶກທັງຜູ້ແຈ້ງ ແລະ ຜູ້ໄດ້ຮັບຜົນກະທົບ
+                        ໃຊ້ເມື່ອແຈ້ງແທນເພື່ອນຮ່ວມງານທີ່ແຈ້ງເອງບໍ່ໄດ້ ລະບົບຈະບັນທຶກທັງຜູ້ແຈ້ງ ແລະ
+                        ຜູ້ໄດ້ຮັບຜົນກະທົບ
                       </span>
                     </span>
                   </label>
@@ -655,10 +702,17 @@ export default function NewTicketPage(): React.JSX.Element {
             </Section>
 
             {/* ── 2 การจำแนกและข้อมูลปัญหา ─────────────────────────── */}
-            <Section step={2} title="ການຈຳແນກປະເພດ ແລະ ຂໍ້ມູນບັນຫາ" hint="ISO/IEC 20000-1 ຂໍ້ 8.6.1 / 8.6.2 / 8.5.1">
+            <Section
+              step={2}
+              title="ການຈຳແນກປະເພດ ແລະ ຂໍ້ມູນບັນຫາ"
+              hint="ISO/IEC 20000-1 ຂໍ້ 8.6.1 / 8.6.2 / 8.5.1"
+            >
               <fieldset>
                 <legend className="mb-2 text-label text-ink">
-                  ປະເພດເລື່ອງ <span className="text-sla-breach" aria-hidden="true">*</span>
+                  ປະເພດເລື່ອງ{' '}
+                  <span className="text-sla-breach" aria-hidden="true">
+                    *
+                  </span>
                 </legend>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {TYPE_CARDS.map((card) => {
@@ -671,7 +725,7 @@ export default function NewTicketPage(): React.JSX.Element {
                           'flex cursor-pointer flex-col gap-2 rounded border px-3.5 py-3 transition-colors',
                           checked
                             ? 'border-primary bg-primary-subtle ring-1 ring-primary'
-                            : 'border-control bg-surface hover:border-primary/60',
+                            : 'hover:border-primary/60 border-control bg-surface',
                         )}
                       >
                         <span className="flex items-center gap-2">
@@ -684,7 +738,9 @@ export default function NewTicketPage(): React.JSX.Element {
                             className="h-4 w-4 flex-none accent-[var(--primary)]"
                           />
                           <Icon className="h-4 w-4 flex-none text-ink-2" aria-hidden="true" />
-                          <span className="text-body-sm font-semibold text-ink">{card.english}</span>
+                          <span className="text-body-sm font-semibold text-ink">
+                            {card.english}
+                          </span>
                           <span className="ml-auto rounded-sm border border-hair bg-surface px-1.5 text-caption font-semibold text-ink-2">
                             {card.code}
                           </span>
@@ -692,14 +748,16 @@ export default function NewTicketPage(): React.JSX.Element {
                         <span className="text-caption text-ink-2">
                           <b className="text-ink">{TICKET_TYPE[card.value]}</b> — {card.description}
                         </span>
-                        <span className="border-t border-hair pt-2 text-caption text-ink-3">› {card.consequence}</span>
+                        <span className="border-t border-hair pt-2 text-caption text-ink-3">
+                          › {card.consequence}
+                        </span>
                       </label>
                     );
                   })}
                 </div>
               </fieldset>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 {form.ticket_type === 'service_request' && (
                   <Field
                     label="ລາຍການບໍລິການທີ່ຂໍ (Service Catalogue)"
@@ -707,7 +765,7 @@ export default function NewTicketPage(): React.JSX.Element {
                     required
                     error={errors.catalog_item_id}
                     hint="ລາຍການບໍລິການມີເປົ້າໝາຍເວລາ ແລະ ຂັ້ນຕອນຂອງຕົນເອງ"
-                    className="md:col-span-2"
+                    className="md:col-span-2 2xl:col-span-3"
                   >
                     <Select
                       value={form.catalog_item_id}
@@ -718,7 +776,8 @@ export default function NewTicketPage(): React.JSX.Element {
                         if (item?.category) {
                           const cat = allCategories.find((c) => c.id === item.category?.id);
                           if (cat) {
-                            const parent = cat.parent_id === null ? String(cat.id) : String(cat.parent_id);
+                            const parent =
+                              cat.parent_id === null ? String(cat.id) : String(cat.parent_id);
                             const sub = cat.parent_id === null ? '' : String(cat.id);
                             setForm((prev) => ({
                               ...prev,
@@ -752,15 +811,20 @@ export default function NewTicketPage(): React.JSX.Element {
                 {form.ticket_type === 'service_request' && selectedCatalog?.requires_approval && (
                   <div
                     role="status"
-                    className="flex gap-3 rounded border border-st-pending-fg/30 bg-st-pending-bg px-4 py-3 md:col-span-2"
+                    className="border-st-pending-fg/30 flex gap-3 rounded border bg-st-pending-bg px-4 py-3 md:col-span-2 2xl:col-span-3"
                   >
-                    <ShieldCheck className="mt-0.5 h-5 w-5 flex-none text-st-pending-fg" aria-hidden="true" />
+                    <ShieldCheck
+                      className="mt-0.5 h-5 w-5 flex-none text-st-pending-fg"
+                      aria-hidden="true"
+                    />
                     <div className="min-w-0 text-body-sm text-st-pending-fg">
                       <p className="font-semibold">ລາຍການນີ້ຕ້ອງຜ່ານການອະນຸມັດກ່ອນ</p>
                       <p className="mt-0.5">
                         ເມື່ອກົດສົ່ງ ເລື່ອງຈະຢູ່ໃນສະຖານະ «{TICKET_STATUS.pending_approval.label}»
                         ແລະ ທີມງານຈະເລີ່ມດຳເນີນການໄດ້ຫຼັງຜູ້ອະນຸມັດພິຈາລະນາແລ້ວເທົ່ານັ້ນ
-                        {selectedCatalog.approval_chain ? ` · ສາຍອະນຸມັດ ${selectedCatalog.approval_chain}` : ''}
+                        {selectedCatalog.approval_chain
+                          ? ` · ສາຍອະນຸມັດ ${selectedCatalog.approval_chain}`
+                          : ''}
                       </p>
                       <p className="mt-0.5 text-caption">ຂະນະລໍຖ້າອະນຸມັດ ໂມງ SLA ຈະຢຸດນັບ</p>
                     </div>
@@ -784,7 +848,11 @@ export default function NewTicketPage(): React.JSX.Element {
                     value={form.parent_category_id}
                     onChange={(e) => {
                       const value = e.target.value;
-                      setForm((prev) => ({ ...prev, parent_category_id: value, subcategory_id: '' }));
+                      setForm((prev) => ({
+                        ...prev,
+                        parent_category_id: value,
+                        subcategory_id: '',
+                      }));
                       setErrors((prev) => {
                         const next = { ...prev };
                         delete next.parent_category_id;
@@ -846,13 +914,17 @@ export default function NewTicketPage(): React.JSX.Element {
                     label="ລະບົບ / ບໍລິການທີ່ກ່ຽວຂ້ອງ (Service)"
                     htmlFor="service_id"
                     hint="ອ້າງອີງທະບຽນບໍລິການກາງ ຕາມ ISO/IEC 20000-1 ຂໍ້ 8.2.4 — ລະດັບຊັ້ນບໍລິການມີຜົນຕໍ່ການຈັດລຳດັບວຽກ"
-                    className="md:col-span-2"
+                    className="md:col-span-2 2xl:col-span-1"
                   >
-                    <Select value={form.service_id} onChange={(e) => set('service_id', e.target.value)}>
+                    <Select
+                      value={form.service_id}
+                      onChange={(e) => set('service_id', e.target.value)}
+                    >
                       <option value="">— ບໍ່ລະບຸ —</option>
                       {serviceOptions.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name_th} · {SERVICE_TIER[s.service_tier as ServiceTier]?.label ?? s.service_tier}
+                          {s.name_th} ·{' '}
+                          {SERVICE_TIER[s.service_tier as ServiceTier]?.label ?? s.service_tier}
                         </option>
                       ))}
                     </Select>
@@ -865,7 +937,7 @@ export default function NewTicketPage(): React.JSX.Element {
                   required
                   error={errors.subject}
                   hint={`${form.subject.trim().length} / ${SUBJECT_MAX} ຕົວອັກສອນ (ຢ່າງໜ້ອຍ ${SUBJECT_MIN})`}
-                  className="md:col-span-2"
+                  className="md:col-span-2 2xl:col-span-2"
                 >
                   <Input
                     value={form.subject}
@@ -876,12 +948,26 @@ export default function NewTicketPage(): React.JSX.Element {
                 </Field>
 
                 <Field
+                  label="ເລກຊັບສິນ (Asset tag)"
+                  htmlFor="asset_tag"
+                  hint="ເລກທີ່ຕິດຢູ່ເຄື່ອງ ຫຼື ອຸປະກອນ — ຖ້າມີ"
+                  className="md:col-span-2 2xl:col-span-1"
+                >
+                  <Input
+                    value={form.asset_tag}
+                    maxLength={100}
+                    onChange={(e) => set('asset_tag', e.target.value)}
+                    placeholder="ເຊັ່ນ NB-HQ-0231"
+                  />
+                </Field>
+
+                <Field
                   label="ລາຍລະອຽດ (Description)"
                   htmlFor="description"
                   required
                   error={errors.description}
                   hint={`${form.description.trim().length} ຕົວອັກສອນ (ຢ່າງໜ້ອຍ ${DESCRIPTION_MIN})`}
-                  className="md:col-span-2"
+                  className="md:col-span-2 2xl:col-span-2"
                 >
                   <Textarea
                     rows={7}
@@ -897,92 +983,96 @@ export default function NewTicketPage(): React.JSX.Element {
                   />
                 </Field>
 
-                <Field
-                  label="ເລກຊັບສິນ (Asset tag)"
-                  htmlFor="asset_tag"
-                  hint="ເລກທີ່ຕິດຢູ່ເຄື່ອງ ຫຼື ອຸປະກອນ — ຖ້າມີ"
-                  className="md:col-span-2"
-                >
-                  <Input
-                    value={form.asset_tag}
-                    maxLength={100}
-                    onChange={(e) => set('asset_tag', e.target.value)}
-                    placeholder="ເຊັ່ນ NB-HQ-0231"
-                  />
-                </Field>
-              </div>
-
-              <div className="space-y-1.5">
-                <p className="text-label text-ink">ໄຟລ໌ແນບປະກອບ (Attachments)</p>
-                <label
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragging(true);
-                  }}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDragging(false);
-                    addFiles(Array.from(e.dataTransfer.files));
-                  }}
-                  className={cn(
-                    'flex min-h-[96px] cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed px-4 py-4 text-center transition-colors',
-                    dragging
-                      ? 'border-primary bg-primary-subtle'
-                      : 'border-control bg-subtle hover:border-primary',
-                  )}
-                >
-                  <Upload className="h-5 w-5 text-ink-2" aria-hidden="true" />
-                  <span className="text-body-sm font-semibold text-ink">
-                    {/* จอสัมผัสลากไฟล์มาวางไม่ได้ — บอกสิ่งที่ทำได้จริงบนเครื่องนั้น */}
-                    <span className="sm:hidden">ແຕະເພື່ອຖ່າຍຮູບ ຫຼື ເລືອກໄຟລ໌</span>
-                    <span className="hidden sm:inline">ລາກໄຟລ໌ມາວາງບ່ອນນີ້ ຫຼື ກົດເພື່ອເລືອກໄຟລ໌</span>
-                  </span>
-                  <span className="text-caption text-ink-3">ຮອງຮັບ ຮູບພາບ · PDF · Word · Excel — ບໍ່ເກີນ 20 MB ຕໍ່ໄຟລ໌</span>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-                    onChange={(e) => {
-                      addFiles(Array.from(e.target.files ?? []));
-                      e.target.value = '';
+                <div className="space-y-1.5 md:col-span-2 2xl:col-span-1">
+                  <p className="text-label text-ink">ໄຟລ໌ແນບປະກອບ (Attachments)</p>
+                  <label
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragging(true);
                     }}
-                    className="sr-only"
-                  />
-                </label>
-                {files.length > 0 && (
-                  <ul className="space-y-2 pt-1">
-                    {files.map((file, index) => (
-                      <li
-                        key={`${file.name}-${index}`}
-                        className="flex items-center justify-between gap-3 rounded border border-hair bg-surface px-3 py-2 text-body-sm"
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <Paperclip className="h-4 w-4 flex-none text-ink-3" aria-hidden="true" />
-                          <span className="truncate">{file.name}</span>
-                        </span>
-                        <span className="flex flex-none items-center gap-2">
-                          <span className="tabular text-caption text-ink-3">{formatFileSize(file.size)}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`ລົບ ${file.name}`}
-                            onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
-                          >
-                            <X className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragging(false);
+                      addFiles(Array.from(e.dataTransfer.files));
+                    }}
+                    className={cn(
+                      'flex min-h-[96px] cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed px-4 py-4 text-center transition-colors',
+                      dragging
+                        ? 'border-primary bg-primary-subtle'
+                        : 'border-control bg-subtle hover:border-primary',
+                    )}
+                  >
+                    <Upload className="h-5 w-5 text-ink-2" aria-hidden="true" />
+                    <span className="text-body-sm font-semibold text-ink">
+                      {/* จอสัมผัสลากไฟล์มาวางไม่ได้ — บอกสิ่งที่ทำได้จริงบนเครื่องนั้น */}
+                      <span className="sm:hidden">ແຕະເພື່ອຖ່າຍຮູບ ຫຼື ເລືອກໄຟລ໌</span>
+                      <span className="hidden sm:inline">
+                        ລາກໄຟລ໌ມາວາງບ່ອນນີ້ ຫຼື ກົດເພື່ອເລືອກໄຟລ໌
+                      </span>
+                    </span>
+                    <span className="text-caption text-ink-3">
+                      ຮອງຮັບ ຮູບພາບ · PDF · Word · Excel — ບໍ່ເກີນ 20 MB ຕໍ່ໄຟລ໌
+                    </span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                      onChange={(e) => {
+                        addFiles(Array.from(e.target.files ?? []));
+                        e.target.value = '';
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
+                  {files.length > 0 && (
+                    <ul className="space-y-2 pt-1">
+                      {files.map((file, index) => (
+                        <li
+                          key={`${file.name}-${index}`}
+                          className="flex items-center justify-between gap-3 rounded border border-hair bg-surface px-3 py-2 text-body-sm"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Paperclip
+                              className="h-4 w-4 flex-none text-ink-3"
+                              aria-hidden="true"
+                            />
+                            <span className="truncate">{file.name}</span>
+                          </span>
+                          <span className="flex flex-none items-center gap-2">
+                            <span className="tabular text-caption text-ink-3">
+                              {formatFileSize(file.size)}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`ລົບ ${file.name}`}
+                              onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
+                            >
+                              <X className="h-4 w-4" aria-hidden="true" />
+                            </Button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             </Section>
 
             {/* ── 3 ระดับความสำคัญ ─────────────────────────────────── */}
-            <Section step={3} title="ການປະເມີນລະດັບຄວາມສຳຄັນ" hint="Priority = Impact × Urgency ຕາມ AIDC-IT-SLA-001">
-              <div className="grid gap-4 md:grid-cols-2">
+            <Section
+              step={3}
+              title="ການປະເມີນລະດັບຄວາມສຳຄັນ"
+              hint="Priority = Impact × Urgency ຕາມ AIDC-IT-SLA-001"
+            >
+              {/*
+                ตารางเทียบระดับย้ายขึ้นมาอยู่ข้างตัวเลือก ไม่ใช่ใต้ตัวเลือก
+                ผู้กรอกต้องมองสองอย่างนี้สลับกันอยู่แล้ว (เลือกผลกระทบ → ดูว่าได้ P อะไร)
+                วางคนละแถวเท่ากับบังคับให้เลื่อนจอกลับไปกลับมาทุกครั้งที่เปลี่ยนใจ
+              */}
+              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
                 <ChoiceGroup
                   legend="ຜົນກະທົບ (Impact)"
                   name="impact"
@@ -1005,70 +1095,85 @@ export default function NewTicketPage(): React.JSX.Element {
                     detail: URGENCY_DETAIL[value] ?? '',
                   }))}
                 />
-              </div>
 
-              <div className="border-t border-hair pt-4">
-                <p className="mb-2 text-label text-ink">ຕາຕະລາງທຽບລະດັບຄວາມສຳຄັນ (Priority Matrix)</p>
-                <div className="overflow-x-auto rounded border border-hair">
-                  <table className="w-full min-w-[400px] border-collapse text-body-sm sm:min-w-[480px]">
-                    <caption className="sr-only">ຕາຕະລາງທຽບຜົນກະທົບກັບຄວາມຮີບດ່ວນເພື່ອກຳນົດລະດັບຄວາມສຳຄັນ</caption>
-                    <thead>
-                      <tr className="bg-subtle text-left text-caption text-ink-2">
-                        <th scope="col" className="px-3 py-2 font-semibold">
-                          ຜົນກະທົບ \ ຄວາມຮີບດ່ວນ
-                        </th>
-                        {URGENCY_ORDER.map((u) => (
-                          <th key={u} scope="col" className="px-3 py-2 text-center font-semibold">
-                            {URGENCY_OPTIONS.find((o) => o.value === u)?.label}
+                <div className="border-t border-hair pt-4 md:col-span-2 2xl:col-span-1 2xl:border-l 2xl:border-t-0 2xl:pl-5 2xl:pt-0">
+                  <p className="mb-2 text-label text-ink">
+                    ຕາຕະລາງທຽບລະດັບຄວາມສຳຄັນ (Priority Matrix)
+                  </p>
+                  <div className="overflow-x-auto rounded border border-hair">
+                    <table className="w-full min-w-[340px] border-collapse text-body-sm">
+                      <caption className="sr-only">
+                        ຕາຕະລາງທຽບຜົນກະທົບກັບຄວາມຮີບດ່ວນເພື່ອກຳນົດລະດັບຄວາມສຳຄັນ
+                      </caption>
+                      <thead>
+                        <tr className="bg-subtle text-left text-caption text-ink-2">
+                          <th scope="col" className="px-3 py-2 font-semibold">
+                            ຜົນກະທົບ \ ຄວາມຮີບດ່ວນ
                           </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {IMPACT_ORDER.map((i) => (
-                        <tr key={i} className="border-t border-hair">
-                          <th scope="row" className="px-3 py-2 text-left font-normal text-ink-2">
-                            {IMPACT_OPTIONS.find((o) => o.value === i)?.label}
-                          </th>
-                          {URGENCY_ORDER.map((u) => {
-                            const cell = PRIORITY_MATRIX[i]?.[u];
-                            const on = form.impact === i && form.urgency === u;
-                            return (
-                              <td key={u} className="px-2 py-1.5 text-center">
-                                <span
-                                  aria-current={on || undefined}
-                                  className={cn(
-                                    'inline-flex min-w-[52px] justify-center rounded-sm px-2 py-1 font-semibold',
-                                    on && cell ? cn(PRIORITY[cell].className, 'ring-2 ring-primary') : 'text-ink-3',
-                                  )}
-                                >
-                                  {cell}
-                                </span>
-                              </td>
-                            );
-                          })}
+                          {URGENCY_ORDER.map((u) => (
+                            <th key={u} scope="col" className="px-3 py-2 text-center font-semibold">
+                              {URGENCY_OPTIONS.find((o) => o.value === u)?.label}
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {IMPACT_ORDER.map((i) => (
+                          <tr key={i} className="border-t border-hair">
+                            <th scope="row" className="px-3 py-2 text-left font-normal text-ink-2">
+                              {IMPACT_OPTIONS.find((o) => o.value === i)?.label}
+                            </th>
+                            {URGENCY_ORDER.map((u) => {
+                              const cell = PRIORITY_MATRIX[i]?.[u];
+                              const on = form.impact === i && form.urgency === u;
+                              return (
+                                <td key={u} className="px-2 py-1.5 text-center">
+                                  <span
+                                    aria-current={on || undefined}
+                                    className={cn(
+                                      'inline-flex min-w-[52px] justify-center rounded-sm px-2 py-1 font-semibold',
+                                      on && cell
+                                        ? cn(PRIORITY[cell].className, 'ring-2 ring-primary')
+                                        : 'text-ink-3',
+                                    )}
+                                  >
+                                    {cell}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 
               {priority && (
-                <div className="rounded border border-primary/30 bg-primary-subtle px-4 py-3">
+                <div className="border-primary/30 rounded border bg-primary-subtle px-4 py-3">
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-body-sm font-semibold text-ink">ລະດັບຄວາມສຳຄັນທີ່ລະບົບຄຳນວນໄດ້:</span>
+                    <span className="text-body-sm font-semibold text-ink">
+                      ລະດັບຄວາມສຳຄັນທີ່ລະບົບຄຳນວນໄດ້:
+                    </span>
                     <PriorityBadge priority={priority} />
                   </div>
                   {target && (
                     <dl className="mt-3 grid gap-x-4 gap-y-2 sm:grid-cols-3">
-                      <Stat label="ເວລາຕອບຮັບ" value={formatTarget(target.response_minutes, target.clock_mode)} />
-                      <Stat label="ເວລາແກ້ໄຂ" value={formatTarget(target.resolution_minutes, target.clock_mode)} />
+                      <Stat
+                        label="ເວລາຕອບຮັບ"
+                        value={formatTarget(target.response_minutes, target.clock_mode)}
+                      />
+                      <Stat
+                        label="ເວລາແກ້ໄຂ"
+                        value={formatTarget(target.resolution_minutes, target.clock_mode)}
+                      />
                       <Stat label="ການນັບເວລາ" value={clockLabel(target.clock_mode)} />
                     </dl>
                   )}
                   <p className="mt-2 text-caption text-ink-2">
-                    ຄຳນວນຈາກ ຜົນກະທົບ × ຄວາມຮີບດ່ວນ ຕາມຕາຕະລາງຂ້າງເທິງ — ແກ້ເອງບໍ່ໄດ້ ຄ່າຈິງລະບົບຈະຢືນຢັນຕອນບັນທຶກ
+                    ຄຳນວນຈາກ ຜົນກະທົບ × ຄວາມຮີບດ່ວນ ຕາມຕາຕະລາງຂ້າງເທິງ — ແກ້ເອງບໍ່ໄດ້
+                    ຄ່າຈິງລະບົບຈະຢືນຢັນຕອນບັນທຶກ
                   </p>
                 </div>
               )}
@@ -1081,7 +1186,7 @@ export default function NewTicketPage(): React.JSX.Element {
             top ต้องพ้นแถบหัวที่ติดบน (72px) และจำกัดความสูงไว้ ไม่งั้นส่วนล่างของแผงเลื่อนไปไม่ถึง
           */}
           <aside
-            className="grid min-w-0 items-start gap-4 md:grid-cols-2 lg:sticky lg:top-[88px] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:flex lg:max-h-[calc(100vh-104px)] lg:flex-col lg:overflow-y-auto"
+            className="grid min-w-0 items-start gap-4 md:grid-cols-2 lg:sticky lg:top-[88px] lg:col-start-2 lg:row-start-1 lg:flex lg:max-h-[calc(100vh-104px)] lg:flex-col lg:overflow-y-auto"
             aria-label="ຂໍ້ມູນທີ່ລະບົບບັນທຶກອັດຕະໂນມັດ"
           >
             <Section step={4} title="ລະບົບບັນທຶກອັດຕະໂນມັດ">
@@ -1101,7 +1206,10 @@ export default function NewTicketPage(): React.JSX.Element {
                   aria-label="ຄວາມຄົບຖ້ວນຂອງຂໍ້ມູນ"
                 >
                   <div
-                    className={cn('h-full rounded-full transition-all', missing.length === 0 ? 'bg-sla-ok' : 'bg-primary')}
+                    className={cn(
+                      'h-full rounded-full transition-all',
+                      missing.length === 0 ? 'bg-sla-ok' : 'bg-primary',
+                    )}
                     style={{ width: `${(done / checks.length) * 100}%` }}
                   />
                 </div>
@@ -1129,7 +1237,9 @@ export default function NewTicketPage(): React.JSX.Element {
                     <>
                       {selectedParent.name_th}
                       {selectedSub && (
-                        <span className="block text-caption text-ink-2">› {selectedSub.name_th}</span>
+                        <span className="block text-caption text-ink-2">
+                          › {selectedSub.name_th}
+                        </span>
                       )}
                     </>
                   ) : (
@@ -1146,15 +1256,23 @@ export default function NewTicketPage(): React.JSX.Element {
                 </DefRow>
                 {target && (
                   <>
-                    <DefRow label="ກຳນົດຕອບຮັບ">{formatTarget(target.response_minutes, target.clock_mode)}</DefRow>
-                    <DefRow label="ກຳນົດແກ້ໄຂ">{formatTarget(target.resolution_minutes, target.clock_mode)}</DefRow>
+                    <DefRow label="ກຳນົດຕອບຮັບ">
+                      {formatTarget(target.response_minutes, target.clock_mode)}
+                    </DefRow>
+                    <DefRow label="ກຳນົດແກ້ໄຂ">
+                      {formatTarget(target.resolution_minutes, target.clock_mode)}
+                    </DefRow>
                   </>
                 )}
                 <DefRow label="ຊ່ອງທາງຮັບແຈ້ງ">ລະບົບອອນລາຍ</DefRow>
                 <DefRow label="ຜູ້ບັນທຶກ">{user.full_name}</DefRow>
-                <DefRow label="ຜູ້ໄດ້ຮັບຜົນກະທົບ">{form.on_behalf ? 'ແຈ້ງແທນຜູ້ອື່ນ' : 'ຜູ້ແຈ້ງເອງ'}</DefRow>
+                <DefRow label="ຜູ້ໄດ້ຮັບຜົນກະທົບ">
+                  {form.on_behalf ? 'ແຈ້ງແທນຜູ້ອື່ນ' : 'ຜູ້ແຈ້ງເອງ'}
+                </DefRow>
                 <DefRow label="ບໍລິການທີ່ຜູກ">
-                  {selectedService?.name_th ?? selectedCatalog?.name_th ?? <span className="text-ink-3">—</span>}
+                  {selectedService?.name_th ?? selectedCatalog?.name_th ?? (
+                    <span className="text-ink-3">—</span>
+                  )}
                 </DefRow>
                 <DefRow label="ໄຟລ໌ແນບ">{files.length > 0 ? `${files.length} ໄຟລ໌` : '—'}</DefRow>
               </dl>
@@ -1163,7 +1281,9 @@ export default function NewTicketPage(): React.JSX.Element {
             {policy && policy.targets.length > 0 && (
               <Card>
                 <CardHeader className="justify-start">
-                  <CardTitle className="text-body font-semibold">ຂໍ້ຕົກລົງລະດັບບໍລິການທີ່ບັງຄັບໃຊ້</CardTitle>
+                  <CardTitle className="text-body font-semibold">
+                    ຂໍ້ຕົກລົງລະດັບບໍລິການທີ່ບັງຄັບໃຊ້
+                  </CardTitle>
                 </CardHeader>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-body-sm">
@@ -1186,7 +1306,10 @@ export default function NewTicketPage(): React.JSX.Element {
                         .map((t) => (
                           <tr
                             key={t.priority}
-                            className={cn('border-t border-hair', t.priority === priority && 'bg-primary-subtle')}
+                            className={cn(
+                              'border-t border-hair',
+                              t.priority === priority && 'bg-primary-subtle',
+                            )}
                           >
                             <td className="px-4 py-2 font-semibold">{t.priority}</td>
                             <td className="whitespace-nowrap px-2 py-2">
@@ -1201,13 +1324,22 @@ export default function NewTicketPage(): React.JSX.Element {
                   </table>
                 </div>
                 <p className="border-t border-hair px-4 py-2 text-caption text-ink-3">
-                  ອ້າງອີງ {policy.doc_ref} v{policy.doc_version} · P1 ນັບຕໍ່ເນື່ອງ 24×7 · P2–P4 ນັບສະເພາະເວລາເຮັດວຽກ
+                  ອ້າງອີງ {policy.doc_ref} v{policy.doc_version} · P1 ນັບຕໍ່ເນື່ອງ 24×7 · P2–P4
+                  ນັບສະເພາະເວລາເຮັດວຽກ
                 </p>
               </Card>
             )}
           </aside>
 
-          <Card className="min-w-0 lg:col-start-1 lg:row-start-2">
+          {/*
+            แถบปุ่มส่งลอยติดขอบล่างของจอตลอดเวลาที่ยังอยู่ในฟอร์ม (จอ lg ขึ้นไป)
+            วางซ้อนในช่องกริดเดียวกับคอลัมน์ฟอร์มด้วย self-end — sticky ต้องมีพื้นที่ในกล่องแม่
+            ถึงจะเลื่อนตามได้ ถ้าอยู่ในแถวของตัวเองที่สูงเท่าตัวมันเอง จะไม่มีที่ให้ติด
+            คอลัมน์ฟอร์มจึงเว้น pb-24 ไว้ ไม่ให้แถบทับเนื้อหาบรรทัดสุดท้าย
+
+            ลำดับใน DOM ไม่เปลี่ยน — มือถือยังเป็น ฟอร์ม → สรุป → ปุ่มส่ง ตามเดิม
+          */}
+          <Card className="min-w-0 lg:sticky lg:bottom-4 lg:z-20 lg:col-start-1 lg:row-start-1 lg:self-end lg:shadow-sticky">
             <CardBody className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               {/* ข้อความปุ่มภาษาลาวยาว — มือถือให้ปุ่มเต็มกว้างและตัดบรรทัดได้ ไม่ดันจอให้เลื่อนข้าง */}
               <Button
@@ -1219,11 +1351,18 @@ export default function NewTicketPage(): React.JSX.Element {
                 <Send className="h-4 w-4 flex-none" aria-hidden="true" />
                 ສົ່ງເລື່ອງ ແລະ ບັນທຶກເປັນຫຼັກຖານ
               </Button>
-              <Button type="button" variant="secondary" size="lg" onClick={resetForm} className="w-full sm:w-auto">
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                onClick={resetForm}
+                className="w-full sm:w-auto"
+              >
                 ລ້າງແບບຟອມ
               </Button>
               <span className="text-caption text-ink-3 sm:min-w-[220px] sm:flex-1">
-                ເມື່ອກົດສົ່ງ ລະບົບຈະອອກເລກທີເລື່ອງ ເລີ່ມນັບເວລາ SLA ແລະ ບັນທຶກລາຍການທຳອິດໃນ audit trail ທັນທີ
+                ເມື່ອກົດສົ່ງ ລະບົບຈະອອກເລກທີເລື່ອງ ເລີ່ມນັບເວລາ SLA ແລະ ບັນທຶກລາຍການທຳອິດໃນ audit
+                trail ທັນທີ
               </span>
             </CardBody>
           </Card>
@@ -1255,7 +1394,11 @@ function Section({
         </span>
         <CardTitle className="text-body font-semibold">{title}</CardTitle>
         {/* มือถือขึ้นบรรทัดใหม่ใต้ชื่อหมวดแทนการซ่อน — ข้ออ้างอิงมาตรฐานยังต้องเห็นได้ทุกจอ */}
-        {hint && <span className="basis-full text-caption text-ink-3 md:ml-auto md:basis-auto">{hint}</span>}
+        {hint && (
+          <span className="basis-full text-caption text-ink-3 md:ml-auto md:basis-auto">
+            {hint}
+          </span>
+        )}
       </CardHeader>
       <CardBody className="space-y-4">{children}</CardBody>
     </Card>
@@ -1278,7 +1421,10 @@ function ChoiceGroup({
   return (
     <fieldset>
       <legend className="mb-2 text-label text-ink">
-        {legend} <span className="text-sla-breach" aria-hidden="true">*</span>
+        {legend}{' '}
+        <span className="text-sla-breach" aria-hidden="true">
+          *
+        </span>
       </legend>
       <div className="flex flex-col gap-2">
         {options.map((option) => {
@@ -1288,7 +1434,9 @@ function ChoiceGroup({
               key={option.value}
               className={cn(
                 'flex cursor-pointer items-start gap-3 rounded border px-3 py-2.5 transition-colors',
-                checked ? 'border-primary bg-primary-subtle' : 'border-control bg-surface hover:border-primary/60',
+                checked
+                  ? 'border-primary bg-primary-subtle'
+                  : 'hover:border-primary/60 border-control bg-surface',
               )}
             >
               <input
@@ -1340,7 +1488,12 @@ function OnBehalfPicker({
           placeholder="ພິມຊື່ ຫຼື ຊື່ຜູ້ໃຊ້"
         />
       </Field>
-      <Field label="ຜູ້ໄດ້ຮັບຜົນກະທົບ (Affected user)" htmlFor="requester_id" required error={error}>
+      <Field
+        label="ຜູ້ໄດ້ຮັບຜົນກະທົບ (Affected user)"
+        htmlFor="requester_id"
+        required
+        error={error}
+      >
         <Select value={value} onChange={(e) => onChange(e.target.value)}>
           <option value="">{users.isLoading ? 'ກຳລັງໂຫຼດ…' : '— ເລືອກຜູ້ໃຊ້ —'}</option>
           {rows.map((u) => (
@@ -1364,7 +1517,10 @@ function Stat({ label, value }: { label: string; value: string }): React.JSX.Ele
 }
 
 function formatTarget(minutes: number, clockMode: string): string {
-  return formatMinutes(minutes, clockMode === 'calendar_24x7' ? 'calendar_minutes' : 'business_minutes');
+  return formatMinutes(
+    minutes,
+    clockMode === 'calendar_24x7' ? 'calendar_minutes' : 'business_minutes',
+  );
 }
 
 function clockLabel(clockMode: string): string {
