@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import { Archivo, Noto_Sans_Lao, Noto_Sans_Thai } from 'next/font/google';
+import { Noto_Sans_Lao, Noto_Sans_Thai } from 'next/font/google';
 
 import { THEME_INIT_SCRIPT } from '@/lib/preferences';
 import { Providers } from './providers';
@@ -23,12 +23,6 @@ const notoSansLao = Noto_Sans_Lao({
 });
 
 /**
- * ฟอนต์หัวเรื่องและตัวเลข ตามต้นแบบ (prototype ใช้ Archivo)
- *
- * ใช้เฉพาะข้อความละตินและตัวเลข — Archivo ไม่มีอักษรลาว
- * ข้อความลาวจึงตกไปที่ Noto Sans Lao ตามลำดับ fallback เสมอ
- */
-/**
  * ฟอนต์ไทยสำหรับผู้ใช้ที่สลับภาษาเป็นไทย
  *
  * ต้องโหลดคู่กับฟอนต์ลาวเสมอ ไม่ใช่โหลดตามภาษาที่เลือก เพราะสองภาษานี้
@@ -40,13 +34,6 @@ const notoSansThai = Noto_Sans_Thai({
   weight: ['400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-noto-thai',
-});
-
-const archivo = Archivo({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
-  display: 'swap',
-  variable: '--font-archivo',
 });
 
 export const metadata: Metadata = {
@@ -78,7 +65,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html
       lang="lo"
-      className={`${notoSansLao.variable} ${notoSansThai.variable} ${archivo.variable}`}
+      className={`${notoSansLao.variable} ${notoSansThai.variable}`}
       /*
        * จำเป็นต้องมี — ไม่ใช่การกลบปัญหา
        *

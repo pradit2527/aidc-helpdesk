@@ -596,7 +596,7 @@
   }
 
   .eyebrow {
-    font-family: var(--font-archivo), system-ui, sans-serif;
+    font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
     font-size: 10.5px;
     font-weight: 600;
     line-height: 1.45;
@@ -618,16 +618,16 @@
    * ถ้าปล่อยไว้ตัว & จะเด่นกว่าตัวอักษรรอบข้างจนสะดุดตา
    */
   .amp {
-    font-family: var(--font-noto-lao), system-ui, sans-serif;
+    font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
     font-weight: 600;
     font-size: 0.92em;
     padding-inline: 0.05em;
     letter-spacing: 0;
   }
 
-  /* หัวเรื่องแผงแบรนด์ — ละตินล้วน จึงใช้ Archivo ได้เต็มที่ */
+  /* หัวเรื่องแผงแบรนด์ — ละตินล้วน แต่ใช้ฟอนต์เดียวกับทั้งระบบ ไม่แยกฟอนต์หัวเรื่องอีกแล้ว */
   .display-xl {
-    font-family: var(--font-archivo), var(--font-noto-lao), system-ui, sans-serif;
+    font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
     font-size: clamp(2.15rem, 5.1vw, 3.85rem);
     font-weight: 800;
     line-height: 0.98;
@@ -636,7 +636,7 @@
   }
 
   .display-lg {
-    font-family: var(--font-noto-lao), var(--font-archivo), system-ui, sans-serif;
+    font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
     font-size: clamp(1.4rem, 2.4vw, 1.85rem);
     font-weight: 700;
     line-height: 1.25;
@@ -644,7 +644,7 @@
   }
 
   .stat-md {
-    font-family: var(--font-archivo), system-ui, sans-serif;
+    font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
     font-size: 1.55rem;
     font-weight: 800;
     line-height: 1;
@@ -691,7 +691,7 @@
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    font-family: var(--font-archivo), system-ui, sans-serif;
+    font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
     font-size: 10.5px;
     font-weight: 600;
     letter-spacing: 0.14em;
@@ -789,7 +789,7 @@
     color: var(--text-secondary);
   }
   .devnote code {
-    font-family: var(--font-archivo), ui-monospace, monospace;
+    font-family: ui-monospace, SFMono-Regular, monospace;
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--text-primary);
@@ -903,31 +903,31 @@
 
 /* ── ตัวอักษร ── */
 .font-display {
-  font-family: var(--font-archivo), var(--font-noto-lao), system-ui, sans-serif;
+  font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
 }
 .display-md {
-  font-family: var(--font-archivo), var(--font-noto-lao), system-ui, sans-serif;
+  font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
   font-weight: 700;
   font-size: 1.0625rem;
   line-height: 1.32;
   letter-spacing: -0.012em;
 }
 .display-sm {
-  font-family: var(--font-archivo), var(--font-noto-lao), system-ui, sans-serif;
+  font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
   font-weight: 700;
   font-size: var(--fs-base);
   line-height: 1.4;
   letter-spacing: -0.008em;
 }
 .stat-xl {
-  font-family: var(--font-archivo), system-ui, sans-serif;
+  font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
   font-weight: 800;
   font-size: 2.05rem;
   line-height: 0.96;
   letter-spacing: -0.032em;
 }
 .stat-lg {
-  font-family: var(--font-archivo), system-ui, sans-serif;
+  font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
   font-weight: 800;
   font-size: 1.8rem;
   line-height: 0.98;
@@ -1069,7 +1069,7 @@
   align-items: center;
   gap: 0.3rem;
   padding: 0.22rem 0.48rem;
-  font-family: var(--font-archivo), var(--font-noto-lao), system-ui, sans-serif;
+  font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.045em;
@@ -1154,7 +1154,7 @@
   z-index: 2;
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-family: var(--font-archivo), var(--font-noto-lao), system-ui, sans-serif;
+  font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -1218,7 +1218,7 @@
 }
 .navitem .nb {
   margin-left: auto;
-  font-family: var(--font-archivo), system-ui, sans-serif;
+  font-family: var(--font-noto-lao), var(--font-noto-thai), system-ui, sans-serif;
   font-size: var(--fs-fine);
   font-weight: 600;
   min-width: 22px;

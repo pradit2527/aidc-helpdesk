@@ -136,14 +136,13 @@ export default function LoginPage(): React.JSX.Element {
         <div className="flex items-center gap-3">
           <span
             className="grid h-8 w-8 flex-none place-items-center text-[15px] font-bold text-white"
-            style={{ background: '#ec3013', fontFamily: 'var(--font-archivo)' }}
+            style={{ background: '#ec3013' }}
           >
             A
           </span>
           <div className="leading-none">
             <div
               className="text-[15px] font-extrabold tracking-tight"
-              style={{ fontFamily: 'var(--font-archivo)' }}
             >
               AIDC<span style={{ color: '#ff9783' }}>/</span>SERVICE
             </div>
