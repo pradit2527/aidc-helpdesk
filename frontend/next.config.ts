@@ -1,6 +1,32 @@
+import { networkInterfaces } from 'node:os';
+
 import type { NextConfig } from 'next';
 
+/**
+ * ที่อยู่ IPv4 ของเครื่องนี้ในวงแลนทุกวง (ไม่เอา loopback)
+ *
+ * ใช้ตอน dev เพื่อให้เครื่องอื่นในออฟฟิศเปิดระบบจากเครื่องนี้ได้
+ * อ่านจากการ์ดเครือข่ายจริงตอนเริ่มเซิร์ฟเวอร์ แทนที่จะเขียน IP ไว้ในไฟล์
+ * เพราะ IP ที่ได้จาก DHCP เปลี่ยนเองเมื่อไหร่ก็ได้ แล้วค่าที่เขียนตายไว้จะค้างผิด
+ */
+function lanHosts(): string[] {
+  const found = new Set<string>();
+  for (const list of Object.values(networkInterfaces())) {
+    for (const net of list ?? []) {
+      if (net.family === 'IPv4' && !net.internal) found.add(net.address);
+    }
+  }
+  return [...found];
+}
+
 const nextConfig: NextConfig = {
+  /*
+   * Next 15 เตือน (และรุ่นถัดไปจะบล็อก) คำขอของเครื่องมือ dev ที่มาจาก origin
+   * ที่ไม่ใช่ localhost — เครื่องในวงแลนที่เปิด http://10.x.x.x:3000 เข้าข่ายนี้
+   * ไม่มีผลกับ production build
+   */
+  allowedDevOrigins: lanHosts(),
+
   // standalone = image เล็ก รันด้วย `node server.js` ไม่ต้องมี node_modules ใน image สุดท้าย
   output: 'standalone',
   reactStrictMode: true,

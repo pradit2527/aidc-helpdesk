@@ -17,7 +17,25 @@ import type { SupportChatMessage } from '@/lib/queries/support-chat';
  * คุกกี้ SameSite=Strict จึงยังถูกแนบไปด้วย — ก่อนขึ้น production (คนละโดเมนจริง)
  * ต้องทำ reverse proxy พร้อม WS upgrade หรือทบทวนนโยบายคุกกี้ใหม่
  */
-const WS_ORIGIN = process.env.NEXT_PUBLIC_WS_ORIGIN ?? 'http://localhost:8000';
+/**
+ * ที่อยู่ของ backend สำหรับ WebSocket
+ *
+ * ค่าเริ่มต้นอ้างอิง "โฮสต์ที่ผู้ใช้เปิดหน้าเว็บอยู่จริง" ไม่ใช่ localhost ตายตัว
+ * เครื่องอื่นในวงแลนที่เปิด http://10.0.4.33:3000 จะต่อ WebSocket ไปที่
+ * http://10.0.4.33:8000 ตามไปด้วย ถ้าเขียน localhost ไว้ เบราว์เซอร์ของเครื่องนั้น
+ * จะไปหา backend ในเครื่องตัวเอง ซึ่งไม่มี — ผลคือแชทกับการอัปเดตสดเงียบไปทั้งระบบ
+ * โดยที่หน้าอื่นยังใช้ได้ปกติ จึงหาสาเหตุยาก
+ *
+ * host เดียวกันคนละพอร์ตยังนับเป็น same-site คุกกี้ SameSite=Strict จึงยังแนบไปให้
+ */
+const WS_PORT = process.env.NEXT_PUBLIC_WS_PORT ?? '8000';
+
+function defaultWsOrigin(): string {
+  if (typeof window === 'undefined') return `http://localhost:${WS_PORT}`;
+  return `${window.location.protocol}//${window.location.hostname}:${WS_PORT}`;
+}
+
+const WS_ORIGIN = process.env.NEXT_PUBLIC_WS_ORIGIN ?? defaultWsOrigin();
 
 let socket: Socket | null = null;
 

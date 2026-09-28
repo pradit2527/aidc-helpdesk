@@ -73,15 +73,29 @@ export interface TicketUpdateTarget {
   kind: TicketUpdateKind;
 }
 
+/**
+ * origin ที่ยอมรับตอน dev — localhost หรือเครื่องในวงแลนเดียวกัน
+ *
+ * เขียนเป็น RegExp เพราะทั้งพอร์ตและเลข IP เปลี่ยนได้ ถ้าไล่เขียนเป็นรายการตายตัว
+ * ต้องมาแก้ทุกครั้งที่ DHCP แจก IP ใหม่ แล้วอาการที่เจอคือแชทเงียบโดยไม่มี error บนหน้าจอ
+ */
+const DEV_WS_ORIGIN =
+  /^http:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):\d+$/;
+
 @WebSocketGateway({
   // ต้องอยู่ใต้ /api/v1 เท่านั้น — คุกกี้ aidc_at ตั้ง Path=/api/v1
   // handshake ไป path อื่นจะไม่มีคุกกี้แนบมาเลย เบราว์เซอร์กรองให้เองตาม Path attribute
   path: '/api/v1/ws',
   cors: {
-    // dev: พอร์ต Next.js เปลี่ยนได้ตามพอร์ตว่าง · production ต้องตั้ง WS_CORS_ORIGIN เสมอ
+    /*
+     * dev: พอร์ต Next.js เปลี่ยนได้ตามพอร์ตว่าง และเครื่องอื่นในวงแลนเปิดด้วย IP ของเครื่องนี้
+     *      จึงรับทั้ง localhost และช่วง IP ส่วนตัวตาม RFC 1918 (10.x · 172.16–31.x · 192.168.x)
+     *      IP สาธารณะไม่เข้าเงื่อนไข — เปิดเครื่อง dev ให้อินเทอร์เน็ตต่อตรงไม่ใช่สิ่งที่ตั้งใจ
+     * production: ต้องตั้ง WS_CORS_ORIGIN เสมอ ไม่มีค่าเริ่มต้นให้
+     */
     origin:
       process.env.WS_CORS_ORIGIN ??
-      (process.env.NODE_ENV === 'production' ? false : /^http:\/\/localhost:\d+$/),
+      (process.env.NODE_ENV === 'production' ? false : DEV_WS_ORIGIN),
     credentials: true,
   },
 })
