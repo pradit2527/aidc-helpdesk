@@ -31,13 +31,26 @@ const SCOPE_MIGRATION_FILES = [
   '0010_ticket_type_workflow.sql',
   '0012_category_scope_sa_ruling.sql',
   '0013_category_sla_alignment.sql',
+  '0015_category_new_pc.sql',
 ];
 
-/** เนื้อไฟล์ดิบของ 0013 — ใช้ตรวจว่าการย้ายหมวดย่อยใน seed กับใน SQL ตรงกันทีละแถว */
+/** เนื้อไฟล์ดิบของ 0013 — ใช้ตรวจเรื่องเฉพาะของไฟล์นั้น (ย้ายหมวด ปิดหมวดเก่า ห้ามลบ) */
 const MIGRATION_0013 = readFileSync(
   join(__dirname, '../../migrations/0013_category_sla_alignment.sql'),
   'utf8',
 );
+
+/*
+ * ไฟล์ที่ประกาศ "หมวดย่อยอยู่ใต้หมวดหลักไหน" — 0013 จัดผังทั้งชุด ส่วนไฟล์หลังจากนั้น
+ * เติมทีละหมวดตามที่ธุรกิจขอมา ใช้ทุกไฟล์รวมกันตรวจ ไม่ใช่เฉพาะ 0013
+ * เพิ่มหมวดใหม่เมื่อไหร่ ให้เติมชื่อไฟล์ลงลิสต์นี้ ไม่ใช่ย้อนไปแก้ไฟล์ที่ apply ไปแล้ว
+ */
+const TREE_MIGRATION_SQL = [
+  '0013_category_sla_alignment.sql',
+  '0015_category_new_pc.sql',
+]
+  .map((file) => readFileSync(join(__dirname, '../../migrations', file), 'utf8'))
+  .join('\n');
 
 /*
  * ตัดคอมเมนต์ทิ้งก่อนแกะรายการรหัส
@@ -257,7 +270,7 @@ describe('ต้นไม้หมวดหมู่ — seed ต้องตร
     for (const sub of TICKET_SUBCATEGORIES) {
       if (UNTOUCHED_PARENTS.includes(sub.parentCode)) continue;
       // รูปแบบของแถวใน VALUES ของขั้น 4: ('หมวดหลัก', 'รหัส', ...
-      if (!MIGRATION_0013.includes(`('${sub.parentCode}', '${sub.code}',`)) {
+      if (!TREE_MIGRATION_SQL.includes(`('${sub.parentCode}', '${sub.code}',`)) {
         mismatched.push(`${sub.parentCode} → ${sub.code}`);
       }
     }

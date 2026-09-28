@@ -199,6 +199,14 @@ export const TICKET_SUBCATEGORIES: readonly TicketSubcategorySeed[] = [
   { parentCode: 'ACCESS', code: 'ACCESS_VPN', nameTh: 'ຂໍໃຊ້ງານ VPN', defaultImpact: 'individual', defaultUrgency: 'low', sortOrder: 80, ticketTypeScope: 'service_request' },
   // SR-ONBOARDING · SOP-04 แจ้งล่วงหน้า ≥ 7 วันปฏิทิน
   { parentCode: 'LIFECYCLE', code: 'LIFECYCLE_ONBOARD', nameTh: 'ຕຽມລະບົບໃຫ້ພະນັກງານໃໝ່', defaultImpact: 'individual', defaultUrgency: 'medium', sortOrder: 10, ticketTypeScope: 'service_request' },
+  /*
+   * เตรียมเครื่องคอมพิวเตอร์ของพนักงานใหม่ แยกจาก LIFECYCLE_ONBOARD ที่เป็นเรื่องบัญชีและสิทธิ์
+   *
+   * สองงานนี้คนละคนทำและคนละกำหนดเวลา — บัญชีเปิดได้ในวันเดียว แต่เครื่องต้องเบิก ลงภาพระบบ
+   * ลงซอฟต์แวร์ แล้วบันทึกเข้าทะเบียนทรัพย์สิน ถ้ารวมเป็นหมวดเดียวจะวัดไม่ได้ว่างานไหนช้า
+   * (ขั้นตอนย่อยยังอยู่ในเช็กลิสต์ ONBOARDING ข้อ 30 และ 50 เหมือนเดิม)
+   */
+  { parentCode: 'LIFECYCLE', code: 'LIFECYCLE_NEW_PC', nameTh: 'ຕຽມຄອມພິວເຕີໃຫ້ພະນັກງານໃໝ່', defaultImpact: 'individual', defaultUrgency: 'medium', sortOrder: 15, ticketTypeScope: 'service_request' },
   // SR-OFFBOARDING · SOP-05 แจ้งล่วงหน้า ≥ 3 วันทำการ ระงับสิทธิ์ภายในสิ้นวันสุดท้าย
   { parentCode: 'LIFECYCLE', code: 'LIFECYCLE_OFFBOARD', nameTh: 'ປິດສິດພະນັກງານລາອອກ', defaultImpact: 'individual', defaultUrgency: 'high', sortOrder: 20, ticketTypeScope: 'service_request' },
   // SR-SOFTWARE-INSTALL · SOP-06 อยู่ในบัญชีมาตรฐาน ติดตั้งภายใน 2 วันทำการ
