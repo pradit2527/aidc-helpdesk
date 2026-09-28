@@ -11,7 +11,7 @@ import { SupportChatRealtime } from '@/components/support-chat/chat-realtime';
 import { TicketRealtime } from '@/components/tickets/ticket-realtime';
 import { Brand } from '@/components/layout/brand';
 import { AssistantChatProvider } from '@/lib/assistant-chat';
-import { PreferenceButtons, useT } from '@/components/layout/preference-controls';
+import { PreferenceButtons, PreferenceControls, useT } from '@/components/layout/preference-controls';
 import { initials } from '@/lib/format';
 import {
   bottomNavItems,
@@ -41,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
   const t = useT();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
-  const sections = visibleSections(user.roles);
+  const sections = visibleSections(user.roles, { securityViewer: user.security_viewer === true });
   const bottom = bottomNavItems(user.roles);
   const title = t(pageTitleKey(pathname));
 
@@ -86,9 +86,13 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
               <Menu className="h-5 w-5" aria-hidden="true" />
             </button>
 
-            {/* บนมือถือ sidebar ถูกซ่อน โลโก้จึงต้องมาอยู่บนแถบบนแทน
-                มิฉะนั้นจะไม่เห็นตราสัญลักษณ์เลยตลอดการใช้งานบนมือถือ */}
-            <Brand className="lg:hidden" showWordmark={false} />
+            {/*
+              โลโก้อยู่บนแถบบนเฉพาะแท็บเล็ตขึ้นไป (sm ขึ้นไป)
+              บนจอโทรศัพท์กว้าง 375px แถบนี้มีที่ให้ชื่อหน้าแค่ 24px — วัดจริงแล้วเหลือ "ແ..."
+              ผู้ใช้จึงไม่รู้ว่าตัวเองอยู่หน้าไหนเลยตลอดการใช้งาน ซึ่งแย่กว่าการไม่เห็นโลโก้
+              (โลโก้ยังอยู่ในลิ้นชักเมนูซึ่งห่างไปแค่แตะเดียว)
+            */}
+            <Brand className="hidden sm:flex lg:hidden" showWordmark={false} />
 
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-h2">{title}</h1>
@@ -104,7 +108,8 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
 
             {/* ปุ่มสลับธีมกับภาษาอยู่มุมขวาบน เข้าถึงได้จากทุกหน้าและทุกขนาดจอ
                 เดิมอยู่ท้ายแถบเมนู ซึ่งต้องเลื่อนลงไปหา และมือถือไม่มีแถบเมนูให้เลื่อน */}
-            <PreferenceButtons />
+            {/* บนโทรศัพท์ย้ายไปอยู่ในลิ้นชักเมนู — แถบบนไม่มีที่พอให้ชื่อหน้าอ่านได้ */}
+            <PreferenceButtons className="hidden sm:flex" />
 
             <Link
               href="/notifications"
@@ -316,6 +321,16 @@ function Sidebar({
           </div>
         ))}
       </nav>
+
+      {/*
+        ธีมกับภาษาอยู่ในลิ้นชักเฉพาะจอที่มีลิ้นชัก (onClose มีค่าเฉพาะตอนเปิดเป็นลิ้นชัก)
+        จอใหญ่ยังใช้ปุ่มย่อบนแถบบนเหมือนเดิม ไม่มีสองที่ให้สับสน
+      */}
+      {onClose && (
+        <div className="side-hair flex-none border-t px-3 py-2.5">
+          <PreferenceControls tone="dark" />
+        </div>
+      )}
 
       <div className="side-hair flex-none border-t px-3 py-2">
         {/*

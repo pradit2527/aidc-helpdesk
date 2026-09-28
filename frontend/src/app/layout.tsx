@@ -49,6 +49,16 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover', // รองรับจอบากของมือถือ
+  /*
+   * สีแถบระบบของเบราว์เซอร์บนมือถือ ให้กลืนกับพื้นหลังของหน้า
+   *
+   * ถ้าไม่ตั้ง Android จะใช้สีขาว/เทาของตัวเอง ผู้ใช้โหมดมืดจึงเห็นแถบสว่าง
+   * คาดอยู่เหนือหน้าจอมืดทั้งหน้า ค่าตรงกับ --bg-page ของแต่ละธีมเป๊ะ
+   */
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f5f7fa' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0f17' },
+  ],
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
