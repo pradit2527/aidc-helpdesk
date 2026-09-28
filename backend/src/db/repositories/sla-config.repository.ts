@@ -52,10 +52,20 @@ export class SlaConfigRepository {
     const cached = this.calendarCache.get(key);
     if (cached) return cached;
 
-    const rows = await this.db
-      .select()
-      .from(businessHours)
-      .where(or(isNull(businessHours.companyId), eq(businessHours.companyId, companyId)));
+    /*
+     * เวลาทำการกับวันหยุดไม่ได้พึ่งผลของกัน ยิงพร้อมกันประหยัดไปหนึ่งรอบเครือข่าย
+     * ปฏิทินถูกแคชไว้ก็จริง แต่รอบแรกของทุกบริษัทคือตอนคำนวณ SLA ของเรื่องที่เพิ่งแจ้ง
+     */
+    const [rows, holidayRows] = await Promise.all([
+      this.db
+        .select()
+        .from(businessHours)
+        .where(or(isNull(businessHours.companyId), eq(businessHours.companyId, companyId))),
+      this.db
+        .select({ date: holiday.holidayDate })
+        .from(holiday)
+        .where(or(isNull(holiday.companyId), eq(holiday.companyId, companyId))),
+    ]);
 
     const cal = defaultCalendar();
     cal.windows.clear();
@@ -73,10 +83,6 @@ export class SlaConfigRepository {
       });
     }
 
-    const holidayRows = await this.db
-      .select({ date: holiday.holidayDate })
-      .from(holiday)
-      .where(or(isNull(holiday.companyId), eq(holiday.companyId, companyId)));
     for (const row of holidayRows) cal.holidays.add(row.date);
 
     this.calendarCache.set(key, cal);

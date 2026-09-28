@@ -520,17 +520,23 @@ export class ReportsService {
       uptime_percent: string | null;
     }[])[0];
 
-    const denominator = async (q: SQL) => (await this.scalar<number>(q)) ?? 0;
-    const closedCount = await denominator(sql`
-      SELECT count(*)::int FROM ticket t
-      WHERE t.deleted_at IS NULL AND t.sla_exclusion_code IS NULL
-        AND t.closed_at >= ${period.fromIso}::timestamptz AND t.closed_at <= ${period.toIso}::timestamptz AND ${scoped}
-    `);
-    const openCount = await denominator(sql`
-      SELECT count(*)::int FROM ticket t
-      WHERE t.deleted_at IS NULL
-        AND t.status IN ${OPEN_STATUSES} AND ${scoped}
-    `);
+    /*
+     * ตัวหารสองตัวนี้ไม่ได้พึ่งผลของกัน — ยิงคิวรีเดียวกัน ไม่ใช่รอกันคนละรอบ
+     * ทั้งคู่สแกน ticket ชุดเดียวกัน จึงรวมเป็นคิวรีเดียวด้วย FILTER
+     */
+    const [counts] = (await this.db.execute(sql`
+      SELECT
+        count(*) FILTER (
+          WHERE t.sla_exclusion_code IS NULL
+            AND t.closed_at >= ${period.fromIso}::timestamptz
+            AND t.closed_at <= ${period.toIso}::timestamptz
+        )::int AS closed_count,
+        count(*) FILTER (WHERE t.status IN ${OPEN_STATUSES})::int AS open_count
+      FROM ticket t
+      WHERE t.deleted_at IS NULL AND ${scoped}
+    `)) as unknown as { closed_count: number; open_count: number }[];
+    const closedCount = counts?.closed_count ?? 0;
+    const openCount = counts?.open_count ?? 0;
 
     const kpi1 = this.round1(compliance);
     const kpi3 = this.round1(fcr);
@@ -993,12 +999,31 @@ export class ReportsService {
     const usable = rows.filter((r) => r.clockStart !== null && r.completedAt !== null);
     if (usable.length === 0) return null;
 
+    /*
+     * โหลดปฏิทินและเป้าหมายของทุก "คู่ (บริษัท × ระดับ)" ที่ต้องใช้ให้จบในรอบเดียว
+     *
+     * เดิมถามทีละใบในลูป ใบที่พลาดแคชแต่ละใบคือการวิ่งไปฐานข้อมูลหนึ่งรอบ
+     * แบบเรียงต่อกัน รายงานที่มีร้อยใบจากห้าบริษัทจึงรอเท่ากับจำนวนใบ
+     * ทั้งที่ค่าที่ต้องใช้จริงมีแค่ห้าชุด — จำนวนคิวรีตอนนี้ผูกกับจำนวนคู่ ไม่ใช่จำนวนใบ
+     */
+    const pairs = new Map<string, { companyId: number; priority: string }>();
+    for (const row of usable) {
+      pairs.set(`${row.companyId}:${row.priority}`, { companyId: row.companyId, priority: row.priority });
+    }
+    const loaded = await Promise.all(
+      [...pairs].map(async ([key, p]) => {
+        const [cal, target] = await Promise.all([
+          this.slaConfig.calendarFor(p.companyId),
+          this.slaConfig.targetFor(p.companyId, p.priority as Priority),
+        ]);
+        return [key, { cal, target }] as const;
+      }),
+    );
+    const byPair = new Map(loaded);
+
     let sum = 0;
     for (const row of usable) {
-      const [cal, target] = await Promise.all([
-        this.slaConfig.calendarFor(row.companyId),
-        this.slaConfig.targetFor(row.companyId, row.priority as Priority),
-      ]);
+      const { cal, target } = byPair.get(`${row.companyId}:${row.priority}`)!;
       /*
        * new Date(...) เสมอ ไม่ใช่แค่ cast — บาง caller (เช่น incidentMetrics)
        * ส่ง clockStart มาจากนิพจน์ sql<Date>`coalesce(...)` ซึ่ง postgres.js

@@ -47,47 +47,36 @@ export class DashboardService {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    const [open, breached, resolvedThisMonth, byPriority, byStatus, dueSoon] = await Promise.all([
-      this.count(openOnly),
-      this.count(and(openOnly, eq(ticket.isResolutionBreached, true)) as SQL),
-      this.count(and(base, gte(ticket.resolvedAt, monthStart)) as SQL),
-      this.db
-        .select({ priority: ticket.priority, n: count() })
-        .from(ticket)
-        .where(openOnly)
-        .groupBy(ticket.priority),
-      this.db
-        .select({ status: ticket.status, n: count() })
-        .from(ticket)
-        .where(and(base, sql`${ticket.status} in ${OPEN_STATUSES}`) as SQL)
-        .groupBy(ticket.status),
-      /*
-       * "ใกล้ครบกำหนด" = ยังไม่เกิน แต่เหลือน้อยกว่า 4 ชั่วโมงตามนาฬิกาจริง
-       *
-       * ใช้เวลาจริงไม่ใช่นาทีทำการ เพราะตัวเลขนี้มีไว้ให้หัวหน้าทีมเห็นว่า
-       * "ต้องรีบจัดคนวันนี้" ซึ่งเป็นการตัดสินใจตามเวลานาฬิกา
-       * ส่วนการตัดสินว่าเกินกำหนดหรือยังยังใช้นาทีทำการตามเอกสาร SLA
-       */
-      this.count(
-        and(
-          openOnly,
-          eq(ticket.isResolutionBreached, false),
-          sql`${ticket.resolutionDueAt} between now() and now() + interval '4 hours'`,
-        ) as SQL,
-      ),
-    ]);
+    /*
+     * ทุกคิวรีของหน้านี้ยิงพร้อมกันรอบเดียว — ไม่มีคิวรีไหนรอผลของอีกตัว
+     *
+     * ก่อนหน้านี้แบ่งเป็นห้าระลอกที่รอกันเป็นทอด ๆ (สองระลอกขนาน แล้วสามคิวรีเรียงกัน)
+     * ฐานข้อมูล dev อยู่คนละทวีป ไป-กลับครั้งละ ~250 มิลลิวินาที ห้าระลอกจึงกิน
+     * เวลาเดินทางอย่างเดียว 1.2 วินาที ก่อนจะนับรวมเวลาที่ฐานข้อมูลทำงานจริง
+     *
+     * ตัวนับหกตัวที่เคยเป็นหกคิวรี รวมเหลือคิวรีเดียวด้วย FILTER (WHERE …)
+     * ทั้งหกตัวสแกน ticket ชุดเดียวกันอยู่แล้ว การแยกยิงคือการสแกนซ้ำหกรอบ
+     */
+    const [totals, byPriority, byStatus, avgResponse, trend, topCategories, companyCodes] =
+      await Promise.all([
+        this.totals(base, openOnly, monthStart),
+        this.db
+          .select({ priority: ticket.priority, n: count() })
+          .from(ticket)
+          .where(openOnly)
+          .groupBy(ticket.priority),
+        this.db
+          .select({ status: ticket.status, n: count() })
+          .from(ticket)
+          .where(openOnly)
+          .groupBy(ticket.status),
+        this.avgFirstResponseMinutes(scope, monthStart),
+        this.trend(scope),
+        this.topCategories(scope),
+        this.companyCodes(scope),
+      ]);
 
-    const [avgResponse, trend, topCategories] = await Promise.all([
-      this.avgFirstResponseMinutes(scope, monthStart),
-      this.trend(scope),
-      this.topCategories(scope),
-    ]);
-
-    const companyCodes = await this.companyCodes(scope);
-    const closedThisMonth = await this.count(and(base, gte(ticket.closedAt, monthStart)) as SQL);
-    const breachedThisMonth = await this.count(
-      and(base, gte(ticket.closedAt, monthStart), eq(ticket.isResolutionBreached, true)) as SQL,
-    );
+    const { open, breached, dueSoon, resolvedThisMonth, closedThisMonth, breachedThisMonth } = totals;
 
     return {
       /*
@@ -229,9 +218,65 @@ export class DashboardService {
     return rows.map((r) => r.code);
   }
 
-  private async count(where: SQL): Promise<number> {
-    const [row] = await this.db.select({ n: count() }).from(ticket).where(where);
-    return row?.n ?? 0;
+  /**
+   * ตัวนับทั้งหกของหน้าแดชบอร์ดในคิวรีเดียว
+   *
+   * ทุกตัวนับจากตาราง ticket ชุดเดียวกัน ต่างกันแค่เงื่อนไข จึงใช้
+   * count(*) FILTER (WHERE …) แทนการยิงหกคิวรีที่สแกนข้อมูลชุดเดิมหกรอบ
+   *
+   * ⚠️ ::int ไม่ใช่ของประดับ — count() ของ postgres คืน bigint ซึ่งไดรเวอร์
+   *    ส่งกลับมาเป็นสตริง ถ้าไม่แคสต์ ตัวเลขจะกลายเป็น "12" แล้วการบวกลบ
+   *    ในชั้นบนจะได้ผลเป็นการต่อสตริงโดยไม่มีใครสังเกต
+   *
+   * "ใกล้ครบกำหนด" ใช้เวลานาฬิกาจริง ไม่ใช่นาทีทำการ เพราะมีไว้ให้หัวหน้าทีม
+   * ตัดสินว่า "ต้องรีบจัดคนวันนี้" ส่วนการตัดสินว่าเกินกำหนดหรือยัง
+   * ยังใช้นาทีทำการตามเอกสาร SLA เหมือนเดิม
+   */
+  private async totals(
+    base: SQL,
+    openOnly: SQL,
+    monthStart: Date,
+  ): Promise<{
+    open: number;
+    breached: number;
+    dueSoon: number;
+    resolvedThisMonth: number;
+    closedThisMonth: number;
+    breachedThisMonth: number;
+  }> {
+    /*
+     * ⚠️ ส่งเวลาเป็นสตริง ISO พร้อมแคสต์ ไม่ใช่อ็อบเจกต์ Date
+     *    พารามิเตอร์ที่ฝังใน sql`` ดิบวิ่งผ่านไดรเวอร์คนละทางกับตัวช่วยของ drizzle
+     *    (gte / lte) ซึ่งรับได้เฉพาะสตริงหรือ Buffer — ถ้าส่ง Date จะได้ TypeError
+     *    ที่ข้อความไม่บอกเลยว่าเกี่ยวกับวันที่
+     */
+    const since = monthStart.toISOString();
+    const closedThisMonth: SQL = sql`${ticket.closedAt} >= ${since}::timestamptz`;
+
+    const [row] = await this.db
+      .select({
+        open: sql<number>`count(*) FILTER (WHERE ${openOnly})::int`,
+        breached: sql<number>`count(*) FILTER (WHERE ${openOnly} AND ${ticket.isResolutionBreached})::int`,
+        dueSoon: sql<number>`count(*) FILTER (WHERE ${openOnly}
+          AND NOT ${ticket.isResolutionBreached}
+          AND ${ticket.resolutionDueAt} BETWEEN now() AND now() + interval '4 hours')::int`,
+        resolvedThisMonth: sql<number>`count(*) FILTER (WHERE ${ticket.resolvedAt} >= ${since}::timestamptz)::int`,
+        closedThisMonth: sql<number>`count(*) FILTER (WHERE ${closedThisMonth})::int`,
+        breachedThisMonth: sql<number>`count(*) FILTER (WHERE ${closedThisMonth} AND ${ticket.isResolutionBreached})::int`,
+      })
+      .from(ticket)
+      .where(base);
+
+    return (
+      row ?? {
+        open: 0,
+        breached: 0,
+        dueSoon: 0,
+        resolvedThisMonth: 0,
+        closedThisMonth: 0,
+        breachedThisMonth: 0,
+      }
+    );
   }
 
   /**

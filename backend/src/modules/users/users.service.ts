@@ -995,30 +995,52 @@ export class UsersService {
      * ไม่ต้องไล่ลบทีละแถว — และการไล่ลบเองมีโอกาสเหลือแถวกำพร้า
      * ถ้าลบไม่ครบทุกกรณี
      */
-    await this.db.delete(userRole).where(eq(userRole.userId, userId));
-
-    for (const r of wanted) {
+    /*
+     * ลบแล้วเขียนใหม่ทั้งชุดในธุรกรรมเดียว — สามคำสั่ง ไม่ใช่หนึ่งคำสั่งต่อบทบาท
+     *
+     * ⚠️ ธุรกรรมสำคัญกว่าความเร็วที่นี่ ของเดิมลบบทบาทเก่าก่อนแล้วค่อยวนใส่ทีละอัน
+     *    ถ้าคำสั่งกลางทางล้ม (เน็ตหลุด ฐานข้อมูลตัดการเชื่อมต่อ) ผู้ใช้คนนั้นจะเหลือ
+     *    บทบาทไม่ครบหรือไม่เหลือเลย = ล็อกตัวเองออกจากระบบโดยไม่มีใครรู้ว่าเกิดอะไรขึ้น
+     *    ทั้งก้อนอยู่ใน transaction แล้ว ล้มเมื่อไหร่ก็ย้อนกลับไปเป็นชุดเดิมทั้งหมด
+     */
+    const grants = wanted.map((r) => {
       const expires = r.expires_at ? new Date(r.expires_at) : null;
-      const [granted] = await this.db
+      return {
+        userId,
+        roleId: roleByCode.get(r.code)!,
+        grantedBy: scope.userId,
+        ...(expires && !Number.isNaN(expires.getTime()) ? { expiresAt: expires } : {}),
+      };
+    });
+
+    await this.db.transaction(async (tx) => {
+      await tx.delete(userRole).where(eq(userRole.userId, userId));
+      if (grants.length === 0) return;
+
+      /*
+       * จับคู่แถวที่เพิ่งสร้างกลับด้วย role_id ไม่ใช่ลำดับใน RETURNING
+       * ลำดับของ RETURNING ไม่มีอะไรรับประกันไว้ในสัญญา ถ้าวันหนึ่งมันสลับ
+       * ขอบเขตบริษัทจะไปเกาะผิดบทบาทแบบเงียบ ๆ ซึ่งเป็นช่องโหว่สิทธิ์เต็มตัว
+       */
+      const created = await tx
         .insert(userRole)
-        .values({
-          userId,
-          roleId: roleByCode.get(r.code)!,
-          grantedBy: scope.userId,
-          ...(expires && !Number.isNaN(expires.getTime()) ? { expiresAt: expires } : {}),
-        })
-        .returning({ id: userRole.id });
+        .values(grants)
+        .returning({ id: userRole.id, roleId: userRole.roleId });
+      const idByRole = new Map(created.map((row) => [row.roleId, row.id]));
 
       // ตัดบริษัทที่ผู้เรียกไม่มีสิทธิ์เห็นออกเงียบ ๆ ไม่ตอบ error
       // กฎเดียวกับตัวกรอง company_id ในหน้ารายการ
-      const companyIds = (r.company_ids ?? []).filter((id) => scope.inScope(id));
-      for (const companyId of companyIds) {
-        await this.db
-          .insert(userRoleScope)
-          .values({ userRoleId: granted!.id, companyId })
-          .onConflictDoNothing();
+      const scopeRows = wanted.flatMap((r) => {
+        const userRoleId = idByRole.get(roleByCode.get(r.code)!);
+        if (userRoleId === undefined) return [];
+        const companyIds = new Set((r.company_ids ?? []).filter((id) => scope.inScope(id)));
+        return [...companyIds].map((companyId) => ({ userRoleId, companyId }));
+      });
+
+      if (scopeRows.length > 0) {
+        await tx.insert(userRoleScope).values(scopeRows).onConflictDoNothing();
       }
-    }
+    });
 
     // บทบาทที่ถอนต้องหมดผลทันที ไม่ใช่อีก 30 วินาทีตามอายุแคช
     this.scopes.invalidate(userId);

@@ -155,17 +155,35 @@ export class NotificationsService {
   ) {
     const allowed = new Set(NOTIFICATION_CHANNEL);
 
+    /*
+     * ทุกช่องทางลงในคำสั่งเดียว ไม่ใช่วนยิงทีละช่อง
+     *
+     * หน้าตั้งค่าส่งมาทั้งชุดเสมอ (อีเมล · LINE · ในระบบ) การวนยิงจึงเสียรอบเครือข่าย
+     * เท่าจำนวนช่องทางทุกครั้งที่กดบันทึก — สามรอบบนฐานข้อมูลที่อยู่ไกลคือเกือบหนึ่งวินาที
+     * ทั้งที่เป็นงานเขียนก้อนเดียวกัน แถมยังได้ atomic ฟรี: ล้มก็ไม่เหลือครึ่ง ๆ กลาง ๆ
+     */
+    /*
+     * ⚠️ ต้องตัดช่องทางซ้ำออกก่อน เอาค่าตัวท้ายสุดเหมือนตอนวนเขียนทับกันเอง
+     *    ON CONFLICT DO UPDATE แก้แถวเดียวกันสองครั้งในคำสั่งเดียวไม่ได้ Postgres
+     *    จะตอบ "cannot affect row a second time" ซึ่งการวนยิงแบบเดิมไม่เคยเจอ
+     */
+    const byChannel = new Map<string, { isEnabled: boolean; destination: string | null }>();
     for (const c of channels) {
       if (!allowed.has(c.channel as (typeof NOTIFICATION_CHANNEL)[number])) continue;
+      byChannel.set(c.channel, { isEnabled: c.is_enabled, destination: c.destination ?? null });
+    }
 
+    const rows = [...byChannel].map(([channel, value]) => ({
+      userId: scope.userId,
+      channel,
+      isEnabled: value.isEnabled,
+      destination: value.destination,
+    }));
+
+    if (rows.length > 0) {
       await this.db
         .insert(notificationChannel)
-        .values({
-          userId: scope.userId,
-          channel: c.channel,
-          isEnabled: c.is_enabled,
-          destination: c.destination ?? null,
-        })
+        .values(rows)
         .onConflictDoUpdate({
           target: [notificationChannel.userId, notificationChannel.channel],
           // อัปเดตเฉพาะสองฟิลด์นี้ — is_verified ไม่อยู่ในรายการโดยตั้งใจ
