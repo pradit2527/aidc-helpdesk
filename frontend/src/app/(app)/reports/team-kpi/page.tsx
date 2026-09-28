@@ -4,9 +4,11 @@ import { Crown, Download, LayoutGrid, Printer, Rows3 } from 'lucide-react';
 import * as React from 'react';
 
 import { currentMonth, MonthPicker, monthLabel, monthRange } from '@/components/reports/month-picker';
+import { filterRows, ReportSearch, SummaryStrip } from '@/components/reports/report-layout';
 import { TargetBar } from '@/components/reports/target-bar';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
+import { DataTable, type Column } from '@/components/ui/data-table';
 import { Select } from '@/components/ui/field';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
@@ -25,7 +27,8 @@ import { useTeamKpiReport, type TeamKpiMetrics, type TeamKpiReport, type TeamKpi
 export default function TeamKpiPage(): React.JSX.Element {
   const [month, setMonth] = React.useState(currentMonth);
   const [teamId, setTeamId] = React.useState('');
-  const [view, setView] = React.useState<'cards' | 'table'>('cards');
+  // ตารางเป็นค่าเริ่มต้น: หน้ารายงานทุกหน้าในระบบเริ่มด้วยตารางเหมือนกันหมด
+  const [view, setView] = React.useState<'cards' | 'table'>('table');
   const { from, to } = monthRange(month);
   const query = useTeamKpiReport(from, to, teamId);
   const d = query.data;
@@ -88,8 +91,11 @@ function Content({
   onView: (v: 'cards' | 'table') => void;
 }): React.JSX.Element {
   const team = d.selected_team_id ? d.teams.find((x) => x.id === d.selected_team_id)?.name : null;
-  const ranked = d.rows.filter((r) => r.enough_data);
-  const pending = d.rows.filter((r) => !r.enough_data);
+  const [term, setTerm] = React.useState('');
+  /* ค้นด้วยชื่อเจ้าหน้าที่หรือชื่อทีม — ทีมใหญ่มีสิบกว่าคน การกวาดตาหาชื่อช้ากว่าพิมพ์ */
+  const rows = filterRows(d.rows, term, (r) => `${r.user.full_name} ${r.teams.map((t) => t.name).join(' ')}`);
+  const ranked = rows.filter((r) => r.enough_data);
+  const pending = rows.filter((r) => !r.enough_data);
 
   return (
     <>
@@ -110,14 +116,22 @@ function Content({
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <h3 className="text-h3">ລາຍບຸກຄົນ</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="text-h3">ລາຍບຸກຄົນ</h3>
+          <ReportSearch
+            value={term}
+            onChange={setTerm}
+            placeholder="ຄົ້ນຫາຊື່ເຈົ້າໜ້າທີ່..."
+            count={rows.length}
+          />
+        </div>
         <div role="group" aria-label="ຮູບແບບການສະແດງ" className="inline-flex rounded border border-control p-0.5">
           <ViewButton active={view === 'cards'} onClick={() => onView('cards')} icon={LayoutGrid} label="ບັດ" />
           <ViewButton active={view === 'table'} onClick={() => onView('table')} icon={Rows3} label="ຕາຕະລາງ" />
         </div>
       </div>
 
-      {d.rows.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="rounded border border-dashed border-hair px-4 py-6 text-body-sm text-ink-3">ບໍ່ມີຂໍ້ມູນໃນເດືອນນີ້</p>
       ) : view === 'cards' ? (
         <div className="grid gap-5">
@@ -142,7 +156,7 @@ function Content({
           )}
         </div>
       ) : (
-        <PeopleTable d={d} />
+        <PeopleTable d={d} rows={rows} />
       )}
 
       <details className="rounded-lg border border-hair bg-surface px-4 py-3 print:hidden">
@@ -172,23 +186,38 @@ function Content({
 
 function TeamSummary({ d }: { d: TeamKpiReport }): React.JSX.Element {
   const t = d.totals;
+  const tone = (meets: boolean | null): 'good' | 'bad' | 'neutral' =>
+    meets === null ? 'neutral' : meets ? 'good' : 'bad';
+
   return (
-    <Card>
-      <CardBody className="grid gap-5 md:grid-cols-[180px_1fr] md:items-center">
-        <div className="flex items-center gap-4 md:flex-col md:items-start md:gap-1">
-          <p className="text-caption text-ink-3">ຄະແນນທີມ</p>
-          <p className={cn('tabular text-display leading-none', scoreTone(t.score))}>{t.score ?? '—'}</p>
-          <p className="text-caption text-ink-3">
-            ຈາກ 100 · ແກ້ໄຂ {t.resolved} ເລື່ອງ
-          </p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <MetricBar title="ຕອບຮັບທັນ" value={t.response.percent} target={d.rules.targets.response_met_percent} detail={`${t.response.met} ຈາກ ${t.response.eligible}`} />
-          <MetricBar title="ແກ້ໄຂທັນ" value={t.resolution.percent} target={d.rules.targets.resolution_met_percent} detail={`${t.resolution.met} ຈາກ ${t.resolution.eligible}`} />
-          <MetricBar title="ຄວາມພໍໃຈ" value={t.csat.avg} target={d.rules.targets.csat_avg} min={1} max={5} score detail={`${t.csat.count} ຄະແນນ`} />
-        </div>
-      </CardBody>
-    </Card>
+    <SummaryStrip
+      items={[
+        {
+          label: 'ຄະແນນທີມ',
+          value: t.score === null ? '—' : String(t.score),
+          sub: `ຈາກ 100 · ແກ້ໄຂ ${t.resolved} ເລື່ອງ`,
+          tone: t.score === null ? 'neutral' : t.score >= 80 ? 'good' : t.score >= 60 ? 'warn' : 'bad',
+        },
+        {
+          label: `ຕອບຮັບທັນ (ເປົ້າ ≥ ${d.rules.targets.response_met_percent}%)`,
+          value: t.response.percent === null ? '—' : formatPercent(t.response.percent),
+          sub: `${t.response.met} ຈາກ ${t.response.eligible} ເລື່ອງ`,
+          tone: tone(t.meets.response),
+        },
+        {
+          label: `ແກ້ໄຂທັນ (ເປົ້າ ≥ ${d.rules.targets.resolution_met_percent}%)`,
+          value: t.resolution.percent === null ? '—' : formatPercent(t.resolution.percent),
+          sub: `${t.resolution.met} ຈາກ ${t.resolution.eligible} ເລື່ອງ`,
+          tone: tone(t.meets.resolution),
+        },
+        {
+          label: `ຄວາມພໍໃຈ (ເປົ້າ ≥ ${d.rules.targets.csat_avg})`,
+          value: t.csat.avg === null ? '—' : t.csat.avg.toFixed(1),
+          sub: `${t.csat.count} ຄະແນນ`,
+          tone: tone(t.meets.csat),
+        },
+      ]}
+    />
   );
 }
 
@@ -284,45 +313,80 @@ function MetricBar({
   );
 }
 
-function PeopleTable({ d }: { d: TeamKpiReport }): React.JSX.Element {
+function PeopleTable({ d, rows }: { d: TeamKpiReport; rows: TeamKpiRow[] }): React.JSX.Element {
   const t = d.rules.targets;
+  const columns: Column<TeamKpiRow>[] = [
+    {
+      key: 'name',
+      header: 'ເຈົ້າໜ້າທີ່',
+      render: (r) => (
+        <span className={cn('font-medium', r.enough_data ? 'text-ink' : 'text-ink-3')}>
+          {r.user.full_name}
+          {!r.enough_data && <span className="ml-2 text-caption font-normal text-ink-3">ຂໍ້ມູນໜ້ອຍ</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'score',
+      header: 'ຄະແນນ',
+      align: 'right',
+      width: '10%',
+      render: (r) => (
+        <span className={cn('tabular font-semibold', r.enough_data && scoreTone(r.score))}>
+          {r.score ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'response',
+      header: `ຕອບຮັບທັນ (≥${t.response_met_percent}%)`,
+      align: 'right',
+      render: (r) => cell(r.response.percent, r.meets.response, formatPercent),
+    },
+    {
+      key: 'resolution',
+      header: `ແກ້ໄຂທັນ (≥${t.resolution_met_percent}%)`,
+      align: 'right',
+      render: (r) => cell(r.resolution.percent, r.meets.resolution, formatPercent),
+    },
+    {
+      key: 'csat',
+      header: `ຄວາມພໍໃຈ (≥${t.csat_avg})`,
+      align: 'right',
+      render: (r) => cell(r.csat.avg, r.meets.csat, (v) => v.toFixed(1)),
+    },
+    {
+      key: 'resolved',
+      header: 'ແກ້ໄຂແລ້ວ',
+      align: 'right',
+      hideBelow: 'xl',
+      render: (r) => <span className="tabular">{r.resolved}</span>,
+    },
+    {
+      key: 'open',
+      header: 'ຄ້າງ (ເກີນກຳນົດ)',
+      align: 'right',
+      hideBelow: 'xl',
+      render: (r) => (
+        <span className="tabular">
+          {r.open_now}
+          {r.overdue_now > 0 && <span className="ml-1 text-sla-breach">({r.overdue_now})</span>}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <Card>
-      <CardBody className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-body-sm">
-            <thead>
-              <tr className="border-b border-hair bg-subtle text-caption text-ink-2">
-                <th scope="col" className="px-3 py-2 text-left font-semibold">ເຈົ້າໜ້າທີ່</th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">ຄະແນນ</th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">ຕອບຮັບທັນ (≥{t.response_met_percent}%)</th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">ແກ້ໄຂທັນ (≥{t.resolution_met_percent}%)</th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">ຄວາມພໍໃຈ (≥{t.csat_avg})</th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">ແກ້ໄຂແລ້ວ</th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">ຄ້າງ (ເກີນ)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.rows.map((r) => (
-                <tr key={r.user.id} className={cn('border-b border-hair last:border-0', !r.enough_data && 'text-ink-3')}>
-                  <td className="px-3 py-2 font-medium text-ink">
-                    {r.user.full_name}
-                    {!r.enough_data && <span className="ml-2 text-caption font-normal text-ink-3">ຂໍ້ມູນໜ້ອຍ</span>}
-                  </td>
-                  <td className={cn('tabular px-3 py-2 text-right font-semibold', r.enough_data && scoreTone(r.score))}>{r.score ?? '—'}</td>
-                  <td className="tabular px-3 py-2 text-right">{cell(r.response.percent, r.meets.response, formatPercent)}</td>
-                  <td className="tabular px-3 py-2 text-right">{cell(r.resolution.percent, r.meets.resolution, formatPercent)}</td>
-                  <td className="tabular px-3 py-2 text-right">{cell(r.csat.avg, r.meets.csat, (v) => v.toFixed(1))}</td>
-                  <td className="tabular px-3 py-2 text-right">{r.resolved}</td>
-                  <td className="tabular px-3 py-2 text-right">
-                    {r.open_now}
-                    {r.overdue_now > 0 && <span className="ml-1 text-sla-breach">({r.overdue_now})</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <CardBody>
+        <DataTable
+          striped
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.user.id}
+          emptyTitle="ບໍ່ມີຂໍ້ມູນໃນເດືອນນີ້"
+          caption="ຄະແນນ KPI ລາຍບຸກຄົນ"
+        />
       </CardBody>
     </Card>
   );

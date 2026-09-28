@@ -35,6 +35,13 @@ interface DataTableProps<T> {
   emptyTitle?: string | undefined;
   emptyHint?: string | undefined;
   caption?: string | undefined;
+  /**
+   * สลับสีพื้นแถวคู่–แถวคี่ — เปิดใช้ในหน้ารายงานที่ตารางยาวและมีตัวเลขหลายคอลัมน์
+   *
+   * สีลายทางใช้ bg-subtle ส่วนสีตอนชี้เมาส์ใช้ primary-subtle จึงแยกออกจากกันได้
+   * ทั้งบนธีมสว่างและธีมมืด ถ้าใช้สีเดียวกันทั้งสองอย่าง แถวที่ชี้อยู่จะกลืนกับลายทาง
+   */
+  striped?: boolean | undefined;
 }
 
 const HIDE_CLASS = {
@@ -55,6 +62,7 @@ export function DataTable<T>({
   emptyTitle = 'ບໍ່ມີຂໍ້ມູນ',
   emptyHint,
   caption,
+  striped = false,
 }: DataTableProps<T>): React.JSX.Element {
   if (rows.length === 0) {
     return <EmptyState title={emptyTitle} hint={emptyHint} />;
@@ -101,7 +109,11 @@ export function DataTable<T>({
       <div className="hidden overflow-x-auto lg:block">
         <table className="w-full min-w-[640px] border-collapse text-body-sm">
           {caption && <caption className="sr-only">{caption}</caption>}
-          <thead>
+          {/*
+            หัวคอลัมน์ติดอยู่กับที่เวลาเลื่อนอ่านตารางยาว — รายงานรายเดือนมีหลายสิบแถว
+            เลื่อนลงไปสามจอแล้วจำไม่ได้ว่าคอลัมน์ไหนคืออะไร
+          */}
+          <thead className="sticky top-0 z-10 bg-surface">
             <tr className="border-b border-hair text-left">
               {columns.map((col) => (
                 <th
@@ -127,8 +139,10 @@ export function DataTable<T>({
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={cn(
-                  'border-b border-hair last:border-0',
-                  onRowClick && 'cursor-pointer hover:bg-subtle',
+                  'border-b border-hair transition-colors last:border-0',
+                  striped && 'even:bg-subtle',
+                  'hover:bg-primary-subtle',
+                  onRowClick && 'cursor-pointer',
                 )}
               >
                 {columns.map((col) => (

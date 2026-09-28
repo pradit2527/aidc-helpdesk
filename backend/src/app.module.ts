@@ -52,6 +52,7 @@ import { ProblemsService } from './modules/problems/problems.service';
 import { ReportsController } from './modules/reports/reports.controller';
 import { ReportsService } from './modules/reports/reports.service';
 import { IsoReportsService } from './modules/reports/iso-reports.service';
+import { SecurityReportService } from './modules/reports/security-report.service';
 import { RealtimeGateway } from './modules/realtime/realtime.gateway';
 import { SupportChatController } from './modules/support-chat/support-chat.controller';
 import { ChatwootSyncService } from './modules/support-chat/chatwoot-sync.service';
@@ -127,6 +128,7 @@ import { UsersService } from './modules/users/users.service';
     ProblemsService,
     ReportsService,
     IsoReportsService,
+    SecurityReportService,
     SystemService,
     UsersService,
     DashboardService,

@@ -57,15 +57,15 @@ export function previousPeriod(from: Date, to: Date): { from: Date; to: Date } {
  *   เดือนเต็ม  SPR-202609
  *   ช่วงอื่น    SPR-20260901-20260915 (วันสุดท้าย = วันก่อน to เพราะ to เป็นขอบเปิด)
  */
-export function reportNumber(from: Date, to: Date): string {
+export function reportNumber(from: Date, to: Date, prefix = 'SPR'): string {
   const month = wholeLocalMonth(from, to);
-  if (month) return `SPR-${month.year}${String(month.month + 1).padStart(2, '0')}`;
+  if (month) return `${prefix}-${month.year}${String(month.month + 1).padStart(2, '0')}`;
 
   const ymd = (d: Date): string => {
     const p = local(d);
     return `${p.year}${String(p.month + 1).padStart(2, '0')}${String(p.day).padStart(2, '0')}`;
   };
-  return `SPR-${ymd(from)}-${ymd(new Date(to.getTime() - 1))}`;
+  return `${prefix}-${ymd(from)}-${ymd(new Date(to.getTime() - 1))}`;
 }
 
 // ── สถานะภาพรวมของรายงาน ──────────────────────────────────────────────

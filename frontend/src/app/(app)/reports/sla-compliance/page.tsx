@@ -6,7 +6,8 @@ import * as React from 'react';
 import { PriorityBadge } from '@/components/common/badges';
 import { currentMonth, MonthPicker, monthRange } from '@/components/reports/month-picker';
 import { Button } from '@/components/ui/button';
-import { Card, CardBody, CardHeader, CardTitle, StatCard } from '@/components/ui/card';
+import { filterRows, ReportSearch, SummaryStrip } from '@/components/reports/report-layout';
+import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Select } from '@/components/ui/field';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
@@ -60,6 +61,9 @@ export default function SlaCompliancePage(): React.JSX.Element {
    * และเป็นข้อความที่ทำให้คนตกใจโดยไม่มีเหตุ
    */
   const overall = totals.total > 0 ? (totals.met / totals.total) * 100 : null;
+  const [term, setTerm] = React.useState('');
+  /* ค้นด้วยรหัสบริษัทหรือระดับความสำคัญ — ตารางนี้ยาวเท่าจำนวนบริษัทคูณสี่ระดับ */
+  const shown = filterRows(rows, term, (r) => `${r.company.code} ${r.priority}`);
 
   const columns: Column<SlaComplianceRow>[] = [
     { key: 'company', header: 'ບໍລິສັດ', render: (r) => r.company.code },
@@ -112,26 +116,24 @@ export default function SlaCompliancePage(): React.JSX.Element {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="SLA Compliance ລວມ"
-          value={overall === null ? '—' : formatPercent(overall)}
-          {...(overall === null ? {} : { tone: overall >= TARGET_PERCENT ? 'ok' : 'breach' })}
-          hint={
-            overall === null
-              ? 'ຍັງບໍ່ມີເລື່ອງທີ່ປິດໃນຊ່ວງນີ້'
-              : `ເປົ້າໝາຍ ≥ ${TARGET_PERCENT}%`
-          }
-        />
-        <StatCard label="ເລື່ອງທີ່ປິດ" value={formatNumber(totals.total)} />
-        <StatCard label="ທັນເວລາ" value={formatNumber(totals.met)} tone="ok" />
-        <StatCard
-          label="ຕັດອອກຈາກຕົວຫານ"
-          value={formatNumber(totals.excluded)}
-          tone="risk"
-          hint="ເລື່ອງທີ່ມີລະຫັດຂໍ້ຍົກເວັ້ນ SLA"
-        />
-      </div>
+      <SummaryStrip
+        items={[
+          {
+            label: 'SLA Compliance ລວມ',
+            value: overall === null ? '—' : formatPercent(overall),
+            sub: overall === null ? 'ຍັງບໍ່ມີເລື່ອງທີ່ປິດໃນຊ່ວງນີ້' : `ເປົ້າໝາຍ ≥ ${TARGET_PERCENT}%`,
+            tone: overall === null ? 'neutral' : overall >= TARGET_PERCENT ? 'good' : 'bad',
+          },
+          { label: 'ເລື່ອງທີ່ປິດ', value: formatNumber(totals.total) },
+          { label: 'ທັນເວລາ', value: formatNumber(totals.met), tone: 'good' },
+          {
+            label: 'ຕັດອອກຈາກຕົວຫານ',
+            value: formatNumber(totals.excluded),
+            sub: 'ເລື່ອງທີ່ມີລະຫັດຂໍ້ຍົກເວັ້ນ SLA',
+            tone: totals.excluded > 0 ? 'warn' : 'neutral',
+          },
+        ]}
+      />
 
       {totals.excluded > 0 && (
         <Alert tone="info" title="ເລື່ອງທີ່ຕັດອອກຈາກຕົວຫານ">
@@ -143,7 +145,13 @@ export default function SlaCompliancePage(): React.JSX.Element {
       <Card>
         <CardHeader>
           <CardTitle>ຜົນຕາມບໍລິສັດ ແລະ ລະດັບ</CardTitle>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ReportSearch
+              value={term}
+              onChange={setTerm}
+              placeholder="ຄົ້ນຫາບໍລິສັດ ຫຼື ລະດັບ..."
+              count={shown.length}
+            />
             <MonthPicker value={month} onChange={setMonth} />
             <Select
               value={company}
@@ -163,8 +171,9 @@ export default function SlaCompliancePage(): React.JSX.Element {
         <CardBody className="p-0">
           <QueryBoundary query={query}>
             <DataTable
+              striped
               columns={columns}
-              rows={rows}
+              rows={shown}
               rowKey={(r) => `${r.company.id}-${r.priority}`}
               caption="ຜົນ SLA ແຍກຕາມບໍລິສັດ ແລະ ລະດັບຄວາມສຳຄັນ"
               emptyTitle="ບໍ່ມີຂໍ້ມູນໃນເດືອນທີ່ເລືອກ"

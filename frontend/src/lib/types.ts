@@ -56,6 +56,13 @@ export interface SessionUser {
    * สิทธิ์มอบหมายงานจริงตัดสินที่ backend ผ่าน can.assign ของแต่ละเรื่อง
    */
   led_teams: TeamRef[];
+  /**
+   * เห็นเหตุความปลอดภัยและรายงาน ISO/IEC 27001 ได้ไหม — หัวหน้าไอที · CEO · DPO · ผู้ดูแลระบบ
+   *
+   * เป็นตำแหน่งในทะเบียนผู้ติดต่อ ไม่ใช่ role จึงไม่อยู่ใน permissions
+   * optional บนสายเพราะ API รุ่นก่อนหน้าไม่มีช่องนี้ — ไม่มีค่า = ไม่เห็น (ปลอดภัยกว่า)
+   */
+  security_viewer?: boolean;
 }
 
 export interface TicketSla {

@@ -13,14 +13,19 @@
  */
 
 import {
-  BarChart3,
+  Award,
   Bot,
+  Building2,
   Clock,
+  FileText,
   Gauge,
   Inbox,
   Layers,
+  LayoutGrid,
   MessagesSquare,
   Plus,
+  Search,
+  ShieldCheck,
   SlidersHorizontal,
   User,
   type LucideIcon,
@@ -45,6 +50,13 @@ export interface NavItem {
   roles: readonly RoleCode[];
   /** ให้เมนูยังไฮไลต์อยู่เมื่ออยู่ในหน้าลูก เช่น /tickets/1038 */
   matchPrefix?: boolean;
+  /**
+   * true = ซ่อนจากคนที่เห็นเหตุความปลอดภัยไม่ได้ (หัวหน้าไอที · CEO · DPO · ผู้ดูแลระบบ)
+   *
+   * เป็นตำแหน่งในทะเบียนผู้ติดต่อ ไม่ใช่ role จึงกรองด้วย roles ไม่ได้
+   * ไม่ใช่ด่านความปลอดภัย — endpoint ตอบ 403 อยู่แล้ว ตรงนี้แค่ไม่โชว์ทางที่กดแล้วเจอแต่คำปฏิเสธ
+   */
+  securityOnly?: boolean;
 }
 
 export interface NavSection {
@@ -176,25 +188,67 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         icon: MessagesSquare,
         roles: SETTINGS_VIEWERS,
       },
-      /*
-       * รายงานเรื่องแจ้งแบบกรองได้ (บริษัท / แผนก / สถานะ / รายบุคคล)
-       *
-       * บทบาทชุดนี้คือชุดเดียวกับที่ถือ report.view ใน seed permissions
-       * (support_lead · support_agent · company_admin · manager_viewer · super_admin) — พนักงานทั่วไปไม่มี
-       * backend ตรวจ report.view ซ้ำที่ GET /reports/tickets อีกชั้นอยู่แล้ว
-       */
+    ],
+  },
+  /*
+   * ── รายงาน: หมวดของตัวเอง ──
+   *
+   * เดิมมีเมนูเดียวชี้ไปศูนย์รายงาน แล้วให้ผู้ใช้เลือกรายงานจากการ์ดในหน้านั้น
+   * ผลคือ "เมนู" กับ "หน้าจอ" ปนกัน — ต้องเข้าหน้ากลางก่อนทุกครั้งจึงจะไปรายงานที่ต้องการได้
+   * ตอนนี้รายงานทุกตัวอยู่ในเมนู กดจากแถบซ้ายไปถึงได้เลย ส่วนศูนย์รายงานเหลือหน้าที่
+   * "ค้นหาและดูภาพรวม" อย่างเดียว
+   */
+  {
+    titleKey: 'nav.reportsSection',
+    items: [
       {
-        /*
-         * ชี้ไปที่ศูนย์รายงาน (จัดกลุ่มตาม ISO/IEC 20000-1) ไม่ใช่รายงานเรื่องแจ้งตัวเดียว
-         * matchPrefix ให้เมนูยังไฮไลต์อยู่เมื่อเปิดรายงานย่อย เช่น /reports/team-kpi
-         */
         href: '/reports',
-        labelKey: 'nav.ticketReport',
+        labelKey: 'nav.reportsHub',
         shortKey: 'navShort.ticketReport',
-        icon: BarChart3,
+        icon: LayoutGrid,
         roles: STAFF_AND_VIEWER,
-        matchPrefix: true,
       },
+      {
+        href: '/reports/service-performance',
+        labelKey: 'page.servicePerformance',
+        shortKey: 'navShort.ticketReport',
+        icon: FileText,
+        roles: STAFF_AND_VIEWER,
+      },
+      {
+        href: '/reports/team-kpi',
+        labelKey: 'page.teamKpi',
+        shortKey: 'navShort.ticketReport',
+        icon: Award,
+        roles: STAFF_AND_VIEWER,
+      },
+      {
+        href: '/reports/sla-compliance',
+        labelKey: 'nav.slaCompliance',
+        shortKey: 'navShort.ticketReport',
+        icon: Building2,
+        roles: STAFF_AND_VIEWER,
+      },
+      {
+        href: '/reports/security',
+        labelKey: 'page.securityReport',
+        shortKey: 'navShort.ticketReport',
+        icon: ShieldCheck,
+        roles: STAFF_AND_VIEWER,
+        securityOnly: true,
+      },
+      {
+        href: '/reports/tickets',
+        labelKey: 'nav.ticketList',
+        shortKey: 'navShort.ticketReport',
+        icon: Search,
+        roles: STAFF_AND_VIEWER,
+      },
+    ],
+  },
+  {
+    titleKey: null,
+    items: [
       /*
        * ตั้งค่าระบบเป็น "หน้าเดียว 10 แท็บ" ตามต้นแบบ ไม่ใช่ 16 หน้าแยกกัน
        *
@@ -256,10 +310,17 @@ export function landingPath(roles: readonly RoleCode[]): string {
   return LANDING_BY_ROLE[primaryRole(roles)];
 }
 
-export function visibleSections(roles: readonly RoleCode[]): NavSection[] {
+export function visibleSections(
+  roles: readonly RoleCode[],
+  opts: { securityViewer?: boolean } = {},
+): NavSection[] {
   return NAV_SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter((item) => item.roles.some((r) => roles.includes(r))),
+    items: section.items.filter(
+      (item) =>
+        item.roles.some((r) => roles.includes(r)) &&
+        (!item.securityOnly || opts.securityViewer === true),
+    ),
   })).filter((section) => section.items.length > 0);
 }
 
@@ -308,6 +369,7 @@ export const PAGE_TITLE_KEYS: Record<string, MessageKey> = {
   '/reports/tickets': 'nav.ticketReport',
   '/reports/service-performance': 'page.servicePerformance',
   '/reports/team-kpi': 'page.teamKpi',
+  '/reports/security': 'page.securityReport',
   '/kb': 'nav.kb',
   '/kb/new': 'page.newArticle',
   '/notifications': 'nav.notifications',

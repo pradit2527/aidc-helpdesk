@@ -6,9 +6,11 @@ import { ApiEnvelope } from '../../common/http/envelope.dto';
 import { clampPage, clampPageSize } from '../../common/http/pagination';
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
+import { ForbiddenError } from '../../common/errors/domain-error';
 import { TicketReportDto } from './dto/ticket-report.dto';
 import { IsoReportsService } from './iso-reports.service';
 import { ReportsService } from './reports.service';
+import { SecurityReportService } from './security-report.service';
 
 /**
  * แปลง id จาก query string — รับเฉพาะจำนวนเต็มบวก ค่าอื่นถือว่าไม่ได้ส่ง
@@ -52,7 +54,47 @@ export class ReportsController {
   constructor(
     private readonly reports: ReportsService,
     private readonly iso: IsoReportsService,
+    private readonly security: SecurityReportService,
   ) {}
+
+  @Get('security')
+  @ApiOperation({
+    summary: 'รายงานความมั่นคงปลอดภัยสารสนเทศ ตามโครง ISO/IEC 27001:2022',
+    description: [
+      'หัวเอกสาร (เลขที่ ISR-YYYYMM) · สถานะภาพรวมจากผลตรวจ 7 ข้อ · เหตุการณ์ด้านความปลอดภัย ' +
+        '(A.5.24–5.27) · การควบคุมการเข้าถึงและสิทธิ์ (A.5.15–5.18) · ร่องรอยการตรวจสอบ (A.5.28 · A.8.15) · ' +
+        'ทะเบียนช่องว่างของหลักฐาน',
+      '',
+      '**เปิดได้เฉพาะผู้ที่เห็นเหตุความปลอดภัยได้อยู่แล้ว** — หัวหน้าไอที · CEO · DPO · ผู้ดูแลระบบ (SOP-10 ข้อ 2) ' +
+        'คนอื่นได้ 403 แม้จะมีสิทธิ์ `report.view` เพราะตัวเลขสรุปบอกได้ว่ามีเหตุกี่ใบ ทั้งที่ตัวใบถูกซ่อนไว้',
+      '',
+      '- นับเหตุความปลอดภัยจาก **หมวดหมู่กลุ่ม SECURITY** เป็นหลัก เพราะธง `is_security_incident` ' +
+        'ยังไม่มีเส้นทางใดในระบบตั้งค่าให้ (ระบุไว้ใน `evidence_gaps`)',
+      '- ช่องที่ระบบยังไม่ได้บันทึกข้อมูลคืน `null` ไม่ใช่ 0 — และมีแถวอธิบายใน `evidence_gaps` เสมอ',
+    ].join('\n'),
+  })
+  @ApiQuery({ name: 'from', required: false, description: 'ISO 8601 เช่น 2026-09-01T00:00:00+07:00' })
+  @ApiQuery({ name: 'to', required: false, description: 'ISO 8601 (ขอบเปิด) เช่น 2026-10-01T00:00:00+07:00' })
+  securityReport(
+    @CurrentScope() scope: AccessScope,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    scope.require('report.view', 'report.export');
+    /*
+     * ด่านที่สอง แคบกว่าสิทธิ์ดูรายงานปกติ
+     *
+     * รายงานนี้สรุปเหตุความปลอดภัยที่ SOP-10 ข้อ 2 ซ่อนจาก company_admin และเจ้าหน้าที่คนอื่น
+     * ถ้าปล่อยให้ทุกคนที่มี report.view เปิดได้ ตัวเลข "เดือนนี้มีเหตุ 3 ใบ" ก็คือการรั่วเอง
+     */
+    if (!scope.isSecurityIncidentViewer) {
+      throw new ForbiddenError(
+        'FORBIDDEN',
+        'ລາຍງານນີ້ເປີດໄດ້ສະເພາະຫົວໜ້າໄອທີ · CEO · DPO ແລະ ຜູ້ດູແລລະບົບ',
+      );
+    }
+    return this.security.monthly(scope, this.reports.resolvePeriod(from, to));
+  }
 
   @Get('service-performance')
   @ApiOperation({

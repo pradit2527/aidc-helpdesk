@@ -95,6 +95,14 @@ export class MeResponseDto extends CurrentUserDto {
       'ความเป็นหัวหน้าทีมเป็นข้อมูล ไม่ใช่ role จึงไม่โผล่ใน roles หรือ permissions',
   })
   led_teams!: LedTeamDto[];
+
+  @ApiProperty({
+    example: false,
+    description:
+      'เห็นเหตุความปลอดภัยและรายงาน ISO/IEC 27001 ได้ไหม — จริงเฉพาะหัวหน้าไอที · CEO · DPO · ผู้ดูแลระบบ ' +
+      '(SOP-10 ข้อ 2) · ใช้ซ่อนเมนูเท่านั้น backend บังคับซ้ำที่ endpoint เสมอ',
+  })
+  security_viewer!: boolean;
 }
 
 export class HealthResponseDto {

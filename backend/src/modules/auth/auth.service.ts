@@ -289,6 +289,8 @@ export class AuthService {
        * หน้าจออ่าน .length ตรง ๆ ตามสัญญาที่ประกาศไว้ในชนิดข้อมูล
        */
       led_teams: scope.ledTeams.map((t) => ({ id: t.id, name: t.name })),
+      /* มาจาก scope เช่นกัน — ตำแหน่งในทะเบียนผู้ติดต่อ ไม่ใช่ role จึงไม่โผล่ใน permissions */
+      security_viewer: scope.isSecurityIncidentViewer,
     };
   }
 

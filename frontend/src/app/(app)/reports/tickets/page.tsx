@@ -905,6 +905,7 @@ function ReportContent({
         </CardHeader>
         <CardBody className="p-0">
           <DataTable
+            striped
             columns={assigneeColumns}
             rows={report.by_assignee}
             rowKey={(r) => r.assignee?.id ?? 'unassigned'}
@@ -923,6 +924,7 @@ function ReportContent({
               </CardHeader>
               <CardBody className="p-0">
                 <DataTable
+                  striped
                   columns={companyColumns}
                   rows={report.by_company}
                   rowKey={(r) => r.company.id}
@@ -938,6 +940,7 @@ function ReportContent({
               </CardHeader>
               <CardBody className="p-0">
                 <DataTable
+                  striped
                   columns={departmentColumns(showCompanies)}
                   rows={report.by_department}
                   rowKey={(r) => `${r.company.id}-${r.department?.id ?? 'none'}`}
@@ -956,6 +959,7 @@ function ReportContent({
         </CardHeader>
         <CardBody className="p-0">
           <DataTable
+            striped
             columns={ticketColumns(showProject)}
             rows={report.tickets.items}
             rowKey={(r) => r.id}

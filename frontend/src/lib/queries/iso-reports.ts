@@ -152,3 +152,85 @@ export function useTeamKpiReport(
       api.get<TeamKpiReport>('/reports/team-kpi', { from, to, ...(teamId ? { team_id: teamId } : {}) }),
   });
 }
+
+/**
+ * รายงานความมั่นคงปลอดภัยสารสนเทศ ตามโครง ISO/IEC 27001:2022
+ *
+ *   GET /reports/security  — เปิดได้เฉพาะหัวหน้าไอที · CEO · DPO · ผู้ดูแลระบบ (คนอื่นได้ 403)
+ *
+ * ค่าที่เป็น null แปลว่า "ระบบยังไม่มีข้อมูลให้วัด" ไม่ใช่ศูนย์ — หน้าจอต้องแยกสองอย่างนี้
+ */
+export type CheckStatus = 'pass' | 'fail' | 'no_data';
+
+export interface SecurityCheck {
+  code: string;
+  control: string;
+  title: string;
+  status: CheckStatus;
+  detail: string;
+}
+
+export interface SecurityReport {
+  document: {
+    report_no: string;
+    standard: string;
+    period: { from: string; to: string; label: string };
+    previous_period: { from: string; to: string };
+    generated_at: string;
+  };
+  summary: { status: OverallStatus; failing: string[]; checks: SecurityCheck[] };
+  incidents: {
+    total: number;
+    previous_total: number;
+    p1: number;
+    still_open: number;
+    reopened: number;
+    response_met_percent: number | null;
+    resolution_breached: number;
+    avg_minutes_to_response: number | null;
+    avg_minutes_to_resolve: number | null;
+    by_category: { code: string; name: string; count: number }[];
+  };
+  access: {
+    requests_total: number;
+    requests_by_kind: { code: string; name: string; count: number }[];
+    offboarding_total: number;
+    offboarding_done: number;
+    approvals_decided: number;
+    approvals_rejected: number;
+    approvals_pending: number;
+    approvals_pending_over_target: number;
+    avg_approval_hours: number | null;
+    grants_total: number;
+    grants_with_expiry: number;
+    grants_expired_still_present: number;
+    admin_accounts: number;
+    locked_accounts: number;
+    dormant_accounts: number;
+    never_logged_in: number;
+    active_accounts: number;
+  };
+  audit: {
+    entries: number;
+    by_action: { action: string; count: number }[];
+    status_changes: number;
+    status_changes_audited: number;
+    coverage_percent: number | null;
+    entries_with_origin: number;
+    first_entry_at: string | null;
+  };
+  evidence_gaps: { control: string; title: string; missing: string; action: string }[];
+  targets: { approval_pending_days: number; dormant_account_days: number };
+}
+
+export function useSecurityReport(
+  from: string,
+  to: string,
+  enabled = true,
+): UseQueryResult<SecurityReport, Error> {
+  return useQuery({
+    queryKey: ['reports', 'security', { from, to }],
+    queryFn: () => api.get<SecurityReport>('/reports/security', { from, to }),
+    enabled,
+  });
+}

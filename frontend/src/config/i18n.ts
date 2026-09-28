@@ -101,6 +101,10 @@ export const MESSAGES = {
   'navShort.chats': { lo: 'ກ່ອງແຊັດ', th: 'กล่องแชท' },
   // เมนู "รายงาน" ชี้ตรงไปหน้ารายงานเรื่องแจ้งที่กรองได้ — คนละอันกับ nav.reports (ศูนย์รายงาน)
   'nav.ticketReport': { lo: 'ລາຍງານ', th: 'รายงาน' },
+  'nav.reportsSection': { lo: 'ລາຍງານ', th: 'รายงาน' },
+  'nav.reportsHub': { lo: 'ສູນລາຍງານ', th: 'ศูนย์รายงาน' },
+  'nav.slaCompliance': { lo: 'SLA ແຍກຕາມບໍລິສັດ', th: 'SLA แยกตามบริษัท' },
+  'nav.ticketList': { lo: 'ລາຍງານເລື່ອງແຈ້ງ', th: 'รายงานเรื่องแจ้ง' },
   'navShort.ticketReport': { lo: 'ລາຍງານ', th: 'รายงาน' },
 
   // ── เมนูและการนำทาง ──
@@ -278,6 +282,7 @@ export const MESSAGES = {
   'page.slaReport': { lo: 'ລາຍງານ SLA ລາຍເດືອນ', th: 'รายงาน SLA รายเดือน' },
   'page.servicePerformance': { lo: 'ລາຍງານຜົນການໃຫ້ບໍລິການປະຈຳເດືອນ', th: 'รายงานผลการให้บริการประจำเดือน' },
   'page.teamKpi': { lo: 'KPI ທີມ Support', th: 'KPI ทีม Support' },
+  'page.securityReport': { lo: 'ຄວາມໝັ້ນຄົງປອດໄພສາລະສົນເທດ', th: 'ความมั่นคงปลอดภัยสารสนเทศ' },
   'page.importUsers': { lo: 'ນຳເຂົ້າຜູ້ໃຊ້ຈາກໄຟລ໌', th: 'นำเข้าผู้ใช้จากไฟล์' },
   'page.newUser': { lo: 'ສ້າງຜູ້ໃຊ້ໃໝ່', th: 'สร้างผู้ใช้ใหม่' },
   'page.newArticle': { lo: 'ຂຽນບົດຄວາມໃໝ່', th: 'เขียนบทความใหม่' },
