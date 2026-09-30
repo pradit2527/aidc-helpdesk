@@ -253,6 +253,7 @@ export const TICKET_SUBCATEGORIES: readonly TicketSubcategorySeed[] = [
   { parentCode: 'MAGIC', code: 'MAGIC_ACCOUNT', nameTh: 'Magic-Account', defaultImpact: 'department', defaultUrgency: 'medium', sortOrder: 20, ticketTypeScope: 'both' },
   { parentCode: 'MAGIC', code: 'MAGIC_FINANCE', nameTh: 'Magic-Finance', defaultImpact: 'department', defaultUrgency: 'medium', sortOrder: 30, ticketTypeScope: 'both' },
   { parentCode: 'MAGIC', code: 'MAGIC_ASSET', nameTh: 'Magic-Asset', defaultImpact: 'department', defaultUrgency: 'medium', sortOrder: 40, ticketTypeScope: 'both' },
+  { parentCode: 'MAGIC', code: 'MAGIC_BUDGET', nameTh: 'Magic-Budget', defaultImpact: 'department', defaultUrgency: 'medium', sortOrder: 50, ticketTypeScope: 'both' },
 ];
 
 export interface ChecklistItemSeed {
