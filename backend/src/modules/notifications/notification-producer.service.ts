@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, gt, inArray, isNull, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
@@ -29,6 +29,23 @@ export const NOTIFICATION_EVENT = {
   slaBreached: 'sla_breached',
   /** มีคำขอรออนุมัติอยู่ในคิวของคุณ */
   approvalPending: 'approval_pending',
+
+  /*
+   * ── สามเหตุการณ์ของงานประจำวัน ──
+   *
+   * สี่เหตุการณ์ข้างบนล้วนเป็นข่าว "สายไปแล้ว" (เกินกำหนด · ใกล้เกิน · เหตุร้ายแรง ·
+   * ค้างอนุมัติ) ระบบจึงเคยส่งเสียงเฉพาะตอนที่ความเสียหายเกิดไปแล้ว
+   * วัดจากฐานข้อมูลจริงเมื่อ 30 ก.ย. 2569: การแจ้งเตือน 307 รายการเป็น sla_breached
+   * ทั้งหมด ขณะที่ 13 จาก 22 เรื่องที่เปิดอยู่ไม่มีผู้รับผิดชอบ และ 11 เรื่องค้าง
+   * ที่สถานะ "ใหม่" โดยเกินกำหนดทุกใบ — เพราะไม่เคยมีอะไรบอกใครว่ามีงานเข้ามา
+   */
+
+  /** มีเรื่องใหม่เข้าคิวของบริษัทที่คุณดูแล */
+  ticketCreated: 'ticket_created',
+  /** เรื่องถูกมอบหมายให้คุณ */
+  ticketAssigned: 'ticket_assigned',
+  /** มีคนตอบกลับในเรื่องที่คุณเกี่ยวข้อง */
+  ticketReplied: 'ticket_replied',
 } as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENT)[keyof typeof NOTIFICATION_EVENT];
@@ -39,6 +56,19 @@ export interface NotificationDraft {
   eventType: NotificationEvent;
   title: string;
   body: string;
+  /**
+   * ถ้าวันนี้เคยแจ้งเรื่องนี้ไปแล้วและผู้รับ "อ่านไปแล้ว" ให้ปลุกซ้ำ
+   *
+   * ดัชนีกันซ้ำคุมถึงระดับวัน ซึ่งถูกต้องสำหรับข่าวที่ซ้ำได้ไม่จำกัดอย่าง
+   * งานกวาด SLA ทุก 5 นาที แต่ผิดสำหรับการตอบกลับ — ถ้าเจ้าหน้าที่อ่าน
+   * แจ้งเตือนตอนเช้าแล้วผู้แจ้งตอบมาอีกตอนบ่าย การกันซ้ำจะกลืนข้อความที่สอง
+   * หายไปเงียบ ๆ ทั้งที่เป็นคนละเรื่องกัน
+   *
+   * เปิดธงนี้แล้วจะล้าง read_at ของแถวเดิมในวันนั้นให้กลับเป็นยังไม่อ่าน
+   * พร้อมเปลี่ยนข้อความเป็นของใหม่ — กระดิ่งจึงสว่างอีกครั้งโดยไม่มีแถวซ้ำ
+   * แถวที่ยังไม่ถูกอ่านอยู่แล้วจะไม่ถูกแตะ (เตือนซ้ำสิ่งที่ยังไม่ได้อ่านไม่มีประโยชน์)
+   */
+  renotifyIfRead?: boolean;
 }
 
 /**
@@ -100,6 +130,10 @@ export class NotificationProducer {
         .onConflictDoNothing()
         .returning({ id: notification.id });
 
+      if (draft.renotifyIfRead === true && rows.length < userIds.length) {
+        return rows.length + (await this.wakeReadRows(draft, userIds));
+      }
+
       return rows.length;
     } catch (error) {
       this.logger.error(
@@ -108,6 +142,33 @@ export class NotificationProducer {
       );
       return 0;
     }
+  }
+
+  /**
+   * ปลุกแถวของวันนี้ที่ถูกอ่านไปแล้ว ให้กลับมาเป็นยังไม่อ่านพร้อมข้อความใหม่
+   *
+   * ขอบวันต้องคิดด้วยโซนเวียงจันทน์ให้ตรงกับนิพจน์ใน uq_notification_dedup
+   * ถ้าใช้ขอบวันของเซิร์ฟเวอร์ (UTC) ช่วงเช้ามืดของลาวจะไปตกอยู่คนละวันกับดัชนี
+   * แล้วจะหาแถวที่เพิ่งชนไม่เจอ ผลคือการตอบกลับช่วงนั้นเงียบสนิท
+   */
+  private async wakeReadRows(draft: NotificationDraft, userIds: number[]): Promise<number> {
+    const woken = await this.db
+      .update(notification)
+      .set({ readAt: null, title: draft.title.slice(0, 255), body: draft.body })
+      .where(
+        and(
+          inArray(notification.userId, userIds),
+          eq(notification.ticketId, draft.ticketId),
+          eq(notification.eventType, draft.eventType),
+          eq(notification.channel, 'in_app'),
+          isNotNull(notification.readAt),
+          sql`(${notification.createdAt} AT TIME ZONE 'Asia/Vientiane')::date
+              = (now() AT TIME ZONE 'Asia/Vientiane')::date`,
+        ),
+      )
+      .returning({ id: notification.id });
+
+    return woken.length;
   }
 
   /**

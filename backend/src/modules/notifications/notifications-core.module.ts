@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 
 import { IncidentAlertService } from './incident-alert.service';
+import { WorkAlertService } from './work-alert.service';
 import { NotificationProducer } from './notification-producer.service';
 
 /**
@@ -21,7 +22,7 @@ import { NotificationProducer } from './notification-producer.service';
  */
 @Global()
 @Module({
-  providers: [NotificationProducer, IncidentAlertService],
-  exports: [NotificationProducer, IncidentAlertService],
+  providers: [NotificationProducer, IncidentAlertService, WorkAlertService],
+  exports: [NotificationProducer, IncidentAlertService, WorkAlertService],
 })
 export class NotificationsCoreModule {}

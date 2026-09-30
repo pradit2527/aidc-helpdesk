@@ -8,6 +8,7 @@ import { CreateTicketUseCase } from '../../application/use-cases/create-ticket.u
 import { SuperworkService } from '../../integrations/superwork/superwork.service';
 import { MasterDataService } from '../master-data/master-data.service';
 import { IncidentAlertService } from '../notifications/incident-alert.service';
+import { WorkAlertService } from '../notifications/work-alert.service';
 import { RealtimeGateway, type TicketUpdateKind } from '../realtime/realtime.gateway';
 import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
 import { ReassessTicketPriorityUseCase } from '../../application/use-cases/reassess-ticket-priority.use-case';
@@ -83,6 +84,7 @@ export class TicketsService {
     private readonly projects: SupportProjectRepository,
     private readonly chatNotifier: TicketChatNotifier,
     private readonly alerts: IncidentAlertService,
+    private readonly work: WorkAlertService,
   ) {}
 
   async list(scope: AccessScope, query: Record<string, string>): Promise<TicketListResponseDto> {
@@ -361,6 +363,22 @@ export class TicketsService {
     }
 
     /*
+     * บอกคนที่รับงานได้ว่ามีเรื่องเข้าคิว — ทุกระดับ ไม่ใช่เฉพาะ P1
+     *
+     * ก่อนหน้านี้มีแต่ข่าวของ P1 (majorIncidentDeclared) เรื่อง P3 ที่เป็นงานส่วนใหญ่
+     * จึงเข้ามานอนในคิวโดยไม่มีใครรู้ จนกระทั่งเลยกำหนดแล้วค่อยมีเสียงดัง
+     * สองข่าวนี้ไปหาคนละกลุ่ม (หัวหน้าไอที กับ คนที่รับงานได้) จึงส่งทั้งคู่ได้ไม่ซ้ำซ้อน
+     */
+    void this.work.ticketOpened({
+      ticketId: ticket.id,
+      ticketNo: ticket.ticket_no,
+      companyId: ticket.company.id,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      actorId: scope.userId,
+    });
+
+    /*
      * ส่งขึ้นบอร์ด Super Work แบบไม่รอผล
      *
      * ไม่ await โดยตั้งใจ — ผู้ใช้กดแจ้งเรื่องเพื่อขอความช่วยเหลือ ไม่ใช่เพื่อ
@@ -517,6 +535,14 @@ export class TicketsService {
      * การย้ายมือระหว่างทาง (สถานะเท่าเดิม) ไม่ใช่ — notifier กรองให้เองจาก from/to
      */
     this.chatNotifier.ticketStatusChanged({ ticketId: ticket.id, from: fromStatus, to: toStatus });
+    // คนที่เพิ่งได้งานต้องรู้ตัว — เดิมรู้ก็ต่อเมื่อบังเอิญเปิดหน้าคิวของตัวเองเจอ
+    void this.work.ticketAssigned({
+      ticketId: ticket.id,
+      ticketNo: ticket.ticket_no,
+      subject: ticket.subject,
+      assigneeId: ticket.assignee?.id ?? null,
+      actorId: scope.userId,
+    });
     return ticket;
   }
 
@@ -1049,6 +1075,22 @@ export class TicketsService {
       isSecurityIncident: row.isSecurityIncident,
       actorId: scope.userId,
       kind: 'comment',
+    });
+
+    /*
+     * สัญญาณ realtime ข้างบนปลุกเฉพาะหน้าจอที่เปิดเรื่องนี้ค้างไว้อยู่แล้ว
+     * คนที่ปิดหน้าไปแล้ว (คือเกือบทุกคน) ไม่ได้อะไรเลย — การแจ้งเตือนคือสิ่งที่
+     * ตามไปถึงเขา และเป็นเหตุผลว่าทำไมสองอย่างนี้ต้องมีทั้งคู่
+     */
+    void this.work.ticketReplied({
+      ticketId: row.id,
+      ticketNo: row.ticketNo,
+      companyId: row.companyId,
+      subject: row.subject,
+      requesterId: row.requesterId,
+      assigneeId: row.assigneeId,
+      authorId: scope.userId,
+      isInternal: wantsInternal,
     });
 
     return {
