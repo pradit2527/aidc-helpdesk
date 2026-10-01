@@ -8,13 +8,17 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBody, ApiCookieAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import type { AccessScope } from '../../common/scope';
 import { CurrentScope, ScopeGuard } from '../../common/scope.guard';
 import { clampPage, clampPageSize } from '../../common/http/pagination';
+import { NoEnvelope } from '../../common/http/envelope.dto';
+import { exportFileName } from './user-csv';
 import { UsersService } from './users.service';
 
 @ApiTags('Users')
@@ -166,6 +170,56 @@ export class UsersController {
         : {}),
       ...(body.dry_run !== undefined ? { dry_run: body.dry_run } : {}),
     });
+  }
+
+  /*
+   * ⚠️ ต้องประกาศก่อน @Get(':id') เสมอ
+   *    Nest จับคู่เส้นทางตามลำดับที่ประกาศ ถ้าอยู่หลัง คำว่า "export"
+   *    จะถูกจับเป็นค่า :id แล้ว ParseIntPipe จะตอบ 400 แทนที่จะได้ไฟล์
+   */
+  @Get('export')
+  @NoEnvelope()
+  @ApiOperation({
+    summary: 'ส่งออกทะเบียนผู้ใช้เป็นไฟล์ CSV',
+    description:
+      'ขอบเขตและตัวกรองชุดเดียวกับ `GET /users` — เห็นใครในหน้ารายการ ได้คนนั้นในไฟล์ · ' +
+      '**ไม่มีคอลัมน์รหัสผ่าน** ระบบเก็บเป็น argon2id hash ซึ่งถอดกลับไม่ได้ ' +
+      'สิ่งที่ส่งออกคือสถานะของรหัส (ยังเป็นรหัสตั้งต้นหรือไม่) ไม่ใช่ตัวรหัส · ' +
+      'ทุกครั้งที่เรียกจะถูกบันทึกลง audit log (`user.exported`) ตาม ISO/IEC 27001 A.5.34',
+  })
+  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({ name: 'company_id', required: false })
+  @ApiQuery({ name: 'is_active', required: false, enum: ['true', 'false'] })
+  async exportCsv(
+    @CurrentScope() scope: AccessScope,
+    @Res({ passthrough: true }) res: Response,
+    @Query('q') q?: string,
+    @Query('company_id') companyId?: string,
+    @Query('is_active') isActive?: string,
+  ): Promise<string> {
+    /*
+     * สองด่าน ไม่ใช่ด่านเดียว — เห็นรายชื่อ กับ เอาทั้งทะเบียนออกไป ไม่ใช่เรื่องเดียวกัน
+     *
+     * end_user ถือ user.read อยู่แล้ว เพราะต้องเลือกเพื่อนร่วมงานตอนแจ้งแทนผู้อื่น
+     * ถ้าใช้ user.read ด่านเดียว พนักงานทุกคนจะดาวน์โหลดชื่อ อีเมล และตำแหน่ง
+     * ของทุกคนในบริษัทเป็นไฟล์เดียวได้ ซึ่งต่างจากการเปิดดูทีละคนในกล่องค้นหา
+     * โดยสิ้นเชิง — user.create คือเส้นแบ่งที่มีอยู่แล้วระหว่างคนที่ดูแลบัญชีกับคนทั่วไป
+     */
+    scope.require('user.read');
+    scope.require('user.create');
+
+    const { csv, rows } = await this.users.exportCsv(scope, {
+      q,
+      company_id: companyId,
+      is_active: isActive,
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${exportFileName(new Date())}"`);
+    // ไฟล์มีข้อมูลส่วนบุคคล — ห้ามให้พร็อกซีหรือเบราว์เซอร์เก็บสำเนาไว้
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Export-Rows', String(rows));
+    return csv;
   }
 
   @Get(':id')

@@ -254,6 +254,32 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 /**
+ * โหลดไฟล์จาก endpoint ที่ตอบเป็นไฟล์ ไม่ใช่ JSON (เช่น ส่งออก CSV)
+ *
+ * ใช้ send() ตัวเดียวกับคำขออื่น จึงได้คุกกี้ การต่ออายุ session เมื่อเจอ 401
+ * และการแปลง error เป็น ApiError เหมือนกันหมด — ถ้ายิง fetch เองที่หน้าจอ
+ * ไฟล์ที่โหลดตอน token เพิ่งหมดอายุจะกลายเป็นไฟล์ที่มีข้อความ error อยู่ข้างใน
+ * แล้วผู้ใช้จะเปิดไฟล์เสียโดยไม่รู้ว่าเกิดอะไรขึ้น
+ */
+export async function apiDownload(
+  path: string,
+  query?: RequestOptions['query'],
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await send(path, query === undefined ? {} : { query });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as Envelope<unknown> | null;
+    throw toApiError(response, payload);
+  }
+
+  // ชื่อไฟล์มาจากเซิร์ฟเวอร์ ไม่ใช่เดาที่หน้าจอ — วันที่ในชื่อไฟล์จึงเป็นของเซิร์ฟเวอร์เสมอ
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+
+  return { blob: await response.blob(), fileName: match?.[1] ?? 'download.csv' };
+}
+
+/**
  * เรียก endpoint ที่แบ่งหน้า แล้วประกอบรายการกับตัวเลขกลับเป็นก้อนเดียว
  *
  * backend แยกไว้คนละที่โดยตั้งใจ (data เป็นอาร์เรย์ · meta เป็นตัวเลข)

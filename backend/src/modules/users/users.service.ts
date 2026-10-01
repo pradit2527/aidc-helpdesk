@@ -9,7 +9,8 @@ import type { AccessScope } from '../../common/scope';
 import { ScopeService } from '../../common/scope.service';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
-import { appUser, company, department, role, userRole, userRoleScope } from '../../db/schema';
+import { appUser, auditLog, company, department, role, userRole, userRoleScope } from '../../db/schema';
+import { toCsv, USER_EXPORT_MAX_ROWS, type UserCsvRow } from './user-csv';
 
 export interface ImportRowResult {
   line: number;
@@ -108,6 +109,128 @@ export class UsersService {
     }
 
     return and(...parts) as SQL;
+  }
+
+  /**
+   * ส่งออกทะเบียนผู้ใช้เป็น CSV — ขอบเขตและตัวกรองชุดเดียวกับหน้ารายการ
+   *
+   * ⚠️ ไม่มีคอลัมน์ใดที่เกี่ยวกับรหัสผ่าน และจะไม่มีวันมี
+   *    ระบบเก็บรหัสเป็น argon2id hash ซึ่งถอดกลับไม่ได้อยู่แล้ว
+   *    สิ่งที่ส่งออกได้คือ "สถานะ" ของรหัส (ยังเป็นรหัสตั้งต้นหรือไม่) ไม่ใช่ตัวรหัส
+   *
+   * ⚠️ บันทึก audit เสมอ ไม่ใช่เฉพาะตอนสำเร็จบางกรณี
+   *    ไฟล์นี้คือรายชื่อ อีเมล และตำแหน่งของพนักงานทั้งองค์กรในไฟล์เดียว
+   *    ซึ่งเป็นสิ่งที่ ISO/IEC 27001 A.5.34 ถามหาว่า "ใครเอาออกไปเมื่อไร"
+   *    ถ้าไม่บันทึก การคัดลอกข้อมูลส่วนบุคคลออกจากระบบจะไม่เหลือร่องรอยเลย
+   */
+  async exportCsv(
+    scope: AccessScope,
+    params: Omit<UserListParams, 'page' | 'page_size'>,
+  ): Promise<{ csv: string; rows: number }> {
+    const requested = params.company_id ? Number(params.company_id) : undefined;
+    const parts: SQL[] = [this.scopeWhere(scope, requested)];
+
+    if (params.q) {
+      const needle = `%${params.q}%`;
+      parts.push(
+        or(
+          ilike(appUser.fullName, needle),
+          ilike(appUser.username, needle),
+          ilike(appUser.employeeCode, needle),
+        ) as SQL,
+      );
+    }
+    if (params.is_active === 'true' || params.is_active === 'false') {
+      parts.push(eq(appUser.isActive, params.is_active === 'true') as SQL);
+    }
+
+    /*
+     * เพดานจำนวนแถว — กันคำขอเดียวดึงทั้งฐานข้อมูลออกมาค้างในหน่วยความจำ
+     * องค์กรนี้มีพนักงานหลักร้อย เพดานนี้จึงไม่เคยถูกชนในการใช้งานจริง
+     * แต่ถ้าวันหนึ่งชน ไฟล์จะขาดท้ายโดยไม่มีใครรู้ จึงคืนจำนวนแถวออกไปให้ผู้เรียกบอกผู้ใช้ด้วย
+     */
+    const rows = await this.db
+      .select({
+        username: appUser.username,
+        full_name: appUser.fullName,
+        email: appUser.email,
+        employee_code: appUser.employeeCode,
+        job_title: appUser.jobTitle,
+        company_code: company.code,
+        department_name: department.name,
+        is_active: appUser.isActive,
+        is_locked: appUser.isLocked,
+        must_change_password: appUser.mustChangePassword,
+        last_login_at: appUser.lastLoginAt,
+        id: appUser.id,
+      })
+      .from(appUser)
+      .innerJoin(company, eq(company.id, appUser.companyId))
+      .leftJoin(department, eq(department.id, appUser.departmentId))
+      .where(and(...parts) as SQL)
+      .orderBy(asc(company.code), asc(appUser.fullName))
+      .limit(USER_EXPORT_MAX_ROWS);
+
+    const roleRows =
+      rows.length === 0
+        ? []
+        : await this.db
+            .select({ user_id: userRole.userId, code: role.code })
+            .from(userRole)
+            .innerJoin(role, eq(role.id, userRole.roleId))
+            .where(
+              inArray(
+                userRole.userId,
+                rows.map((r) => r.id),
+              ),
+            );
+
+    const rolesByUser = new Map<number, string[]>();
+    for (const r of roleRows) {
+      const list = rolesByUser.get(r.user_id);
+      if (list) list.push(r.code);
+      else rolesByUser.set(r.user_id, [r.code]);
+    }
+
+    const csv = toCsv(
+      rows.map(
+        (r): UserCsvRow => ({
+          username: r.username,
+          full_name: r.full_name,
+          email: r.email,
+          employee_code: r.employee_code,
+          job_title: r.job_title,
+          company_code: r.company_code,
+          department_name: r.department_name,
+          roles: (rolesByUser.get(r.id) ?? []).sort().join(' + '),
+          is_active: r.is_active,
+          is_locked: r.is_locked,
+          must_change_password: r.must_change_password,
+          last_login_at: r.last_login_at,
+        }),
+      ),
+    );
+
+    await this.db.insert(auditLog).values({
+      actorId: scope.userId,
+      companyId: requested !== undefined && scope.inScope(requested) ? requested : null,
+      action: 'user.exported',
+      entityType: 'user',
+      entityId: null,
+      oldValue: null,
+      // เก็บ "ขอบเขตของสิ่งที่ถูกเอาออกไป" ไม่ใช่ตัวข้อมูล — ห้าม log ข้อมูลส่วนบุคคลซ้ำลง audit
+      newValue: {
+        rows: rows.length,
+        filters: {
+          q: params.q ?? null,
+          company_id: params.company_id ?? null,
+          is_active: params.is_active ?? null,
+        },
+        truncated: rows.length === USER_EXPORT_MAX_ROWS,
+      },
+    });
+
+    return { csv, rows: rows.length };
   }
 
   async list(scope: AccessScope, params: UserListParams) {

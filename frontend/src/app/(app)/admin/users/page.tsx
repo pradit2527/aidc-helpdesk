@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { KeyRound, Lock, Search, Upload, UserPlus } from 'lucide-react';
+import { Download, KeyRound, Lock, Search, Upload, UserPlus } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 
@@ -13,6 +13,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/field';
 import { Avatar, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
+import { apiDownload, ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatRelative } from '@/lib/format';
 import { useCan, useSession } from '@/lib/session';
@@ -31,6 +32,42 @@ import type { AdminUser } from '@/lib/types';
 export default function AdminUsersPage(): React.JSX.Element {
   const { user } = useSession();
   const canCreate = useCan('user.create');
+  const [exporting, setExporting] = React.useState(false);
+
+  /*
+   * ส่งออกตามตัวกรองที่เห็นอยู่บนหน้าจอ แล้วให้เบราว์เซอร์เซฟไฟล์
+   *
+   * ต้องผ่าน apiDownload ไม่ใช่ <a href> ตรง ๆ — ลิงก์ธรรมดาไม่ผ่านตัวต่ออายุ
+   * session ถ้า access token เพิ่งหมดอายุ ผู้ใช้จะได้ไฟล์ที่ข้างในเป็นข้อความ
+   * 401 แทนที่จะเป็นข้อมูล และจะไม่รู้ตัวจนกว่าจะเปิดไฟล์
+   */
+  async function exportCsv(): Promise<void> {
+    setExporting(true);
+    try {
+      const { blob, fileName } = await apiDownload('/users/export', {
+        ...(q.trim() ? { q: q.trim() } : {}),
+        ...(company ? { company_id: company } : {}),
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      // ปล่อยหน่วยความจำของ blob คืน ไม่งั้นไฟล์ค้างอยู่จนกว่าจะปิดแท็บ
+      URL.revokeObjectURL(url);
+
+      toast.success('ສົ່ງອອກໄຟລ໌ແລ້ວ');
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError && error.code === 'FORBIDDEN'
+          ? 'ທ່ານບໍ່ມີສິດສົ່ງອອກທະບຽນຜູ້ໃຊ້'
+          : 'ສົ່ງອອກບໍ່ສຳເລັດ ກະລຸນາລອງໃໝ່',
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
   const t = useT();
   const [q, setQ] = React.useState('');
   const [company, setCompany] = React.useState('');
@@ -182,7 +219,16 @@ export default function AdminUsersPage(): React.JSX.Element {
                 ນຳເຂົ້າຈາກໄຟລ໌
               </Link>
             </Button>
-            {/* ซ่อนจากคนที่ไม่มีสิทธิ์ user.create — กดแล้วโดนปฏิเสธแน่ ๆ ไม่ควรให้เห็นปุ่ม */}
+            {/*
+              ส่งออกใช้ตัวกรองเดียวกับที่เห็นบนหน้าจอ — ได้ไฟล์ตรงกับที่กำลังดูอยู่
+              ไม่ใช่ทั้งฐานข้อมูล ซึ่งเป็นสิ่งที่คนกดคาดหวังเมื่อเพิ่งค้นหาอะไรไว้
+            */}
+            {canCreate && (
+              <Button variant="secondary" onClick={exportCsv} disabled={exporting}>
+                <Download className="h-4 w-4" aria-hidden="true" />
+                {exporting ? 'ກຳລັງສົ່ງອອກ…' : 'ສົ່ງອອກ CSV'}
+              </Button>
+            )}
             {canCreate && (
               <Button asChild>
                 <Link href="/admin/users/new">
