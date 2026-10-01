@@ -9,9 +9,7 @@
 
 import 'dotenv/config';
 
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import postgres from 'postgres';
+import { runMigrations } from './run-migrations';
 
 async function main(): Promise<void> {
   const url = process.env.MIGRATE_URL ?? process.env.DATABASE_URL;
@@ -19,20 +17,9 @@ async function main(): Promise<void> {
     throw new Error('ต้องตั้ง MIGRATE_URL หรือ DATABASE_URL ก่อน');
   }
 
-  // max: 1 เพราะ migrator ต้องรันทุกคำสั่งบน connection เดียวกัน
-  // ไม่เช่นนั้น advisory lock ที่กันการรันซ้อนจะอยู่คนละ session
-  const client = postgres(url, { max: 1, onnotice: () => {} });
-
-  const host = new URL(url).host;
-  console.log(`กำลัง migrate ไปยัง ${host} ...`);
-
-  const started = Date.now();
-  try {
-    await migrate(drizzle(client), { migrationsFolder: './src/db/migrations' });
-    console.log(`migrate สำเร็จใน ${Date.now() - started} ms`);
-  } finally {
-    await client.end();
-  }
+  console.log(`กำลัง migrate ไปยัง ${new URL(url).host} ...`);
+  // eslint-disable-next-line no-console
+  await runMigrations((message) => console.log(message));
 }
 
 main().catch((err: unknown) => {

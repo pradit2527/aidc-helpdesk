@@ -21,10 +21,31 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 
 import { AppModule } from './app.module';
+import { runMigrations } from './db/run-migrations';
 
 const API_PREFIX = 'api/v1';
 
 async function bootstrap(): Promise<void> {
+  /*
+   * รัน migration ก่อนเปิดรับคำขอ เมื่อ MIGRATE_ON_BOOT=true
+   *
+   * Render ชั้นฟรีไม่มี preDeployCommand ให้ใช้ การ deploy จึงเคยต้องพึ่ง
+   * คนเข้าไปรัน `npm run db:migrate:prod` ในเชลล์เอง "ก่อน" โค้ดใหม่ขึ้น
+   * ถ้าลืมหรือสลับลำดับ โค้ดใหม่จะวิ่งบน schema เก่าแล้วล้มเป็นคำขอ ๆ ไป
+   * ซึ่งเป็นความล้มเหลวที่หาสาเหตุยากกว่าการบูตไม่ขึ้นมาก
+   *
+   * หลายอินสแตนซ์บูตพร้อมกันปลอดภัย — migrator ถือ advisory lock ของ Postgres
+   * ตัวที่ได้ล็อกรัน ตัวที่เหลือรอแล้วพบว่าไม่มีอะไรค้าง
+   *
+   * ⚠️ migration ที่ล้มทำให้แอปไม่บูต โดยตั้งใจ — ให้เห็นตั้งแต่ตอน deploy
+   *    ดีกว่าให้ขึ้นมาแล้วตอบ error ทีละคำขอโดยที่ health check ยังเขียว
+   *    ปิดธงนี้แล้วกลับไปรันเองได้ทุกเมื่อ (ค่าเริ่มต้นคือปิด)
+   */
+  if (process.env.MIGRATE_ON_BOOT === 'true') {
+    // eslint-disable-next-line no-console
+    await runMigrations((message) => console.log(`[migrate] ${message}`));
+  }
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // ปิด logger ของ Nest แล้วให้ pino รับช่วง มิฉะนั้น log บูตจะเป็นข้อความเปล่า
     // ปนอยู่กับ JSON ทำให้ตัวเก็บ log แยกฟิลด์บางบรรทัดไม่ได้
