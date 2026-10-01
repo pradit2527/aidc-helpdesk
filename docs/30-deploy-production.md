@@ -1,11 +1,11 @@
-# คู่มือขึ้นระบบจริง — Vercel + Railway + Neon
+# คู่มือขึ้นระบบจริง — Vercel + Render + Neon
 
 เอกสารนี้พาไปทีละขั้นจนระบบใช้งานได้จริงบนอินเทอร์เน็ต
 
 | ส่วน | โฮสต์ที่ใช้ | เหตุผล |
 |---|---|---|
 | หน้าเว็บ (Next.js) | **Vercel** | รองรับ App Router กับ middleware เต็มรูปแบบ |
-| API (NestJS) | **Railway** | รันโปรเซสค้างได้ ซึ่ง Vercel ทำไม่ได้ |
+| API (NestJS) | **Render** (สิงคโปร์) | รันโปรเซสค้างได้ ซึ่ง Vercel ทำไม่ได้ · ใกล้ลาวที่สุดเท่าที่มี |
 | ฐานข้อมูล | **Neon** | Postgres 17 · มีชั้นฟรี · รองรับ `pg_trgm` กับ `unaccent` |
 | คิวงาน | **Upstash Redis** | ไม่บังคับ — ไม่มีก็ยังใช้งานได้ แค่ไม่มีการประเมิน SLA อัตโนมัติ |
 
@@ -27,13 +27,13 @@ Vercel รันโค้ดแบบ serverless คือปลุกขึ้�
 **หน้าเว็บต้องคุยกับ API ผ่านโดเมนของตัวเอง ห้ามเรียกข้ามโดเมน**
 
 ระบบยืนยันตัวตนด้วยคุกกี้ `SameSite=Strict` ซึ่งเบราว์เซอร์จะไม่ส่งข้ามโดเมนให้
-ถ้าตั้งให้หน้าเว็บยิงไป `api.railway.app` ตรง ๆ จะล็อกอินไม่ได้เลย
+ถ้าตั้งให้หน้าเว็บยิงไป `onrender.com` ตรง ๆ จะล็อกอินไม่ได้เลย
 และอาการที่เห็นคือ "ล็อกอินสำเร็จแล้วเด้งกลับหน้าล็อกอิน" ซึ่งไล่หาสาเหตุยากมาก
 
 วิธีที่ถูกคือให้ Next.js เป็นตัวส่งต่อ (มีอยู่แล้วใน `next.config.ts`)
 
 ```
-เบราว์เซอร์ → aidc-helpdesk.vercel.app/api/v1/*  →  Railway
+เบราว์เซอร์ → aidc-helpdesk.vercel.app/api/v1/*  →  Render
                     ↑ เบราว์เซอร์เห็นแค่โดเมนเดียว คุกกี้จึงทำงาน
 ```
 
@@ -83,60 +83,53 @@ Error relocating .../argon2.node: __strdup: symbol not found
 
 ---
 
-## ขั้นที่ 2 — API (Railway)
+## ขั้นที่ 2 — API (Render)
 
-1. สมัครที่ https://railway.app แล้ว **New Project → Deploy from GitHub repo**
-2. เลือก repo `aidc-helpdesk`
-3. **Settings → Root Directory** ตั้งเป็น `backend`
-4. Railway จะเจอ `backend/Dockerfile` กับ `backend/railway.json` เอง
+Render อ่าน [`render.yaml`](../render.yaml) ที่รากของ repo แล้วตั้งค่าเกือบทั้งหมดให้เอง
+สิ่งที่ต้องทำด้วยมือจึงเหลือแค่กรอกค่าที่เป็นความลับ
 
-### ตัวแปรสภาพแวดล้อมที่ต้องตั้ง
+1. https://dashboard.render.com → **New → Blueprint**
+2. เลือก repo `aidc-helpdesk` สาขา `master`
+3. Render อ่าน `render.yaml` แล้วสร้าง service `aidc-helpdesk-api` (docker · สิงคโปร์)
+   โดยใช้ `Dockerfile` ที่รากของ repo — **ไม่ต้องตั้ง Root Directory**
 
-```bash
-NODE_ENV=production
-TZ=Asia/Vientiane
+### ค่าที่ต้องกรอกเอง (4 ตัว)
 
-DATABASE_URL=<connection string จาก Neon>
-MIGRATE_URL=<connection string จาก Neon>
+ทุกตัวในไฟล์ blueprint ทำเครื่องหมาย `sync: false` ไว้ Render จะถามตอนสร้าง
+และไม่เก็บค่าไว้ใน repo
 
-# สร้างใหม่เสมอ ห้ามใช้ค่าจากเอกสารหรือจากเครื่องพัฒนา
-# สร้างด้วย: node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-JWT_SECRET=<ค่าที่สร้างเอง ยาวอย่างน้อย 32 ไบต์>
+| key | ค่า |
+|---|---|
+| `DATABASE_URL` | connection string **แบบ pooled** จาก Neon (ชื่อโฮสต์ลงท้าย `-pooler`) |
+| `MIGRATE_URL` | connection string **แบบ direct** (ไม่มี `-pooler`) — 0001 เรียก `CREATE EXTENSION` |
+| `JWT_SECRET` | สร้างใหม่เสมอ: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
+| `SEED_ADMIN_PASSWORD` | 12 ตัวขึ้นไป มีพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข และอักขระพิเศษ |
 
-ACCESS_TOKEN_TTL_MINUTES=30
-REFRESH_TOKEN_TTL_DAYS=7
-COOKIE_SECURE=true
+ค่าที่เหลือ blueprint ตั้งให้แล้วทั้งหมด — `NODE_ENV` · `TZ=Asia/Vientiane` ·
+`COOKIE_SECURE=true` · `TRUST_PROXY_HOPS=1` · `LOCKOUT_ENABLED=false` ·
+`JOBS_ENABLED=false` · `MIGRATE_ON_BOOT=true` · `WS_CORS_ORIGIN` · `APP_BASE_URL`
 
-# Railway มี proxy หนึ่งชั้นหน้าแอป
-TRUST_PROXY_HOPS=1
+### ตารางฐานข้อมูลสร้างเอง ไม่ต้องเข้า shell
 
-# เปิดการล็อกบัญชีบน production
-# ⚠️ ต้องมี POST /users/{id}/unlock ใช้ได้ก่อน มิฉะนั้นบัญชีที่ถูกล็อก
-#    จะไม่มีใครปลดได้เลย ตอนนี้ยังไม่มี endpoint นั้น จึงยังตั้ง true ไม่ได้
-LOCKOUT_ENABLED=false
+`MIGRATE_ON_BOOT=true` ทำให้แอปรัน migration ที่ค้างอยู่ให้เองก่อนเปิดรับคำขอทุกครั้งที่บูต
+ชั้นฟรีของ Render ไม่มี `preDeployCommand` ให้ใช้ ถ้าไม่ทำแบบนี้จะต้องมีคนจำว่า
+ต้องเข้า shell ไปรัน `db:migrate:prod` **ก่อน** โค้ดใหม่ขึ้นทุกครั้ง ซึ่งพลาดเมื่อไหร่
+โค้ดใหม่จะวิ่งบน schema เก่าแล้วล้มเป็นคำขอ ๆ ไป
 
-# ไม่มี Redis ก็รันได้ แค่ไม่มีการประเมิน SLA อัตโนมัติ
-JOBS_ENABLED=false
-# ถ้ามี Upstash แล้ว: REDIS_URL=rediss://...  แล้วเปลี่ยน JOBS_ENABLED=true
+> migration ที่ล้มจะทำให้บูตไม่ขึ้นโดยตั้งใจ — เห็นในหน้า Logs ของ deploy นั้นเลย
+> ดีกว่าขึ้นมาแล้วตอบ error ทีละคำขอโดยที่ health check ยังเขียว
 
-# บัญชีผู้ดูแลชุดแรก — ใช้ครั้งเดียวตอน seed
-SEED_ADMIN_USERNAME=admin
-SEED_ADMIN_PASSWORD=<ตั้งรหัสที่แข็งแรง ห้ามใช้ค่าจากเครื่องพัฒนา>
-```
-
-### สร้างตารางและข้อมูลตั้งต้น
-
-หลัง deploy ครั้งแรกสำเร็จ เปิด Railway shell แล้วสั่งตามลำดับ
+ส่วน **ข้อมูลตั้งต้น** (บัญชี admin · บทบาท · หมวดหมู่ · ค่า SLA) ยังต้องสั่งเองครั้งเดียว
+หลัง deploy แรกสำเร็จ — Render → service → **Shell**
 
 ```bash
-npm run db:migrate:prod
 npm run db:seed:prod
 ```
 
-> ทั้งสองคำสั่งใช้ไฟล์ที่คอมไพล์แล้วใน `dist/` เพราะ `tsx` เป็น devDependency
-> ที่ถูกตัดออกจาก image ไปแล้ว การเรียก `npm run db:migrate` ธรรมดาจะไม่ทำงาน
+> ใช้ไฟล์ที่คอมไพล์แล้วใน `dist/` เพราะ `tsx` เป็น devDependency ที่ถูกตัดออกจาก image
+> การเรียก `npm run db:seed` ธรรมดาจะไม่ทำงาน
 
-5. คัดลอก URL สาธารณะที่ Railway ให้มา เช่น `https://aidc-helpdesk-api.up.railway.app`
+4. คัดลอก URL สาธารณะที่ Render ให้มา — ปัจจุบันคือ `https://aidc-helpdesk.onrender.com`
 
 ---
 
@@ -155,7 +148,6 @@ frontend
 3. **Settings → Environment Variables**
 
 ```bash
-BACKEND_ORIGIN=https://aidc-helpdesk-api.up.railway.app
 
 # แชทถาม-ตอบ Chatwoot — ไม่ตั้งสองตัวนี้ = ไม่มีปุ่มแชท
 NEXT_PUBLIC_CHATWOOT_BASE_URL=https://helpdesk.aidclaos.com
@@ -165,9 +157,9 @@ NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN=<website token ของ inbox แบบ Webs
    **เซิร์ฟเวอร์ Chatwoot ต้องเป็น https** — หน้าเว็บนี้เป็น https ถ้าแชทเป็น http
    เบราว์เซอร์บล็อกโดยไม่แจ้งอะไรเลย ปุ่มแชทแค่ไม่โผล่
    `NEXT_PUBLIC_*` ถูกฝังตอน build ต้อง Redeploy ทุกครั้งที่แก้
-   ส่วน HMAC token ของแชท (`CHATWOOT_HMAC_TOKEN`) เป็นความลับ ตั้งที่ Railway ไม่ใช่ที่นี่
+   ส่วน HMAC token ของแชท (`CHATWOOT_HMAC_TOKEN`) เป็นความลับ ตั้งที่ Render ไม่ใช่ที่นี่
 
-   **ห้ามตั้ง `NEXT_PUBLIC_API_BASE_URL`** — ถ้าตั้งเป็น URL เต็มของ Railway
+   **ห้ามตั้ง `NEXT_PUBLIC_API_BASE_URL`** — ถ้าตั้งเป็น URL เต็มของ Render
    เบราว์เซอร์จะยิงข้ามโดเมนแล้วคุกกี้ `SameSite=Strict` จะไม่ถูกส่งไป
    ปล่อยให้เป็นค่าเริ่มต้น `/api/v1` แล้วให้ Next.js ส่งต่อให้
 
@@ -179,10 +171,10 @@ NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN=<website token ของ inbox แบบ Webs
 
 ```bash
 # API ตอบไหม
-curl https://aidc-helpdesk-api.up.railway.app/api/v1/livez
+curl https://aidc-helpdesk.onrender.com/api/v1/livez
 
 # ฐานข้อมูลต่อติดไหม — ต้องได้ database.status = "ok"
-curl https://aidc-helpdesk-api.up.railway.app/api/v1/health
+curl https://aidc-helpdesk.onrender.com/api/v1/health
 
 # หน้าเว็บส่งต่อไป API ได้ไหม
 curl https://aidc-helpdesk.vercel.app/api/v1/livez
@@ -217,7 +209,7 @@ curl -i -X POST https://aidc-helpdesk.vercel.app/api/v1/auth/login \
 | บริการ | ชั้นฟรี | พอไหม |
 |---|---|---|
 | Vercel Hobby | 100 GB ทราฟฟิก/เดือน | พอสำหรับใช้ภายในองค์กร |
-| Railway | เครดิต $5/เดือน | พอสำหรับ API ตัวเดียว |
+| Render | ชั้นฟรี | หลับเมื่อไม่มีคนใช้ 15 นาที คำขอแรกหลังตื่นช้าราวครึ่งนาที |
 | Neon | 0.5 GB · 190 ชม.คอมพิวต์ | พอช่วงทดลอง |
 | Upstash | 10,000 คำสั่ง/วัน | พอสำหรับงาน SLA ทุก 5 นาที |
 

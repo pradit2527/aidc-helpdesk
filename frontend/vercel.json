@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "env": {
+    "BACKEND_ORIGIN": "https://aidc-helpdesk.onrender.com",
+    "NEXT_PUBLIC_WS_ORIGIN": "https://aidc-helpdesk.onrender.com"
+  },
+  "build": {
+    "env": {
+      "BACKEND_ORIGIN": "https://aidc-helpdesk.onrender.com",
+      "NEXT_PUBLIC_WS_ORIGIN": "https://aidc-helpdesk.onrender.com"
+    }
+  }
+}
