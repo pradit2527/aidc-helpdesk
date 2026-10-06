@@ -19,6 +19,9 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "incremental": true,
+    // เก็บไว้ใน dist โดยตั้งใจ: ลบ dist เมื่อไร แคชหายตามเมื่อนั้น จึงไม่มีทางเหลือแคชที่บอกว่า
+    // "คอมไพล์แล้ว" ทั้งที่ไฟล์ผลลัพธ์ไม่มี (ถ้าแยกไว้นอก dist จะได้ dist ว่างแต่แอปไม่ยอมสร้างใหม่)
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "skipLibCheck": true,
     "strict": true,
     "strictNullChecks": true,
