@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Inbox } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,18 @@ export interface Column<T> {
   /** คลาสเพิ่มทั้งหัวคอลัมน์และช่องข้อมูล เช่น whitespace-nowrap ของคอลัมน์ที่ต้องอยู่บรรทัดเดียว */
   cellClassName?: string | undefined;
   render: (row: T) => React.ReactNode;
+  /**
+   * กดหัวคอลัมน์เพื่อเรียงลำดับได้ — ใช้ได้เมื่อตารางส่ง onSort มาด้วย (ReportTable)
+   * ไม่ระบุ = เรียงได้ถ้ามีหัวคอลัมน์ (คอลัมน์ปุ่มที่ไม่มีหัว เรียงไม่ได้ ซึ่งถูกต้อง)
+   */
+  sortable?: boolean | undefined;
+  /**
+   * ค่าที่ใช้เรียงลำดับ — ไม่ระบุ = เรียงตามข้อความที่เซลล์แสดง
+   * ระบุเมื่อข้อความเรียงไม่ถูก เช่นวันที่ที่แสดงเป็น "5 ຕ.ລ." หรือช่วงเวลา "3 ມື້ 14 ຊມ."
+   */
+  sortValue?: ((row: T) => string | number | null) | undefined;
+  /** ข้อความของเซลล์สำหรับค้นหา/ส่งออก — ไม่ระบุ = อ่านจากสิ่งที่ render แสดง */
+  text?: ((row: T) => string) | undefined;
 }
 
 interface DataTableProps<T> {
@@ -42,6 +54,10 @@ interface DataTableProps<T> {
    * ทั้งบนธีมสว่างและธีมมืด ถ้าใช้สีเดียวกันทั้งสองอย่าง แถวที่ชี้อยู่จะกลืนกับลายทาง
    */
   striped?: boolean | undefined;
+  /** คอลัมน์ที่กำลังเรียงอยู่ — ใช้คู่กับ onSort */
+  sort?: { key: string; dir: 'asc' | 'desc' } | null | undefined;
+  /** ผู้ใช้กดหัวคอลัมน์ — ผู้เรียกเป็นคนตัดสินว่าจะเรียงขึ้นหรือลง */
+  onSort?: ((key: string) => void) | undefined;
 }
 
 const HIDE_CLASS = {
@@ -63,6 +79,8 @@ export function DataTable<T>({
   emptyHint,
   caption,
   striped = false,
+  sort,
+  onSort,
 }: DataTableProps<T>): React.JSX.Element {
   if (rows.length === 0) {
     return <EmptyState title={emptyTitle} hint={emptyHint} />;
@@ -120,6 +138,13 @@ export function DataTable<T>({
                   key={col.key}
                   scope="col"
                   style={col.width ? { width: col.width } : undefined}
+                  aria-sort={
+                    sort?.key === col.key
+                      ? sort.dir === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : undefined
+                  }
                   className={cn(
                     'px-3 py-2.5 text-caption font-semibold text-ink-2',
                     col.align === 'right' && 'text-right',
@@ -128,7 +153,21 @@ export function DataTable<T>({
                     col.cellClassName,
                   )}
                 >
-                  {col.header}
+                  {onSort && col.header && col.sortable !== false ? (
+                    <button
+                      type="button"
+                      onClick={() => onSort(col.key)}
+                      className={cn(
+                        'group inline-flex items-center gap-1 rounded font-semibold hover:text-ink',
+                        sort?.key === col.key && 'text-ink',
+                      )}
+                    >
+                      {col.header}
+                      <SortIcon dir={sort?.key === col.key ? sort.dir : null} />
+                    </button>
+                  ) : (
+                    col.header
+                  )}
                 </th>
               ))}
             </tr>
@@ -140,7 +179,7 @@ export function DataTable<T>({
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={cn(
                   'border-b border-hair transition-colors last:border-0',
-                  striped && 'even:bg-subtle',
+                  striped && 'odd:bg-subtle',
                   'hover:bg-primary-subtle',
                   onRowClick && 'cursor-pointer',
                 )}
@@ -165,6 +204,18 @@ export function DataTable<T>({
         </table>
       </div>
     </>
+  );
+}
+
+function SortIcon({ dir }: { dir: 'asc' | 'desc' | null }): React.JSX.Element {
+  // ลูกศรเทาจางเมื่อยังไม่ได้เรียงตามคอลัมน์นี้ — บอกว่ากดได้ โดยไม่แย่งความสนใจจากข้อมูล
+  if (dir === 'asc') return <ArrowUp className="h-3.5 w-3.5 text-primary" aria-hidden="true" />;
+  if (dir === 'desc') return <ArrowDown className="h-3.5 w-3.5 text-primary" aria-hidden="true" />;
+  return (
+    <ChevronsUpDown
+      className="h-3.5 w-3.5 text-ink-3 opacity-60 group-hover:opacity-100"
+      aria-hidden="true"
+    />
   );
 }
 

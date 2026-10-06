@@ -30,6 +30,28 @@ import { formatSlaRemaining } from '@/lib/format';
 const BADGE_BASE = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-caption font-semibold';
 const BADGE = `${BADGE_BASE} max-w-full flex-wrap`;
 
+/**
+ * ຂໍ້ຄວາມຂອງປ້າຍສະຖານະ — ແຍກອອກມາເພື່ອໃຫ້ຕາຕະລາງລາຍງານໃຊ້ຄຳດຽວກັນກັບທີ່ປ້າຍສະແດງ
+ * ໃນການຄົ້ນຫາ ແລະ ໄຟລ໌ສົ່ງອອກ (ບໍ່ມີສອງຊຸດທີ່ຂັດກັນ)
+ */
+export function statusBadgeLabel(
+  status: TicketStatus | (string & {}),
+  pendingReason?: string | null,
+): string {
+  /*
+   * "ລໍຖ້າຜູ້ແຈ້ງ" ຢ່າງດຽວບໍ່ພໍ — ຜູ້ໃຊ້ຕ້ອງຮູ້ວ່າລໍຖ້າຫຍັງຢູ່ (G-06)
+   *
+   * pending_vendor ກັບ pending_approval ບອກຢູ່ໃນຊື່ສະຖານະແລ້ວ ຈຶ່ງບໍ່ທັບ
+   * ເຫຼືອແຕ່ pending_user — ແລະ ຂໍ້ມູນເກົ່າຍັງເປັນ 'user'/'vendor'/'approval'
+   * ສ່ວນຂໍ້ມູນໃໝ່ເປັນຂໍ້ຄວາມອິດສະຫຼະ ຈຶ່ງແປໄດ້ກໍ່ແປ ແປບໍ່ໄດ້ກໍ່ສະແດງຕາມທີ່ມາ
+   */
+  const reasonLabel =
+    pendingReason && pendingReason in PENDING_REASON
+      ? PENDING_REASON[pendingReason as keyof typeof PENDING_REASON]
+      : (pendingReason ?? null);
+  return status === 'pending_user' && reasonLabel ? reasonLabel : statusMeta(status).label;
+}
+
 export function StatusBadge({
   status,
   pendingReason,
@@ -43,18 +65,7 @@ export function StatusBadge({
 }) {
   const meta = statusMeta(status);
   const Icon = meta.icon;
-  /*
-   * "ລໍຖ້າຜູ້ແຈ້ງ" ຢ່າງດຽວບໍ່ພໍ — ຜູ້ໃຊ້ຕ້ອງຮູ້ວ່າລໍຖ້າຫຍັງຢູ່ (G-06)
-   *
-   * pending_vendor ກັບ pending_approval ບອກຢູ່ໃນຊື່ສະຖານະແລ້ວ ຈຶ່ງບໍ່ທັບ
-   * ເຫຼືອແຕ່ pending_user — ແລະ ຂໍ້ມູນເກົ່າຍັງເປັນ 'user'/'vendor'/'approval'
-   * ສ່ວນຂໍ້ມູນໃໝ່ເປັນຂໍ້ຄວາມອິດສະຫຼະ ຈຶ່ງແປໄດ້ກໍ່ແປ ແປບໍ່ໄດ້ກໍ່ສະແດງຕາມທີ່ມາ
-   */
-  const reasonLabel =
-    pendingReason && pendingReason in PENDING_REASON
-      ? PENDING_REASON[pendingReason as keyof typeof PENDING_REASON]
-      : (pendingReason ?? null);
-  const label = status === 'pending_user' && reasonLabel ? reasonLabel : meta.label;
+  const label = statusBadgeLabel(status, pendingReason);
 
   return (
     <span className={cn(BADGE, meta.className, className)}>

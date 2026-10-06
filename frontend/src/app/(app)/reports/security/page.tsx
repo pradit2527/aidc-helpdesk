@@ -10,9 +10,11 @@ import {
   ReportSearch,
   ReportSection,
   ResultChip,
+  resultLabel,
   SummaryStrip,
 } from '@/components/reports/report-layout';
-import { DataTable, type Column } from '@/components/ui/data-table';
+import { type Column } from '@/components/ui/data-table';
+import { ReportTable } from '@/components/reports/report-table';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
@@ -127,7 +129,7 @@ const METRIC_COLUMNS: Column<MetricRow>[] = [
 ];
 
 function MetricTable({ rows, caption }: { rows: MetricRow[]; caption: string }): React.JSX.Element {
-  return <DataTable striped columns={METRIC_COLUMNS} rows={rows} rowKey={(r) => r.label} caption={caption} />;
+  return <ReportTable columns={METRIC_COLUMNS} rows={rows} rowKey={(r) => r.label} caption={caption} />;
 }
 
 const CHECK_COLUMNS: Column<SecurityCheck>[] = [
@@ -150,6 +152,7 @@ const CHECK_COLUMNS: Column<SecurityCheck>[] = [
     key: 'status',
     header: 'ຜົນ',
     width: '12%',
+    text: (c) => resultLabel(c.status),
     render: (c) => <ResultChip status={c.status} />,
   },
   {
@@ -292,8 +295,7 @@ function Report({ d, month }: { d: SecurityReport; month: string }): React.JSX.E
       <ReportSearch value={term} onChange={setTerm} count={found} />
 
       <ReportSection title="ຜົນການກວດຕາມຂໍ້ຄວບຄຸມ" clause="ISO/IEC 27001:2022 ພາກຜະໜວກ A">
-          <DataTable
-            striped
+          <ReportTable
             columns={CHECK_COLUMNS}
             rows={checks}
             rowKey={(c) => c.code}
@@ -316,8 +318,7 @@ function Report({ d, month }: { d: SecurityReport; month: string }): React.JSX.E
             ]}
           />
           <h3 className="mb-2 mt-4 text-body-sm font-semibold text-ink">ແຍກຕາມໝວດໝູ່</h3>
-          <DataTable
-            striped
+          <ReportTable
             columns={BREAKDOWN_COLUMNS}
             rows={categories}
             rowKey={(r) => r.code}
@@ -365,8 +366,7 @@ function Report({ d, month }: { d: SecurityReport; month: string }): React.JSX.E
             ]}
           />
           <h3 className="mb-2 mt-4 text-body-sm font-semibold text-ink">ຄຳຂໍແຍກຕາມປະເພດ</h3>
-          <DataTable
-            striped
+          <ReportTable
             columns={BREAKDOWN_COLUMNS}
             rows={kinds}
             rowKey={(r) => r.code}
@@ -399,8 +399,7 @@ function Report({ d, month }: { d: SecurityReport; month: string }): React.JSX.E
             ]}
           />
           <h3 className="mb-2 mt-4 text-body-sm font-semibold text-ink">ແຍກຕາມການກະທຳ</h3>
-          <DataTable
-            striped
+          <ReportTable
             columns={ACTION_COLUMNS}
             rows={actions}
             rowKey={(r) => r.action}
@@ -413,8 +412,7 @@ function Report({ d, month }: { d: SecurityReport; month: string }): React.JSX.E
         title="ທະບຽນຊ່ອງວ່າງຂອງຫຼັກຖານ"
         hint="ຂໍ້ທີ່ລະບົບຍັງບໍ່ໄດ້ບັນທຶກຂໍ້ມູນ — ບອກໄວ້ຊັດເຈນແທນທີ່ຈະສະແດງເປັນສູນ"
       >
-          <DataTable
-            striped
+          <ReportTable
             columns={GAP_COLUMNS}
             rows={gaps}
             rowKey={(g) => `${g.control}-${g.title}`}

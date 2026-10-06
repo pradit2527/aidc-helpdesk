@@ -171,15 +171,27 @@ export function filterRows<T>(rows: T[], term: string, toText: (row: T) => strin
   return rows.filter((row) => toText(row).toLowerCase().includes(q));
 }
 
+type ResultStatus = 'pass' | 'fail' | 'no_data';
+type ResultLabels = { pass: string; fail: string; noData: string };
+
+const DEFAULT_RESULT_LABELS: ResultLabels = { pass: 'ຜ່ານ', fail: 'ຕົກ', noData: 'ຍັງວັດບໍ່ໄດ້' };
+
+/** ข้อความของป้ายผล — ตารางใช้เป็น `text` ของคอลัมน์ ให้ค้นหา/ส่งออกได้คำเดียวกับที่ป้ายแสดง */
+export function resultLabel(
+  status: ResultStatus,
+  labels: ResultLabels = DEFAULT_RESULT_LABELS,
+): string {
+  return status === 'pass' ? labels.pass : status === 'fail' ? labels.fail : labels.noData;
+}
+
 /** ป้ายผลการประเมินที่ใช้เหมือนกันทุกหน้า — ผ่าน / ตก / ยังวัดไม่ได้ */
 export function ResultChip({
   status,
   labels,
 }: {
-  status: 'pass' | 'fail' | 'no_data';
-  labels?: { pass: string; fail: string; noData: string };
+  status: ResultStatus;
+  labels?: ResultLabels;
 }): React.JSX.Element {
-  const text = labels ?? { pass: 'ຜ່ານ', fail: 'ຕົກ', noData: 'ຍັງວັດບໍ່ໄດ້' };
   return (
     <span
       className={cn(
@@ -189,7 +201,7 @@ export function ResultChip({
         status === 'no_data' && 'bg-subtle text-ink-2',
       )}
     >
-      {status === 'pass' ? text.pass : status === 'fail' ? text.fail : text.noData}
+      {resultLabel(status, labels)}
     </span>
   );
 }

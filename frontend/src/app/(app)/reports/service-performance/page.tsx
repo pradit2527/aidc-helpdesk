@@ -10,11 +10,13 @@ import {
   ReportSearch,
   ReportSection,
   ResultChip,
+  resultLabel,
   SummaryStrip,
 } from '@/components/reports/report-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
-import { DataTable, type Column } from '@/components/ui/data-table';
+import { type Column } from '@/components/ui/data-table';
+import { ReportTable } from '@/components/reports/report-table';
 import { BackLink, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
@@ -159,8 +161,7 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
       <ReportSearch value={term} onChange={setTerm} count={found} />
 
       <ReportSection title="ຕົວຊີ້ວັດຫຼັກ" clause="§9.1 · ທຽບເປົ້າ ແລະ ເດືອນກ່ອນ">
-        <DataTable
-          striped
+        <ReportTable
           columns={kpiColumns(prev)}
           rows={kpis}
           rowKey={(k) => k.code}
@@ -169,8 +170,7 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
       </ReportSection>
 
       <ReportSection title="SLA ແຍກຕາມລະດັບຄວາມສຳຄັນ" clause="§8.3.3">
-        <DataTable
-          striped
+        <ReportTable
           columns={PRIORITY_COLUMNS}
           rows={priorities}
           rowKey={(p) => p.priority}
@@ -179,8 +179,7 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
       </ReportSection>
 
       <ReportSection title="ປະລິມານວຽກແຍກຕາມບໍລິສັດ" clause="§8.6.1 · §8.6.2">
-        <DataTable
-          striped
+        <ReportTable
           columns={COMPANY_COLUMNS}
           rows={companies}
           rowKey={(r) => r.company.id}
@@ -190,8 +189,7 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
       </ReportSection>
 
       <ReportSection title="ເລື່ອງທີ່ຄ້າງຢູ່" clause="§8.6.1 · ນັບ ณ ຕອນນີ້ ບໍ່ແມ່ນສິ້ນເດືອນ">
-        <DataTable
-          striped
+        <ReportTable
           columns={BACKLOG_COLUMNS}
           rows={backlog}
           rowKey={(r) => r.priority}
@@ -204,8 +202,7 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
         title="ເຫດຮ້າຍແຮງ ແລະ ເຫດຄວາມປອດໄພ"
         clause="§8.6.1 · ISO/IEC 27001 A.5.24–5.28"
       >
-        <DataTable
-          striped
+        <ReportTable
           columns={MAJOR_COLUMNS}
           rows={majors}
           rowKey={(r) => r.id}
@@ -219,8 +216,7 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
         clause="§8.3.3"
         hint={`ຕອບຮັບຊ້າກວ່າກຳນົດ ${d.breaches.response_breached} ໃບ`}
       >
-        <DataTable
-          striped
+        <ReportTable
           columns={BREACH_COLUMNS}
           rows={breaches}
           rowKey={(r) => r.id}
@@ -230,8 +226,7 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
       </ReportSection>
 
       <ReportSection title="ຄວາມພ້ອມໃຊ້ງານຂອງລະບົບ" clause="§8.7.1">
-        <DataTable
-          striped
+        <ReportTable
           columns={AVAILABILITY_COLUMNS}
           rows={services}
           rowKey={(r) => r.service.id}
@@ -241,8 +236,7 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
       </ReportSection>
 
       <ReportSection title="Problem ແລະ ການວິເຄາະສາເຫດ" clause="§8.6.3">
-        <DataTable
-          striped
+        <ReportTable
           columns={METRIC_COLUMNS}
           rows={[
             { label: 'ເປີດໃໝ່ເດືອນນີ້', value: formatNumber(d.problems.opened) },
@@ -287,6 +281,24 @@ function Report({ d, month }: { d: ServicePerformanceReport; month: string }): R
 }
 
 // ── คอลัมน์ของแต่ละตาราง ────────────────────────────────────────────
+
+// ป้ายผลกับ `text` ของคอลัมน์ต้องมาจากที่เดียวกัน — ไม่งั้นไฟล์ส่งออกพูดคนละคำกับหน้าจอ
+type KpiItem = ServicePerformanceReport['kpi']['items'][number];
+type MajorIncident = ServicePerformanceReport['major_incidents'][number];
+
+function kpiStatus(k: KpiItem): 'pass' | 'fail' | 'no_data' {
+  return k.meets_target === null ? 'no_data' : k.meets_target ? 'pass' : 'fail';
+}
+
+function majorStatus(r: MajorIncident): 'pass' | 'fail' | 'no_data' {
+  return r.breached ? 'fail' : r.resolved_at ? 'pass' : 'no_data';
+}
+
+const MAJOR_LABELS = { pass: 'ທັນເວລາ', fail: 'ເກີນກຳນົດ', noData: 'ຍັງເປີດຢູ່' };
+
+function ratioText(percent: number | null, met: number, of: number): string {
+  return `${percent === null ? '—' : formatPercent(percent)} (${met}/${of})`;
+}
 
 function kpiColumns(prev: Map<string, number | null>): Column<ServicePerformanceReport['kpi']['items'][number]>[] {
   return [
@@ -336,8 +348,9 @@ function kpiColumns(prev: Map<string, number | null>): Column<ServicePerformance
       key: 'meets',
       header: 'ຜົນປະເມີນ',
       width: '12%',
+      text: (k) => resultLabel(kpiStatus(k)),
       render: (k) => (
-        <ResultChip status={k.meets_target === null ? 'no_data' : k.meets_target ? 'pass' : 'fail'} />
+        <ResultChip status={kpiStatus(k)} />
       ),
     },
   ];
@@ -360,12 +373,16 @@ const PRIORITY_COLUMNS: Column<ServicePerformanceReport['sla_by_priority'][numbe
     key: 'response',
     header: 'ຕອບຮັບທັນ',
     align: 'right',
+    sortValue: (p) => p.response.percent,
+    text: (p) => ratioText(p.response.percent, p.response.met, p.response.eligible),
     render: (p) => <Ratio percent={p.response.percent} met={p.response.met} of={p.response.eligible} />,
   },
   {
     key: 'resolution',
     header: 'ແກ້ໄຂທັນ',
     align: 'right',
+    sortValue: (p) => p.resolution.percent,
+    text: (p) => ratioText(p.resolution.percent, p.resolution.met, p.resolution.eligible),
     render: (p) => <Ratio percent={p.resolution.percent} met={p.resolution.met} of={p.resolution.eligible} />,
   },
   {
@@ -409,6 +426,7 @@ const COMPANY_COLUMNS: Column<ServicePerformanceReport['volume']['by_company'][n
     key: 'csat',
     header: 'ຄວາມພໍໃຈ',
     align: 'right',
+    sortValue: (r) => r.csat_avg,
     hideBelow: 'xl',
     render: (r) => (
       <span className="tabular text-ink-2">
@@ -470,13 +488,15 @@ const MAJOR_COLUMNS: Column<ServicePerformanceReport['major_incidents'][number]>
     key: 'created',
     header: 'ເປີດເມື່ອ',
     hideBelow: 'xl',
+    sortValue: (r) => Date.parse(r.created_at),
     cellClassName: 'whitespace-nowrap',
     render: (r) => <span className="tabular text-ink-2">{formatDateShort(r.created_at)}</span>,
   },
   {
     key: 'result',
     header: 'ຜົນ',
-    render: (r) => <ResultChip status={r.breached ? 'fail' : r.resolved_at ? 'pass' : 'no_data'} labels={{ pass: 'ທັນເວລາ', fail: 'ເກີນກຳນົດ', noData: 'ຍັງເປີດຢູ່' }} />,
+    text: (r) => resultLabel(majorStatus(r), MAJOR_LABELS),
+    render: (r) => <ResultChip status={majorStatus(r)} labels={MAJOR_LABELS} />,
   },
 ];
 
@@ -503,6 +523,7 @@ const BREACH_COLUMNS: Column<ServicePerformanceReport['breaches']['resolution_p1
     key: 'due',
     header: 'ກຳນົດແກ້ໄຂ',
     hideBelow: 'xl',
+    sortValue: (r) => (r.due_at ? Date.parse(r.due_at) : null),
     cellClassName: 'whitespace-nowrap',
     render: (r) => <span className="tabular text-sla-breach">{r.due_at ? formatDateShort(r.due_at) : '—'}</span>,
   },

@@ -8,7 +8,8 @@ import { filterRows, ReportSearch, SummaryStrip } from '@/components/reports/rep
 import { TargetBar } from '@/components/reports/target-bar';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
-import { DataTable, type Column } from '@/components/ui/data-table';
+import { type Column } from '@/components/ui/data-table';
+import { ReportTable } from '@/components/reports/report-table';
 import { Select } from '@/components/ui/field';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
@@ -341,18 +342,21 @@ function PeopleTable({ d, rows }: { d: TeamKpiReport; rows: TeamKpiRow[] }): Rea
       key: 'response',
       header: `ຕອບຮັບທັນ (≥${t.response_met_percent}%)`,
       align: 'right',
+      sortValue: (r) => r.response.percent,
       render: (r) => cell(r.response.percent, r.meets.response, formatPercent),
     },
     {
       key: 'resolution',
       header: `ແກ້ໄຂທັນ (≥${t.resolution_met_percent}%)`,
       align: 'right',
+      sortValue: (r) => r.resolution.percent,
       render: (r) => cell(r.resolution.percent, r.meets.resolution, formatPercent),
     },
     {
       key: 'csat',
       header: `ຄວາມພໍໃຈ (≥${t.csat_avg})`,
       align: 'right',
+      sortValue: (r) => r.csat.avg,
       render: (r) => cell(r.csat.avg, r.meets.csat, (v) => v.toFixed(1)),
     },
     {
@@ -366,6 +370,7 @@ function PeopleTable({ d, rows }: { d: TeamKpiReport; rows: TeamKpiRow[] }): Rea
       key: 'open',
       header: 'ຄ້າງ (ເກີນກຳນົດ)',
       align: 'right',
+      sortValue: (r) => r.open_now,
       hideBelow: 'xl',
       render: (r) => (
         <span className="tabular">
@@ -379,8 +384,7 @@ function PeopleTable({ d, rows }: { d: TeamKpiReport; rows: TeamKpiRow[] }): Rea
   return (
     <Card>
       <CardBody>
-        <DataTable
-          striped
+        <ReportTable
           columns={columns}
           rows={rows}
           rowKey={(r) => r.user.id}

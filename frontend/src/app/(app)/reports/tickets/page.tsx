@@ -18,15 +18,17 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
-import { PriorityBadge, PriorityMeter, SlaBadge, StatusBadge } from '@/components/common/badges';
+import { PriorityBadge, PriorityMeter, SlaBadge, StatusBadge, statusBadgeLabel } from '@/components/common/badges';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle, StatCard } from '@/components/ui/card';
-import { DataTable, Pagination, type Column } from '@/components/ui/data-table';
+import { Pagination, type Column } from '@/components/ui/data-table';
+import { ReportTable } from '@/components/reports/report-table';
 import { Field, Input, Select } from '@/components/ui/field';
 import { Alert, Avatar, PageHeader } from '@/components/ui/misc';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import {
   PRIORITY,
+  SLA_STATUS,
   STATUS_ORDER,
   TICKET_STATUS,
   TICKET_TYPE,
@@ -904,8 +906,7 @@ function ReportContent({
           <span className="text-caption text-ink-3">% ທັນ SLA ຄິດສະເພາະເລື່ອງທີ່ແກ້ໄຂ/ປິດແລ້ວ · ເປົ້າ ≥ {TARGET_PERCENT}%</span>
         </CardHeader>
         <CardBody className="p-0">
-          <DataTable
-            striped
+          <ReportTable
             columns={assigneeColumns}
             rows={report.by_assignee}
             rowKey={(r) => r.assignee?.id ?? 'unassigned'}
@@ -923,8 +924,7 @@ function ReportContent({
                 <CardTitle>ແຍກຕາມບໍລິສັດ</CardTitle>
               </CardHeader>
               <CardBody className="p-0">
-                <DataTable
-                  striped
+                <ReportTable
                   columns={companyColumns}
                   rows={report.by_company}
                   rowKey={(r) => r.company.id}
@@ -939,8 +939,7 @@ function ReportContent({
                 <CardTitle>ແຍກຕາມພະແນກ</CardTitle>
               </CardHeader>
               <CardBody className="p-0">
-                <DataTable
-                  striped
+                <ReportTable
                   columns={departmentColumns(showCompanies)}
                   rows={report.by_department}
                   rowKey={(r) => `${r.company.id}-${r.department?.id ?? 'none'}`}
@@ -958,12 +957,12 @@ function ReportContent({
           <span className="tabular text-caption text-ink-3">{formatNumber(report.tickets.total)} ເລື່ອງ · ໃໝ່ສຸດກ່ອນ</span>
         </CardHeader>
         <CardBody className="p-0">
-          <DataTable
-            striped
+          <ReportTable
             columns={ticketColumns(showProject)}
             rows={report.tickets.items}
             rowKey={(r) => r.id}
             caption="ລາຍການເລື່ອງແຈ້ງໃນລາຍງານ"
+            loadedPageOnly
             emptyTitle="ບໍ່ພົບເລື່ອງທີ່ຕົງກັບເງື່ອນໄຂ"
             emptyHint="ລອງຂະຫຍາຍຊ່ວງເວລາ ຫຼື ລົບຕົວກັ່ນຕອງບາງອັນ"
           />
@@ -1178,9 +1177,11 @@ function BreakdownBars({
 
 // ── คอลัมน์ตาราง ──────────────────────────────────────────────────────
 
+const NO_DATA_TEXT = 'ບໍ່ມີຂໍ້ມູນ';
+
 function MetPercentCell({ value }: { value: number | null }): React.JSX.Element {
   // null = ไม่มีเรื่องที่แก้เสร็จเลย ไม่ใช่ 0% — สองอย่างนี้อ่านแล้วเข้าใจคนละทาง
-  if (value === null) return <span className="text-caption text-ink-3">ບໍ່ມີຂໍ້ມູນ</span>;
+  if (value === null) return <span className="text-caption text-ink-3">{NO_DATA_TEXT}</span>;
   return (
     <span className={cn('tabular font-semibold', value >= TARGET_PERCENT ? 'text-sla-ok' : 'text-sla-breach')}>
       {formatPercent(value)}
@@ -1203,7 +1204,14 @@ function rollupColumns<T extends TicketReportAssigneeRow | TicketReportCompanyRo
     { key: 'open', header: 'ຍັງເປີດ', align: 'right', hideBelow: 'md', render: (r) => num(r.open) },
     { key: 'done', header: 'ແກ້ໄຂ/ປິດແລ້ວ', align: 'right', render: (r) => num(r.done) },
     { key: 'breached', header: 'ເກີນກຳນົດ', align: 'right', render: (r) => breachedCell(r.breached) },
-    { key: 'met', header: '% ທັນ SLA', align: 'right', render: (r) => <MetPercentCell value={r.met_percent} /> },
+    {
+      key: 'met',
+      header: '% ທັນ SLA',
+      align: 'right',
+      sortValue: (r) => r.met_percent,
+      text: (r) => (r.met_percent === null ? NO_DATA_TEXT : formatPercent(r.met_percent)),
+      render: (r) => <MetPercentCell value={r.met_percent} />,
+    },
   ];
 }
 
@@ -1326,6 +1334,7 @@ function ticketColumns(withProject: boolean): Column<TicketReportItem>[] {
   {
     key: 'status',
     header: 'ສະຖານະ',
+    text: (t) => statusBadgeLabel(t.status, t.pending_reason),
     width: '1%',
     cellClassName: 'whitespace-nowrap',
     render: (t) => <StatusBadge status={t.status} pendingReason={t.pending_reason} className="min-w-max" />,
@@ -1333,6 +1342,10 @@ function ticketColumns(withProject: boolean): Column<TicketReportItem>[] {
   {
     key: 'sla',
     header: 'SLA',
+    text: (t) => {
+      const status = reportSlaStatus(t);
+      return status === null ? '—' : SLA_STATUS[status].label;
+    },
     width: '1%',
     cellClassName: 'whitespace-nowrap',
     render: (t) => {
@@ -1414,6 +1427,7 @@ function ticketColumns(withProject: boolean): Column<TicketReportItem>[] {
     key: 'created',
     header: 'ແຈ້ງເມື່ອ',
     align: 'right',
+    sortValue: (t) => Date.parse(t.created_at),
     width: '1%',
     cellClassName: 'whitespace-nowrap',
     render: (t) => (

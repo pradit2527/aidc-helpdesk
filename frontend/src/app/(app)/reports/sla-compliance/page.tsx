@@ -8,9 +8,11 @@ import { currentMonth, MonthPicker, monthRange } from '@/components/reports/mont
 import { Button } from '@/components/ui/button';
 import { filterRows, ReportSearch, SummaryStrip } from '@/components/reports/report-layout';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
-import { DataTable, type Column } from '@/components/ui/data-table';
+import { type Column } from '@/components/ui/data-table';
+import { ReportTable } from '@/components/reports/report-table';
 import { Select } from '@/components/ui/field';
 import { Alert, BackLink, PageHeader } from '@/components/ui/misc';
+import { PRIORITY } from '@/config/enums';
 import { QueryBoundary } from '@/components/ui/query-boundary';
 import { cn } from '@/lib/cn';
 import { formatNumber, formatPercent } from '@/lib/format';
@@ -67,7 +69,12 @@ export default function SlaCompliancePage(): React.JSX.Element {
 
   const columns: Column<SlaComplianceRow>[] = [
     { key: 'company', header: 'ບໍລິສັດ', render: (r) => r.company.code },
-    { key: 'priority', header: 'ລະດັບ', render: (r) => <PriorityBadge priority={r.priority} withMeter={false} /> },
+    {
+      key: 'priority',
+      header: 'ລະດັບ',
+      text: (r) => PRIORITY[r.priority].label,
+      render: (r) => <PriorityBadge priority={r.priority} withMeter={false} />,
+    },
     { key: 'total', header: 'ປິດທັງໝົດ', align: 'right', render: (r) => <span className="tabular">{formatNumber(r.total)}</span> },
     { key: 'met', header: 'ທັນເວລາ', align: 'right', render: (r) => <span className="tabular">{formatNumber(r.met)}</span> },
     {
@@ -85,6 +92,7 @@ export default function SlaCompliancePage(): React.JSX.Element {
       key: 'percent',
       header: '% ຕາມ SLA',
       align: 'right',
+      sortValue: (r) => r.compliance_percent,
       render: (r) =>
         // null = ไม่มีใบไหนอยู่ในตัวหารของช่องนี้ ไม่ใช่ 0%
         r.compliance_percent === null ? (
@@ -170,8 +178,7 @@ export default function SlaCompliancePage(): React.JSX.Element {
         </CardHeader>
         <CardBody className="p-0">
           <QueryBoundary query={query}>
-            <DataTable
-              striped
+            <ReportTable
               columns={columns}
               rows={shown}
               rowKey={(r) => `${r.company.id}-${r.priority}`}
