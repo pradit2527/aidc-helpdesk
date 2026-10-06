@@ -7,12 +7,9 @@ import {
   ClipboardList,
   Info,
   Lock,
-  Paperclip,
   RotateCcw,
   Send,
   ShieldCheck,
-  Upload,
-  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -35,8 +32,10 @@ import {
 } from '@/config/enums';
 import { SERVICE_TIER, type ServiceTier } from '@/config/admin';
 import { api, ApiError } from '@/lib/api';
+import { MediaPicker } from '@/components/tickets/media-picker';
+import { categoryNeedsAssetTag } from '@/lib/asset-tag';
 import { cn } from '@/lib/cn';
-import { formatFileSize, formatMinutes } from '@/lib/format';
+import { formatMinutes } from '@/lib/format';
 import { masterKeys, useActiveCategories, useCatalogItems } from '@/lib/queries/master-data';
 import { useUsers } from '@/lib/queries/operations';
 import {
@@ -53,7 +52,6 @@ import type {
   TicketCategory,
 } from '@/lib/types';
 
-const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const SUBJECT_MIN = 10;
 const SUBJECT_MAX = 255;
 const DESCRIPTION_MIN = 10;
@@ -211,7 +209,6 @@ export default function NewTicketPage(): React.JSX.Element {
   const [form, setForm] = React.useState<FormState>(() => initialForm(user));
   const [files, setFiles] = React.useState<File[]>([]);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [dragging, setDragging] = React.useState(false);
 
   const categories = useActiveCategories();
   const catalogItems = useCatalogItems();
@@ -301,6 +298,11 @@ export default function NewTicketPage(): React.JSX.Element {
   const selectedParent =
     parentCategories.find((c) => String(c.id) === form.parent_category_id) ?? null;
   const selectedSub = subcategories.find((c) => String(c.id) === form.subcategory_id) ?? null;
+  /*
+   * ช่องเลขทรัพย์สินแสดงเฉพาะเรื่องที่เกี่ยวกับตัวอุปกรณ์ — กฎอยู่ใน lib/asset-tag.ts
+   * เรื่องขอสิทธิ์ ลืมรหัสผ่าน หรือโปรแกรมผิดพลาด ไม่มีเครื่องให้ระบุ ช่องนี้จึงเป็นแค่ที่ให้กรอกผิด
+   */
+  const showAssetTag = categoryNeedsAssetTag(selectedParent?.code, selectedSub?.code);
   // หมวดที่ไม่มีหมวดย่อยเลือกเป็นปลายทางได้เอง ไม่บังคับให้เลือกช่องที่ว่างเปล่า
   const categoryId =
     form.subcategory_id ||
@@ -345,14 +347,6 @@ export default function NewTicketPage(): React.JSX.Element {
         urgency: category.default_urgency,
       }));
     }
-  }
-
-  function addFiles(picked: File[]): void {
-    const tooBig = picked.filter((f) => f.size > MAX_UPLOAD_BYTES);
-    if (tooBig.length > 0) {
-      toast.error(`ໄຟລ໌ໃຫຍ່ເກີນ 20 MB: ${tooBig.map((f) => f.name).join(', ')}`);
-    }
-    setFiles((prev) => [...prev, ...picked.filter((f) => f.size <= MAX_UPLOAD_BYTES)]);
   }
 
   /** รายการช่องบังคับ — ใช้ทั้งตรวจตอนส่งและมาตรวัดความครบถ้วนด้านขวา */
@@ -481,7 +475,12 @@ export default function NewTicketPage(): React.JSX.Element {
         ...(form.ticket_type === 'service_request' && form.catalog_item_id
           ? { catalog_item_id: Number(form.catalog_item_id) }
           : {}),
-        ...(form.asset_tag.trim() ? { asset_tag: form.asset_tag.trim() } : {}),
+        /*
+         * ไม่ส่งค่าที่ซ่อนอยู่ — ผู้แจ้งอาจกรอกเลขไว้ตอนเลือกหมวดอุปกรณ์ แล้วเปลี่ยนใจไปหมวดอื่น
+         * ช่องหายไปจากหน้าจอแต่ค่ายังค้างในฟอร์ม ถ้าส่งไปด้วยเรื่อง "ขอสิทธิ์ VPN" จะมีเลขเครื่อง
+         * ติดไปโดยที่ผู้แจ้งมองไม่เห็นและแก้ไม่ได้ (ไม่ล้างค่าทิ้ง เผื่อเขาสลับกลับมาหมวดเดิม)
+         */
+        ...(showAssetTag && form.asset_tag.trim() ? { asset_tag: form.asset_tag.trim() } : {}),
         ...(form.on_behalf && form.requester_id ? { requester_id: Number(form.requester_id) } : {}),
         ...(uploaded.length > 0 ? { attachment_ids: uploaded.map((a) => a.id) } : {}),
       };
@@ -937,7 +936,10 @@ export default function NewTicketPage(): React.JSX.Element {
                   required
                   error={errors.subject}
                   hint={`${form.subject.trim().length} / ${SUBJECT_MAX} ຕົວອັກສອນ (ຢ່າງໜ້ອຍ ${SUBJECT_MIN})`}
-                  className="md:col-span-2 2xl:col-span-2"
+                  className={cn(
+                    'md:col-span-2',
+                    showAssetTag ? '2xl:col-span-2' : '2xl:col-span-3',
+                  )}
                 >
                   <Input
                     value={form.subject}
@@ -947,19 +949,21 @@ export default function NewTicketPage(): React.JSX.Element {
                   />
                 </Field>
 
-                <Field
-                  label="ເລກຊັບສິນ (Asset tag)"
-                  htmlFor="asset_tag"
-                  hint="ເລກທີ່ຕິດຢູ່ເຄື່ອງ ຫຼື ອຸປະກອນ — ຖ້າມີ"
-                  className="md:col-span-2 2xl:col-span-1"
-                >
-                  <Input
-                    value={form.asset_tag}
-                    maxLength={100}
-                    onChange={(e) => set('asset_tag', e.target.value)}
-                    placeholder="ເຊັ່ນ NB-HQ-0231"
-                  />
-                </Field>
+                {showAssetTag && (
+                  <Field
+                    label="ເລກຊັບສິນ (Asset tag)"
+                    htmlFor="asset_tag"
+                    hint="ເລກທີ່ຕິດຢູ່ເຄື່ອງ ຫຼື ອຸປະກອນ — ຖ້າມີ"
+                    className="md:col-span-2 2xl:col-span-1"
+                  >
+                    <Input
+                      value={form.asset_tag}
+                      maxLength={100}
+                      onChange={(e) => set('asset_tag', e.target.value)}
+                      placeholder="ເຊັ່ນ NB-HQ-0231"
+                    />
+                  </Field>
+                )}
 
                 <Field
                   label="ລາຍລະອຽດ (Description)"
@@ -983,80 +987,8 @@ export default function NewTicketPage(): React.JSX.Element {
                   />
                 </Field>
 
-                <div className="space-y-1.5 md:col-span-2 2xl:col-span-1">
-                  <p className="text-label text-ink">ໄຟລ໌ແນບປະກອບ (Attachments)</p>
-                  <label
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDragging(true);
-                    }}
-                    onDragLeave={() => setDragging(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDragging(false);
-                      addFiles(Array.from(e.dataTransfer.files));
-                    }}
-                    className={cn(
-                      'flex min-h-[96px] cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed px-4 py-4 text-center transition-colors',
-                      dragging
-                        ? 'border-primary bg-primary-subtle'
-                        : 'border-control bg-subtle hover:border-primary',
-                    )}
-                  >
-                    <Upload className="h-5 w-5 text-ink-2" aria-hidden="true" />
-                    <span className="text-body-sm font-semibold text-ink">
-                      {/* จอสัมผัสลากไฟล์มาวางไม่ได้ — บอกสิ่งที่ทำได้จริงบนเครื่องนั้น */}
-                      <span className="sm:hidden">ແຕະເພື່ອຖ່າຍຮູບ ຫຼື ເລືອກໄຟລ໌</span>
-                      <span className="hidden sm:inline">
-                        ລາກໄຟລ໌ມາວາງບ່ອນນີ້ ຫຼື ກົດເພື່ອເລືອກໄຟລ໌
-                      </span>
-                    </span>
-                    <span className="text-caption text-ink-3">
-                      ຮອງຮັບ ຮູບພາບ · PDF · Word · Excel — ບໍ່ເກີນ 20 MB ຕໍ່ໄຟລ໌
-                    </span>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-                      onChange={(e) => {
-                        addFiles(Array.from(e.target.files ?? []));
-                        e.target.value = '';
-                      }}
-                      className="sr-only"
-                    />
-                  </label>
-                  {files.length > 0 && (
-                    <ul className="space-y-2 pt-1">
-                      {files.map((file, index) => (
-                        <li
-                          key={`${file.name}-${index}`}
-                          className="flex items-center justify-between gap-3 rounded border border-hair bg-surface px-3 py-2 text-body-sm"
-                        >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <Paperclip
-                              className="h-4 w-4 flex-none text-ink-3"
-                              aria-hidden="true"
-                            />
-                            <span className="truncate">{file.name}</span>
-                          </span>
-                          <span className="flex flex-none items-center gap-2">
-                            <span className="tabular text-caption text-ink-3">
-                              {formatFileSize(file.size)}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`ລົບ ${file.name}`}
-                              onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
-                            >
-                              <X className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                <div className="md:col-span-2 2xl:col-span-1">
+                  <MediaPicker files={files} onChange={setFiles} disabled={submitting} />
                 </div>
               </div>
             </Section>

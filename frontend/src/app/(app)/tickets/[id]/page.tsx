@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 
 import { PriorityBadge, SlaBadge, StatusBadge } from '@/components/common/badges';
 import { AssignPanel } from '@/components/tickets/assign-panel';
+import { TicketAttachments } from '@/components/tickets/ticket-attachments';
 import {
   HistoryPanel,
   RequesterTicketsPanel,
@@ -140,9 +141,7 @@ function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Eleme
         <Alert
           tone="warning"
           title={
-            approvalStep
-              ? `ລໍຖ້າ ${approverDisplayName(approvalStep)} ອະນຸມັດ`
-              : 'ລໍຖ້າການອະນຸມັດ'
+            approvalStep ? `ລໍຖ້າ ${approverDisplayName(approvalStep)} ອະນຸມັດ` : 'ລໍຖ້າການອະນຸມັດ'
           }
         >
           ທີມງານຈະເລີ່ມດຳເນີນການໄດ້ຫຼັງຜ່ານການອະນຸມັດ ແລະ ຂະນະນີ້ໂມງ SLA ຢຸດນັບຢູ່
@@ -185,8 +184,10 @@ function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Eleme
 
               <p className="mt-4 whitespace-pre-wrap text-body text-ink-2">{ticket.description}</p>
 
+              <TicketAttachments attachments={ticket.attachments} />
+
               {ticket.sla.workaround_at && (
-                <div className="mt-4 rounded border border-sla-risk/30 bg-sla-risk-bg px-4 py-3">
+                <div className="border-sla-risk/30 mt-4 rounded border bg-sla-risk-bg px-4 py-3">
                   <p className="text-body-sm font-semibold">
                     ມີທາງແກ້ຊົ່ວຄາວແລ້ວ — ໂມງ SLA ຂອງການແກ້ໄຂຢຸດນັບຕັ້ງແຕ່{' '}
                     {formatDateTime(ticket.sla.workaround_at)}
@@ -199,7 +200,7 @@ function TicketDetailView({ ticket }: { ticket: TicketDetail }): React.JSX.Eleme
               )}
 
               {ticket.resolution_note && (
-                <div className="mt-4 rounded border border-sla-ok/30 bg-sla-ok-bg px-4 py-3">
+                <div className="border-sla-ok/30 mt-4 rounded border bg-sla-ok-bg px-4 py-3">
                   <p className="text-body-sm font-semibold">ສະຫຼຸບການແກ້ໄຂ</p>
                   <p className="mt-1 text-body-sm text-ink-2">{ticket.resolution_note}</p>
                 </div>
@@ -259,7 +260,9 @@ function RelatedTicket({ ticket }: { ticket: TicketDetail }): React.JSX.Element 
             href={`/tickets/${related.id}`}
             className="group flex min-w-0 flex-wrap items-center gap-2"
           >
-            <span className="tabular text-caption font-semibold text-ink-2">{related.ticket_no}</span>
+            <span className="tabular text-caption font-semibold text-ink-2">
+              {related.ticket_no}
+            </span>
             <span className="min-w-0 truncate text-body-sm font-semibold text-ink group-hover:text-primary">
               {related.subject}
             </span>
@@ -269,12 +272,7 @@ function RelatedTicket({ ticket }: { ticket: TicketDetail }): React.JSX.Element 
             {TICKET_TYPE[related.ticket_type]}
           </span>
           {canLink && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="ml-auto"
-              onClick={() => setPicking(true)}
-            >
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setPicking(true)}>
               ປ່ຽນ
             </Button>
           )}
@@ -413,7 +411,7 @@ function Conversation({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
               comment.is_internal
                 ? // คอมเมนต์ภายในต้องต่างจากสาธารณะแบบเห็นได้ทันที
                   // ถ้าดูเหมือนกัน จะมีคนพิมพ์ข้อความภายในลงช่องสาธารณะสักวัน
-                  'border-dashed border-sla-risk/40 bg-sla-risk-bg/40'
+                  'border-sla-risk/40 bg-sla-risk-bg/40 border-dashed'
                 : 'border-hair bg-surface',
             )}
           >
@@ -519,7 +517,9 @@ function isAwaitingApproval(ticket: TicketDetail): boolean {
 
 /** ขั้นที่กำลังเปิดให้พิจารณาอยู่ — ขั้นแรกสุดที่ยังไม่ตัดสิน */
 function currentApprovalStep(ticket: TicketDetail): ApprovalStep | null {
-  return [...ticket.approvals].sort((a, b) => a.seq - b.seq).find((s) => s.status === 'pending') ?? null;
+  return (
+    [...ticket.approvals].sort((a, b) => a.seq - b.seq).find((s) => s.status === 'pending') ?? null
+  );
 }
 
 /** ชื่อตำแหน่งผู้อนุมัติ — ใช้เมื่อระบบยังหาตัวคนของตำแหน่งนั้นไม่ได้ */
@@ -535,7 +535,9 @@ const APPROVER_TYPE_LABEL: Record<string, string> = {
 /** ชื่อที่แสดงของผู้อนุมัติ — ไม่มีตัวคนก็ยังต้องบอกได้ว่ารอตำแหน่งไหนอยู่ */
 function approverDisplayName(step: ApprovalStep): string {
   if (step.approver) return step.approver.full_name;
-  const role = step.approver_type ? (APPROVER_TYPE_LABEL[step.approver_type] ?? step.approver_type) : 'ຜູ້ອະນຸມັດ';
+  const role = step.approver_type
+    ? (APPROVER_TYPE_LABEL[step.approver_type] ?? step.approver_type)
+    : 'ຜູ້ອະນຸມັດ';
   return `${role} (ຍັງບໍ່ໄດ້ກຳນົດຕົວຜູ້ອະນຸມັດ)`;
 }
 
@@ -556,8 +558,8 @@ function Approvals({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
   return (
     <div className="space-y-3">
       <p className="text-body-sm text-ink-2">
-        ຂັ້ນຖັດໄປເປີດໃຫ້ພິຈາລະນາໄດ້ເມື່ອຂັ້ນກ່ອນໜ້າອະນຸມັດແລ້ວເທົ່ານັ້ນ
-        ແລະ ຂະນະທີ່ຍັງມີຂັ້ນລໍຖ້າຢູ່ ໂມງ SLA ຈະຢຸດນັບ
+        ຂັ້ນຖັດໄປເປີດໃຫ້ພິຈາລະນາໄດ້ເມື່ອຂັ້ນກ່ອນໜ້າອະນຸມັດແລ້ວເທົ່ານັ້ນ ແລະ ຂະນະທີ່ຍັງມີຂັ້ນລໍຖ້າຢູ່
+        ໂມງ SLA ຈະຢຸດນັບ
       </p>
 
       {/* ผู้ที่ไม่ใช่ผู้อนุมัติต้องรู้ว่า "รออยู่ที่ใคร" ไม่ใช่เห็นแค่ป้ายสถานะเฉย ๆ */}
@@ -567,7 +569,8 @@ function Approvals({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
           ທີມງານຈະເລີ່ມດຳເນີນການໄດ້ຫຼັງຜ່ານການອະນຸມັດຄົບທຸກຂັ້ນ
           {!step.approver && (
             <span className="mt-1 block">
-              ຂັ້ນນີ້ຍັງບໍ່ມີຕົວຜູ້ອະນຸມັດ — ຜູ້ດູແລລະບົບຕ້ອງຕັ້ງຜູ້ຕິດຕໍ່ຂອງຕຳແໜ່ງນີ້ກ່ອນ ຈຶ່ງຈະອະນຸມັດໄດ້
+              ຂັ້ນນີ້ຍັງບໍ່ມີຕົວຜູ້ອະນຸມັດ — ຜູ້ດູແລລະບົບຕ້ອງຕັ້ງຜູ້ຕິດຕໍ່ຂອງຕຳແໜ່ງນີ້ກ່ອນ
+              ຈຶ່ງຈະອະນຸມັດໄດ້
             </span>
           )}
         </Alert>
@@ -579,17 +582,23 @@ function Approvals({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
             key={entry.id}
             className={cn(
               'flex flex-wrap items-center gap-3 rounded border px-4 py-3',
-              entry.id === step?.id && waiting ? 'border-st-pending-fg/40 bg-st-pending-bg/40' : 'border-hair',
+              entry.id === step?.id && waiting
+                ? 'border-st-pending-fg/40 bg-st-pending-bg/40'
+                : 'border-hair',
             )}
           >
             <span className="tabular grid h-8 w-8 flex-none place-items-center rounded-full bg-subtle text-body-sm font-semibold">
               {entry.seq}
             </span>
             <span className="min-w-0 flex-1">
-              <span className={cn('block text-body-sm font-semibold', !entry.approver && 'text-ink-3')}>
+              <span
+                className={cn('block text-body-sm font-semibold', !entry.approver && 'text-ink-3')}
+              >
                 {approverDisplayName(entry)}
               </span>
-              {entry.comment && <span className="block text-caption text-ink-2">{entry.comment}</span>}
+              {entry.comment && (
+                <span className="block text-caption text-ink-2">{entry.comment}</span>
+              )}
             </span>
             <span
               className={cn(
@@ -612,8 +621,7 @@ function Approvals({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
       {canDecide && step && <ApprovalDecision step={step} />}
 
       <Alert tone="info" title="ຜູ້ຂໍອະນຸມັດຄຳຂໍຂອງຕົນເອງບໍ່ໄດ້">
-        ປຸ່ມອະນຸມັດຈະປາກົດສະເພາະຜູ້ທີ່ຖືກລະບຸເປັນຜູ້ອະນຸມັດຂອງຂັ້ນນັ້ນ
-        ແລະ ຕ້ອງບໍ່ແມ່ນຜູ້ແຈ້ງເລື່ອງ
+        ປຸ່ມອະນຸມັດຈະປາກົດສະເພາະຜູ້ທີ່ຖືກລະບຸເປັນຜູ້ອະນຸມັດຂອງຂັ້ນນັ້ນ ແລະ ຕ້ອງບໍ່ແມ່ນຜູ້ແຈ້ງເລື່ອງ
       </Alert>
     </div>
   );
@@ -659,7 +667,7 @@ function ApprovalDecision({ step }: { step: ApprovalStep }): React.JSX.Element {
   }
 
   return (
-    <div className="space-y-3 rounded border border-primary/30 bg-primary-subtle px-4 py-3">
+    <div className="border-primary/30 space-y-3 rounded border bg-primary-subtle px-4 py-3">
       <p className="text-body-sm font-semibold text-ink">ທ່ານເປັນຜູ້ພິຈາລະນາຂັ້ນທີ {step.seq}</p>
       <Field
         label="ຄວາມເຫັນ"
@@ -706,10 +714,7 @@ function Checklist({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
       </p>
       <ul className="space-y-2">
         {ticket.checklist.map((item) => (
-          <li
-            key={item.id}
-            className="flex items-start gap-3 rounded border border-hair px-4 py-3"
-          >
+          <li key={item.id} className="flex items-start gap-3 rounded border border-hair px-4 py-3">
             <input
               type="checkbox"
               checked={item.is_done}
@@ -788,8 +793,8 @@ function ActionPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
           !user.permissions.includes('user.assign_role') &&
           user.led_teams.length === 0 && (
             <p className="rounded border border-hair bg-subtle px-3 py-2 text-caption text-ink-2">
-              ທ່ານມີບົດບາດຫົວໜ້າທີມ ແຕ່ຍັງບໍ່ໄດ້ຖືກຕັ້ງເປັນຫົວໜ້າຂອງທີມໃດ — ຂໍໃຫ້ຜູ້ດູແລຕັ້ງໃຫ້ທີ່ໜ້າ
-              “ທີມງານ IT” ຈຶ່ງຈະມອບໝາຍວຽກໃຫ້ຄົນໃນທີມໄດ້
+              ທ່ານມີບົດບາດຫົວໜ້າທີມ ແຕ່ຍັງບໍ່ໄດ້ຖືກຕັ້ງເປັນຫົວໜ້າຂອງທີມໃດ —
+              ຂໍໃຫ້ຜູ້ດູແລຕັ້ງໃຫ້ທີ່ໜ້າ “ທີມງານ IT” ຈຶ່ງຈະມອບໝາຍວຽກໃຫ້ຄົນໃນທີມໄດ້
             </p>
           )}
 
@@ -900,7 +905,8 @@ function StatusChanger({ ticket }: { ticket: TicketDetail }): React.JSX.Element 
    * ไม่ใช่เทียบกับ 'resolved' ตรง ๆ ซึ่งจะทำให้คำขอบริการที่ส่งมอบแล้วขอเหตุผล
    * สั้นกว่าที่ backend บังคับ แล้วผู้ใช้โดนปฏิเสธตอนกดบันทึกโดยไม่มีอะไรเตือนก่อน
    */
-  const reopening = (isDoneStatus(ticket.status) || ticket.status === 'closed') && to === 'in_progress';
+  const reopening =
+    (isDoneStatus(ticket.status) || ticket.status === 'closed') && to === 'in_progress';
   const minReason = reopening ? MIN_REOPEN_REASON : to ? (MIN_REASON[to] ?? 0) : 0;
   /*
    * ช่องสรุปงานโผล่ทั้ง resolved และ fulfilled แต่ "บังคับ" เฉพาะ resolved
@@ -1053,7 +1059,9 @@ function DetailsPanel({ ticket }: { ticket: TicketDetail }): React.JSX.Element {
           <DefRow label="ໝວດໝູ່">{ticket.category.name_th}</DefRow>
           <DefRow label="ຊ່ອງທາງແຈ້ງ">{CHANNEL[ticket.channel]}</DefRow>
           <DefRow label="ລະດັບການສະໜັບສະໜູນ">Tier {ticket.support_tier}</DefRow>
-          {ticket.vendor_ref && <DefRow label="ເລກອ້າງອີງຜູ້ໃຫ້ບໍລິການ">{ticket.vendor_ref}</DefRow>}
+          {ticket.vendor_ref && (
+            <DefRow label="ເລກອ້າງອີງຜູ້ໃຫ້ບໍລິການ">{ticket.vendor_ref}</DefRow>
+          )}
           {/*
             ເຫດຜົນຍ່ອຍເປັນຂໍ້ຄວາມອິດສະຫຼະແລ້ວ — ແປໄດ້ກໍ່ແປ ແປບໍ່ໄດ້ກໍ່ສະແດງຕາມທີ່ມາ
             ກົດດຽວກັບ StatusBadge ໃນ components/common/badges.tsx

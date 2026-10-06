@@ -161,6 +161,15 @@ export interface TicketCan {
   view_history: boolean;
 }
 
+/** ไฟล์แนบของตัวเรื่อง — ที่ผู้แจ้งแนบตอนกรอกฟอร์ม (ไม่รวมไฟล์ของคอมเมนต์) */
+export interface TicketAttachment {
+  id: number;
+  file_name: string;
+  file_size: number;
+  /** ชนิดที่ backend ตรวจจากไบต์จริง — ใช้ตัดสินว่าจะแสดงเป็นรูป วิดีโอ หรือลิงก์ */
+  mime_type: string;
+}
+
 export interface TicketComment {
   id: number;
   author: UserRef;
@@ -269,6 +278,12 @@ export interface TicketDetail extends TicketListItem {
   catalog_item?: { id: number; code: string; name_th: string } | null;
   /** เรื่องอื่นของผู้แจ้งคนเดียวกัน (ไม่รวมใบนี้) สูงสุด 5 ใบ — ว่างเมื่อผู้เรียกคือผู้แจ้งเอง */
   requester_tickets?: RelatedTicketRef[];
+  /**
+   * optional บนสาย — หน้าเว็บกับ API ขึ้นระบบแยกกัน (Vercel / Render) ถ้าหน้าเว็บใหม่ไปถึงก่อน
+   * API เก่าจะไม่ส่งช่องนี้มา การอ่าน .length ตรง ๆ จะทำให้หน้ารายละเอียดเรื่องพังทั้งหน้า
+   * ผู้อ่านต้องใช้ `?? []` เสมอ
+   */
+  attachments?: TicketAttachment[];
   comments: TicketComment[];
   history: TicketHistoryEntry[];
   approvals: ApprovalStep[];
