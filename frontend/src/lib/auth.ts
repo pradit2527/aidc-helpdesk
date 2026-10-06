@@ -32,6 +32,8 @@ interface ApiUser {
    * แทนที่จะแค่ไม่แสดงป้ายหัวหน้าทีม
    */
   led_teams?: { id: number; name: string }[];
+  /** หัวหน้าไอที · CEO · DPO · ผู้ดูแลระบบ — เปิดรายงานความปลอดภัยได้ (SOP-10 ข้อ 2) */
+  security_viewer?: boolean;
 }
 
 interface LoginResponse {
@@ -60,6 +62,8 @@ function toSessionUser(user: ApiUser, mustChangePassword: boolean): SessionUser 
     scoped_companies: user.scoped_companies,
     permissions: user.permissions,
     led_teams: user.led_teams ?? [],
+    // ไม่คัดลอกต่อ = หน้ารายงานความปลอดภัยปฏิเสธทุกคนแม้เป็น super_admin และเมนูถูกซ่อน
+    security_viewer: user.security_viewer === true,
     must_change_password: mustChangePassword,
     /*
      * backend ยังไม่มี endpoint แจ้งเตือน จึงยังไม่ส่งจำนวนที่ยังไม่อ่านมา
