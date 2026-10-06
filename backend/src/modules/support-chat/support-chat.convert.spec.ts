@@ -129,6 +129,7 @@ function ticketDetail(over: Partial<TicketDetailDto> = {}): TicketDetailDto {
     related_ticket: null,
     catalog_item: null,
     requester_tickets: [],
+    attachments: [],
     created_at: '2026-09-17T02:40:00.000Z',
     updated_at: '2026-09-17T02:40:00.000Z',
     description: '',

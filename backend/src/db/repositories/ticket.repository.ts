@@ -289,6 +289,24 @@ export class TicketRepository implements Partial<ITicketRepository> {
     return { rows, total: counted?.total ?? 0 };
   }
 
+  /**
+   * ผู้ขอเห็นเรื่องนี้ได้ไหม — กติกาเดียวกับ findById / หน้ารายการเรื่องทุกประการ
+   *
+   * ใช้ baseWhere ตัวเดียวกัน ไม่เขียนเงื่อนไขขอบเขตซ้ำอีกชุด (บริษัทในขอบเขต · เหตุความปลอดภัย
+   * ที่แคบกว่าตาม SOP-10 · ผู้แจ้งเห็นเรื่องของตัวเอง) ถ้าแยกเขียน วันที่กฎขอบเขตเปลี่ยน
+   * หน้ารายการจะซ่อนเรื่องหนึ่งไว้ แต่ไฟล์แนบของเรื่องนั้นยังเปิดได้ทางตรง
+   *
+   * คืน boolean ไม่โยน 404 — ผู้เรียกเป็นตัวตัดสินว่าจะตอบอะไร (ไฟล์แนบตอบ 404 เหมือน "ไม่มีไฟล์")
+   */
+  async isVisible(scope: AccessScope, id: number): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: ticket.id })
+      .from(ticket)
+      .where(and(this.baseWhere(scope), eq(ticket.id, id)) as SQL)
+      .limit(1);
+    return row !== undefined;
+  }
+
   async findById(scope: AccessScope, id: number): Promise<TicketRow> {
     const [row] = await selectTicketsQuery(this.db)
       .where(and(this.baseWhere(scope), eq(ticket.id, id)) as SQL)

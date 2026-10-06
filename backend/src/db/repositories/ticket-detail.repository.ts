@@ -66,6 +66,31 @@ export class TicketDetailRepository {
    *
    * ไฟล์ที่ถูกลบแบบ soft delete ต้องไม่ติดมาด้วย
    */
+  /**
+   * ไฟล์แนบของตัวเรื่อง (ที่ผู้แจ้งแนบตอนกรอกฟอร์ม) — ไม่รวมไฟล์ที่ติดกับคอมเมนต์
+   *
+   * ไฟล์ของคอมเมนต์อยู่ในรายการคอมเมนต์ของมัน และต้องผ่านกฎ "คอมเมนต์ภายในซ่อนจากผู้แจ้ง"
+   * ถ้าปนมาในรายการนี้ รูปที่ทีมไอทีแนบในบันทึกภายในจะโผล่ในหน้าที่ผู้แจ้งเปิดอยู่
+   */
+  async ticketAttachments(ticketId: number) {
+    return this.db
+      .select({
+        id: attachment.id,
+        fileName: attachment.fileName,
+        fileSize: attachment.fileSize,
+        mimeType: attachment.mimeType,
+      })
+      .from(attachment)
+      .where(
+        and(
+          eq(attachment.ticketId, ticketId),
+          isNull(attachment.commentId),
+          isNull(attachment.deletedAt),
+        ),
+      )
+      .orderBy(asc(attachment.id));
+  }
+
   async commentAttachments(commentIds: readonly number[]) {
     if (commentIds.length === 0) return [];
 

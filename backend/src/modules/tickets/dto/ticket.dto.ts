@@ -324,6 +324,18 @@ export class TicketListResponseDto {
 }
 
 
+export class TicketAttachmentDto {
+  @ApiProperty({ example: 88 }) id!: number;
+  @ApiProperty({ example: 'screenshot.png' }) file_name!: string;
+  @ApiProperty({ example: 245760, description: 'ไบต์' }) file_size!: number;
+  @ApiProperty({
+    example: 'image/png',
+    description:
+      'ชนิดที่ตรวจจากไบต์จริงตอนอัปโหลด — หน้าจอใช้ตัดสินว่าจะแสดงเป็นรูป วิดีโอ หรือลิงก์ดาวน์โหลด',
+  })
+  mime_type!: string;
+}
+
 export class TicketCommentDto {
   @ApiProperty({ example: 501 }) id!: number;
   @ApiProperty({ example: 'ກວດແລ້ວພົບວ່າສາຍແລນຫຼຸດ' }) body!: string;
@@ -526,6 +538,13 @@ export class TicketDetailDto extends TicketListItemDto {
     description: 'คอมเมนต์ภายในถูกตัดออกก่อนส่งเมื่อผู้เรียกไม่มีสิทธิ์เห็น',
   })
   comments!: TicketCommentDto[];
+
+  @ApiProperty({
+    type: [TicketAttachmentDto],
+    description:
+      'ไฟล์แนบของตัวเรื่อง (ที่ผู้แจ้งแนบตอนกรอกฟอร์ม) — ไม่รวมไฟล์ของคอมเมนต์ ซึ่งอยู่ในรายการคอมเมนต์ของมันเอง',
+  })
+  attachments!: TicketAttachmentDto[];
 
   @ApiProperty({
     type: [TicketHistoryDto],

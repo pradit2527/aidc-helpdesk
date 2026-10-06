@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import type { Impact, Priority, TicketStatus, TicketType, Urgency } from '../../common/constants';
 import type { AccessScope } from '../../common/scope';
@@ -9,6 +9,7 @@ import { SuperworkService } from '../../integrations/superwork/superwork.service
 import { MasterDataService } from '../master-data/master-data.service';
 import { IncidentAlertService } from '../notifications/incident-alert.service';
 import { WorkAlertService } from '../notifications/work-alert.service';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { RealtimeGateway, type TicketUpdateKind } from '../realtime/realtime.gateway';
 import { ChangeTicketStatusUseCase } from '../../application/use-cases/change-ticket-status.use-case';
 import { ReassessTicketPriorityUseCase } from '../../application/use-cases/reassess-ticket-priority.use-case';
@@ -67,6 +68,8 @@ const SLA_FILTER_SCAN_CAP = 500;
 
 @Injectable()
 export class TicketsService {
+  private readonly logger = new Logger('Tickets');
+
   constructor(
     private readonly tickets: TicketRepository,
     private readonly details: TicketDetailRepository,
@@ -85,6 +88,7 @@ export class TicketsService {
     private readonly chatNotifier: TicketChatNotifier,
     private readonly alerts: IncidentAlertService,
     private readonly work: WorkAlertService,
+    private readonly uploads: AttachmentsService,
   ) {}
 
   async list(scope: AccessScope, query: Record<string, string>): Promise<TicketListResponseDto> {
@@ -175,7 +179,7 @@ export class TicketsService {
     const canSeeInternal = scope.has('ticket.comment_internal', 'ticket.assign');
 
     const isOwner = row.requesterId === scope.userId;
-    const [comments, history, checklist, approvals, catalogItem, requesterTickets] =
+    const [comments, history, checklist, approvals, catalogItem, requesterTickets, ticketFiles] =
       await Promise.all([
         this.details.comments(row.id, canSeeInternal),
         base.can.view_history ? this.details.history(row.id) : Promise.resolve([]),
@@ -198,6 +202,7 @@ export class TicketsService {
               page: 1,
               pageSize: 6,
             }),
+        this.details.ticketAttachments(row.id),
       ]);
 
     /*
@@ -221,6 +226,12 @@ export class TicketsService {
       catalog_item: catalogItem
         ? { id: catalogItem.id, code: catalogItem.code, name_th: catalogItem.nameTh }
         : null,
+      attachments: ticketFiles.map((f) => ({
+        id: f.id,
+        file_name: f.fileName,
+        file_size: f.fileSize,
+        mime_type: f.mimeType,
+      })),
       requester_tickets: requesterTickets.rows
         .filter((r) => r.id !== row.id)
         .slice(0, 5)
@@ -339,6 +350,30 @@ export class TicketsService {
       ...(dto.asset_tag !== undefined ? { assetTag: dto.asset_tag } : {}),
       ...(dto.project_id !== undefined ? { supportProjectId: dto.project_id } : {}),
     });
+
+    /*
+     * ผูกไฟล์ที่ผู้แจ้งแนบไว้เข้ากับเรื่อง — ต้องทำก่อน detail() เพื่อให้คำตอบมีรายการไฟล์ทันที
+     *
+     * ล้มแล้วไม่ทำให้การแจ้งเรื่องล้ม (เรื่องถูกบันทึกไปแล้ว ผู้แจ้งรอความช่วยเหลืออยู่)
+     * แต่ต้องไม่เงียบ: ผู้แจ้งเชื่อว่าส่งรูปไปแล้ว ถ้าไฟล์หายโดยไม่มีร่องรอย
+     * ทีมไอทีจะต้องถามหารูปที่ไม่เคยมาถึง จึงบันทึกเมื่อจำนวนที่ผูกได้ไม่ตรงกับที่ขอ
+     */
+    const requestedFiles = dto.attachment_ids ?? [];
+    if (requestedFiles.length > 0) {
+      try {
+        const linked = await this.uploads.linkToTicket(scope, id, requestedFiles);
+        if (linked !== new Set(requestedFiles).size) {
+          this.logger.warn(
+            `เรื่อง #${id}: ขอผูกไฟล์ ${new Set(requestedFiles).size} ชิ้น ผูกได้ ${linked} ชิ้น ` +
+              '(ที่เหลือไม่ใช่ไฟล์ของผู้สร้างเรื่อง หรือถูกผูก/ลบไปแล้ว)',
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `ผูกไฟล์แนบเข้ากับเรื่อง #${id} ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
 
     const ticket = await this.detail(scope, id);
 
@@ -875,7 +910,7 @@ export class TicketsService {
   ): Promise<
     Omit<
       TicketDetailDto,
-      'comments' | 'history' | 'checklist' | 'approvals' | 'catalog_item' | 'requester_tickets'
+      'comments' | 'history' | 'checklist' | 'approvals' | 'catalog_item' | 'requester_tickets' | 'attachments'
     >
   > {
     const base = await this.toListItem(row);

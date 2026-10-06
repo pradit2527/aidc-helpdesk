@@ -2,13 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import {
   ForbiddenError,
   NotFoundError,
   ValidationError,
 } from '../../common/errors/domain-error';
+import { canReadAttachment } from '../../common/files/attachment-access';
 import {
   detectFileType,
   MAX_FILE_BYTES,
@@ -17,7 +18,8 @@ import {
 import type { AccessScope } from '../../common/scope';
 import type { Db } from '../../db/client';
 import { DB } from '../../db/db.module';
-import { attachment } from '../../db/schema';
+import { TicketRepository } from '../../db/repositories/ticket.repository';
+import { attachment, ticketComment } from '../../db/schema';
 
 export interface UploadedFile {
   originalname: string;
@@ -54,7 +56,10 @@ export class AttachmentsService {
    */
   private readonly root = process.env.ATTACHMENT_DIR ?? path.resolve('storage/attachments');
 
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    private readonly tickets: TicketRepository,
+  ) {}
 
   async upload(scope: AccessScope, files: UploadedFile[]) {
     if (files.length === 0) {
@@ -96,7 +101,7 @@ export class AttachmentsService {
         throw new ValidationError(
           'UNSUPPORTED_FILE_TYPE',
           `ໄຟລ໌ "${file.originalname}" ເປັນຊະນິດທີ່ບໍ່ຮອງຮັບ`,
-          [{ field: 'files', message: 'ຮອງຮັບ ຮູບພາບ · PDF · zip · ຂໍ້ຄວາມ' }],
+          [{ field: 'files', message: 'ຮອງຮັບ ຮູບພາບ · ວິດີໂອ · PDF · zip · ຂໍ້ຄວາມ' }],
         );
       }
 
@@ -132,6 +137,43 @@ export class AttachmentsService {
   }
 
   /**
+   * ผูกไฟล์ที่อัปโหลดไว้ล่วงหน้าเข้ากับเรื่องที่เพิ่งสร้าง
+   *
+   * หน้าฟอร์มอัปโหลดไฟล์ก่อนกดส่ง (เพื่อให้เห็นความคืบหน้าและตัวอย่าง) แล้วส่งเลข id มากับเรื่อง
+   * แต่ฝั่งนี้เคยรับ attachment_ids เข้ามาแล้วไม่ทำอะไรกับมันเลย ไฟล์ทุกชิ้นที่ผู้แจ้งแนบ
+   * จึงไม่เคยถึงมือทีมไอที (งานล้างไฟล์กำพร้าเก็บไปทิ้งทีหลัง)
+   *
+   * ⚠️ ตรวจเจ้าของไฟล์ทุกครั้ง — ต้องเป็นไฟล์ที่ผู้สร้างเรื่องอัปโหลดเอง และยังไม่ผูกกับอะไร
+   *    ถ้าไม่ตรวจ ผู้ใช้จะส่งเลข id ของไฟล์คนอื่นมากับเรื่องของตัวเองแล้วเปิดดูผ่านสิทธิ์ของเรื่อง
+   *    ซึ่งเป็นทางอ้อมที่เลี่ยงการตรวจสิทธิ์ใน read() ได้ทั้งหมด
+   *
+   * ไฟล์ที่ไม่ผ่านเงื่อนไขถูกข้ามเงียบ ๆ ไม่ทำให้การสร้างเรื่องล้ม — เรื่องสำคัญกว่าไฟล์แนบ
+   *
+   * @returns จำนวนไฟล์ที่ผูกสำเร็จ — ผู้เรียกเทียบกับจำนวนที่ขอเพื่อบันทึกคำเตือนถ้าไม่ตรง
+   */
+  async linkToTicket(scope: AccessScope, ticketId: number, ids: readonly number[]): Promise<number> {
+    const unique = [...new Set(ids)].filter((id) => Number.isInteger(id) && id > 0);
+    if (unique.length === 0) return 0;
+
+    const linked = await this.db
+      .update(attachment)
+      .set({ ticketId })
+      .where(
+        and(
+          inArray(attachment.id, unique),
+          eq(attachment.uploadedBy, scope.userId),
+          isNull(attachment.ticketId),
+          isNull(attachment.commentId),
+          isNull(attachment.kbArticleId),
+          isNull(attachment.deletedAt),
+        ),
+      )
+      .returning({ id: attachment.id });
+
+    return linked.length;
+  }
+
+  /**
    * อ่านไฟล์เพื่อดาวน์โหลด
    *
    * ⚠️ ไฟล์ที่ตรวจพบไวรัสต้องไม่ถูกส่งออกไม่ว่ากรณีใด (403)
@@ -149,12 +191,42 @@ export class AttachmentsService {
         fileSize: attachment.fileSize,
         uploadedBy: attachment.uploadedBy,
         scanStatus: attachment.scanStatus,
+        ticketId: attachment.ticketId,
+        kbArticleId: attachment.kbArticleId,
+        // เรื่องและสถานะภายในของคอมเมนต์ที่ไฟล์ติดอยู่ (ถ้ามี)
+        commentTicketId: ticketComment.ticketId,
+        commentInternal: ticketComment.isInternal,
       })
       .from(attachment)
+      .leftJoin(ticketComment, eq(ticketComment.id, attachment.commentId))
       .where(and(eq(attachment.id, id), isNull(attachment.deletedAt)))
       .limit(1);
 
     if (!row) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'ບໍ່ພົບໄຟລ໌ແນບ', { id });
+
+    /*
+     * ตรวจสิทธิ์ก่อนแตะดิสก์ และตอบ 404 เหมือน "ไม่มีไฟล์นี้" ไม่ใช่ 403
+     * การตอบ 403 ยืนยันว่าเลข id นี้มีไฟล์อยู่จริง ซึ่งไล่เดาตามได้ (กติกาเดียวกับ ticket — US-07 AC-2)
+     */
+    const ownerTicketId = row.ticketId ?? row.commentTicketId;
+    const ticketVisible =
+      ownerTicketId === null ? false : await this.tickets.isVisible(scope, ownerTicketId);
+
+    const allowed = canReadAttachment(
+      {
+        uploadedBy: row.uploadedBy,
+        ticketId: ownerTicketId,
+        onInternalComment: row.commentInternal === true,
+        kbArticleId: row.kbArticleId,
+      },
+      {
+        userId: scope.userId,
+        // ชุดสิทธิ์เดียวกับที่ TicketsService.detail ใช้ตัดสินว่าเห็นคอมเมนต์ภายในได้ไหม
+        canSeeInternal: scope.has('ticket.comment_internal', 'ticket.assign'),
+      },
+      ticketVisible,
+    );
+    if (!allowed) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'ບໍ່ພົບໄຟລ໌ແນບ', { id });
 
     if (row.scanStatus === 'infected') {
       throw new ForbiddenError('FILE_INFECTED', 'ໄຟລ໌ນີ້ຖືກກວດພົບວ່າມີໄວຣັສ ດາວໂຫຼດບໍ່ໄດ້');
@@ -182,7 +254,6 @@ export class AttachmentsService {
       });
     }
 
-    void scope;
     return { ...row, buffer };
   }
 
